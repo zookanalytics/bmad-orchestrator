@@ -1,0 +1,7 @@
+# Project-specific domains
+# Base domains (npm, GitHub, Anthropic, Google APIs) provided by base image
+
+# Add your project's API endpoints, services, etc.
+# Example:
+# api.your-service.com
+# your-backend.example.com

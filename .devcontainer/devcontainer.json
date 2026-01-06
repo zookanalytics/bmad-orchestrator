@@ -1,0 +1,68 @@
+{
+  "name": "bmad-orchestrator - ${localWorkspaceFolderBasename}",
+  "image": "ghcr.io/zookanalytics/claude-devcontainer:latest",
+  "runArgs": [
+    "--name=bmad-orchestrator-${localWorkspaceFolderBasename}",
+    "--cap-add=NET_ADMIN",
+    "--cap-add=NET_RAW",
+    "--cap-add=SYSLOG"
+  ],
+  "customizations": {
+    "vscode": {
+      // vscode settings applicable explicitly to dev containers. Common logic in settings.json
+      "settings": {
+        // Window title shows instance name for easy identification when switching windows
+        "window.title": "bmad-orchestrator - ${containerEnv:CLAUDE_INSTANCE}${separator}${activeRepositoryBranchName}${dirty}",
+        // Terminal profiles: zsh default for normal use, tmux for persistent/shared sessions
+        "terminal.integrated.defaultProfile.linux": "zsh",
+        "terminal.integrated.profiles.linux": {
+          "zsh": {
+            "path": "/bin/zsh"
+          },
+          "tmux": {
+            "path": "/home/node/.local/bin/tmux-session"
+          }
+        },
+        "geminicodeassist.agentYoloMode": true
+      },
+      "extensions": [
+        "Anthropic.claude-code",
+        "appulate.filewatcher",
+        "bierner.markdown-mermaid",
+        "bierner.markdown-footnotes",
+        "DavidAnson.vscode-markdownlint",
+        "dbaeumer.vscode-eslint",
+        "eamodio.gitlens",
+        "esbenp.prettier-vscode",
+        "github.vscode-github-actions",
+        "ms-playwright.playwright",
+        "RobertOstermann.better-status-bar",
+        "usernamehw.errorlens",
+        "google.gemini-cli-vscode-ide-companion"
+      ]
+    }
+  },
+  "remoteUser": "node",
+  "mounts": [
+    "source=bmad-orchestrator-bashhistory-${localWorkspaceFolderBasename},target=/commandhistory,type=volume",
+    "source=bmad-orchestrator-claude-config,target=/home/node/.claude,type=volume",
+    "source=bmad-orchestrator-gemini-config,target=/home/node/.gemini,type=volume",
+    "source=bmad-orchestrator-shared-config,target=/home/node/.config,type=volume",
+    "source=pnpm-store,target=/workspace/.pnpm-store,type=volume",
+    "source=bmad-orchestrator-node-modules-${localWorkspaceFolderBasename},target=/workspace/node_modules,type=volume"
+  ],
+  "containerEnv": {
+    "CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC": "1",
+    "CLAUDE_CODE_VERSION": "latest",
+    "CLAUDE_CONFIG_DIR": "/home/node/.claude",
+    "CLAUDE_INSTANCE": "${localWorkspaceFolderBasename}",
+    "GEMINI_CLI_VERSION": "latest",
+    "PNPM_HOME": "/pnpm",
+    "PROJECT_NAME": "bmad-orchestrator",
+    "npm_config_store_dir": "/workspace/.pnpm-store",
+    "npm_config_virtual_store_dir": ".pnpm-store/container/${localWorkspaceFolderBasename}"
+  },
+  "workspaceMount": "source=${localWorkspaceFolder},target=/workspace,type=bind,consistency=delegated",
+  "workspaceFolder": "/workspace",
+  "postCreateCommand": "/usr/local/bin/post-create.sh"
+}
