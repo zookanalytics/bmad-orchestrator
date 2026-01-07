@@ -51,6 +51,8 @@ A persistent terminal TUI (like `htop`) that:
 3. **Suggests next actions** with ready-to-run commands
 4. **Progressive automation path**: Phase 1 is read-only visibility and copy-paste commands. Later phases add one-click dispatch, then autonomous execution with approval gates.
 
+**UX Layout:** Pane-based grid (2x2 at 120+ cols, 1-column stack at 80-119 cols). Each DevPod is a self-contained pane showing status, story, progress, and inline question display for needs-input states. This provides rich context without drilling down. Trade-off: 5+ DevPods require scrolling.
+
 The transformation: from scattered mental overhead → calm, clear command center.
 
 ### Why This Tool
@@ -62,6 +64,20 @@ The transformation: from scattered mental overhead → calm, clear command cente
 | **Scope** | Solves one specific problem well. Not trying to be a platform. |
 | **Open source** | Shared because it might help others. Community contributions welcome. |
 | **Success criteria** | Does it reduce cognitive overhead? Does it save time? |
+
+### Prior Art
+
+**[bmad-progress-dashboard](https://github.com/ibadmore/bmad-progress-dashboard)** - An existing Node.js terminal UI for BMAD progress tracking that serves as both inspiration and potential foundation:
+
+| Capability | Description |
+|------------|-------------|
+| Terminal-based progress display | Visual progress bars in terminal |
+| BMAD file parsing | Reads story files, calculates completion |
+| Phase weighting | Planning (40%) + Development (60%) |
+| Real-time updates | File watching for live refresh |
+| Markdown dashboard | Generates status reports |
+
+This project demonstrates the terminal UI patterns and BMAD file parsing that inform the orchestrator's design approach.
 
 ---
 
@@ -106,7 +122,7 @@ Not a focus for v1. The tool is built for the person orchestrating, not observer
 | Phase | Experience |
 |-------|------------|
 | **Discovery** | Already knows they need this—built it to scratch their own itch |
-| **Onboarding** | `bmad-dashboard` launches, auto-discovers DevPods, shows status immediately |
+| **Onboarding** | `bmad-orchestrator` launches, auto-discovers DevPods, shows status immediately |
 | **Core Usage** | Dashboard stays open. Glance → see what needs attention → dispatch/resume → repeat |
 | **Aha Moment** | First time a story completes and the next one is ready to dispatch without thinking |
 | **Long-term** | Becomes the default way to interact with BMAD. VS Code is for code, dashboard is for orchestration |

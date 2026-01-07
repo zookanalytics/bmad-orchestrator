@@ -3,7 +3,6 @@ stepsCompleted: [1, 2, 3, 4, 7, 8, 9, 10, 11]
 status: complete
 inputDocuments:
   - 'docs/plans/bmad-orchestration-implementation-brief.md'
-  - '_bmad-output/planning-artifacts/decisions/orchestration-infrastructure-decision.md'
   - '_bmad-output/planning-artifacts/research/claude-agent-sdk-eval.md'
   - '_bmad-output/planning-artifacts/research/auto-claude-patterns.md'
   - '_bmad-output/planning-artifacts/research/prototype-decision.md'
@@ -27,7 +26,7 @@ lastStep: 4
 
 ## Executive Summary
 
-BMAD Dashboard is a unified command center for multi-DevPod development. See every workflow, every story, every heartbeat - and know exactly what to do next.
+BMAD Orchestrator is a unified command center for multi-DevPod development. See every workflow, every story, every heartbeat - and know exactly what to do next.
 
 The core problem: BMAD methodology is effective, but scaling it across multiple parallel workstreams creates cognitive overhead. Developers must manually track which stories are assigned where, detect stuck workflows, and determine optimal next actions. This coordination tax grows with each additional DevPod.
 
@@ -48,7 +47,7 @@ The solution: A host-based dashboard that reads BMAD state files (sprint-status.
 **Technical Type:** CLI tool + Developer tool hybrid
 **Domain:** General (developer tooling)
 **Complexity:** Medium - multi-instance coordination with known patterns
-**Project Context:** Brownfield - extending existing claude-devcontainer system
+**Project Context:** Greenfield - new bmad-orchestrator system
 **Deployment Model:** Host-based (reads DevPod filesystems via mounted workspaces)
 
 ### Phase 1 Scope (MVP)
@@ -135,24 +134,41 @@ The dream version:
 
 Node starts his day with three DevPods running from yesterday - one finishing a story, one mid-implementation, one that was supposed to run overnight. He opens VS Code and sees three workspaces in his dock. *Which one needs attention first?*
 
-He could cycle through each, run `/workflow-status`, piece together the picture. But today he opens BMAD Dashboard instead.
+He could cycle through each, run `/workflow-status`, piece together the picture. But today he opens BMAD Orchestrator instead.
 
-One glance:
+One glance (pane-based layout provides room for inline questions):
 
 ```
-┌─────────────────────────────────────────────────────────────┐
-│  BMAD Dashboard - claude-devcontainer                        │
-├─────────────────────────────────────────────────────────────┤
-│  DevPod-1  │ 1-3-auth-flow    │ ✓ done        │ 2h ago     │
-│  DevPod-2  │ 2-1-api-layer    │ ● running     │ 12m ago    │
-│  DevPod-3  │ 2-2-persistence  │ ⏸ needs-input │ 6h ago     │
-├─────────────────────────────────────────────────────────────┤
-│  Backlog: 1-4-tests, 2-3-validation, 2-4-integration        │
-│  Next suggested: DevPod-1 is idle → assign 1-4-tests        │
-└─────────────────────────────────────────────────────────────┘
+┌─ BMAD Orchestrator ──────────────────────────────────────────── ↻ 5s ago ─┐
+│                                                                            │
+│  ┌─ devpod-1 ──────────────────────┐  ┌─ devpod-2 ──────────────────────┐ │
+│  │  ✓ DONE                  2h ago │  │  ● RUNNING              12m ago │ │
+│  │  → 1-3-auth-flow                │  │  → 2-1-api-layer                │ │
+│  │    Complete                     │  │    ▓▓▓▓▓▓▓▓▓▓▓▓░░░░░░ 60%      │ │
+│  │                                 │  │                                 │ │
+│  │  Suggested: 1-4-tests           │  │                                 │ │
+│  └─────────────────────────────────┘  └─────────────────────────────────┘ │
+│                                                                            │
+│  ╔═ devpod-3 ══════════════════════╗                                      │
+│  ║  ⏸ NEEDS INPUT           6h ago ║                                      │
+│  ║  → 2-2-persistence              ║                                      │
+│  ║                                 ║                                      │
+│  ║  ╭─ Claude is asking ─────────╮ ║                                      │
+│  ║  │ Should I mock the DB or    │ ║                                      │
+│  ║  │ use a test container?      │ ║                                      │
+│  ║  ╰────────────────────────────╯ ║                                      │
+│  ╚═════════════════════════════════╝                                      │
+│                                                                            │
+├────────────────────────────────────────────────────────────────────────────┤
+│  Backlog: 1-4-tests, 2-3-validation, 2-4-integration                       │
+├────────────────────────────────────────────────────────────────────────────┤
+│  j/k: select   Enter: open   b: backlog   c: copy   q: quit               │
+└────────────────────────────────────────────────────────────────────────────┘
 ```
 
-DevPod-3 needs input - Claude asked a question overnight that went unanswered. DevPod-1 finished and is idle. DevPod-2 is humming along. Without opening a single VS Code window, Node knows: answer DevPod-3's question, then assign new work to DevPod-1.
+*Note: Needs-input pane (devpod-3) uses double-line border to draw attention. Pane layout provides space for inline question display without drilling down.*
+
+DevPod-3 needs input - Claude asked a question overnight that went unanswered (visible right in the pane). DevPod-1 finished and is idle. DevPod-2 is humming along. Without opening a single VS Code window, Node knows: answer DevPod-3's question, then assign new work to DevPod-1.
 
 The dashboard shows the command for the idle DevPod:
 
@@ -166,9 +182,9 @@ By the time he finishes his coffee, Node has answered DevPod-3's question, confi
 
 ### Journey 2: The Needs-Input Resolution
 
-Node sees DevPod-3 showing `⏸ needs-input` with last activity 6 hours ago. Claude asked a question that went unanswered overnight.
+*Note: This journey shows the full vision including Phase 2 features (answer input field, Interactive Mode button). MVP uses copy-paste commands; inline response is Phase 2.*
 
-He drills into the detail view:
+Node sees DevPod-3 showing `⏸ needs-input` with last activity 6 hours ago. Claude asked a question that went unanswered overnight. The question is already visible in the pane (see Journey 1 mockup), but for complex questions with multiple options, he drills into the detail view for full context:
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
@@ -199,7 +215,7 @@ He drills into the detail view:
 └─────────────────────────────────────────────────────────────┘
 ```
 
-For this straightforward question, Node types "1" and clicks Send. The dashboard generates:
+**MVP:** Node copies the resume command, pastes into a terminal, and provides the answer. **Phase 2:** Node types "1" directly in the dashboard and clicks Send. The dashboard generates:
 
 ```
 devpod ssh devpod-3 -- claude -p "1" --resume "ab2c3d4-e5f6-7890-abcd-ef1234567890" --output-format json
@@ -237,7 +253,7 @@ Most BMAD steps are transactional: dispatch a skill, get a result. JSON mode mak
 
 ### Project-Type Overview
 
-BMAD Dashboard is a hybrid CLI/developer tool:
+BMAD Orchestrator is a hybrid CLI/developer tool:
 - **TUI component:** Persistent dashboard for visual orchestration
 - **CLI component:** Individual commands for scripting and automation
 - **Developer tool aspect:** Designed for modification and extension by owner
@@ -250,19 +266,19 @@ BMAD Dashboard is a hybrid CLI/developer tool:
 - Familiar ecosystem for owner modification
 
 **Package Structure:**
-- npm package within claude-devcontainer monorepo
-- Entry point: `bmad-dashboard` (persistent TUI)
-- Additional commands: `bmad-dashboard status`, `bmad-dashboard list`, etc.
+- npm package
+- Entry point: `bmad-orchestrator` (persistent TUI)
+- Additional commands: `bmad-orchestrator status`, `bmad-orchestrator list`, etc.
 
 ### Command Structure
 
 | Command | Description |
 |---------|-------------|
-| `bmad-dashboard` | Launch persistent TUI (default) |
-| `bmad-dashboard status` | One-shot status dump (scriptable) |
-| `bmad-dashboard list` | List discovered DevPods |
-| `bmad-dashboard dispatch <devpod> <story>` | Generate/execute dispatch command |
-| `bmad-dashboard resume <devpod> <answer>` | Resume needs-input session |
+| `bmad-orchestrator` | Launch persistent TUI (default) |
+| `bmad-orchestrator status` | One-shot status dump (scriptable) |
+| `bmad-orchestrator list` | List discovered DevPods |
+| `bmad-orchestrator dispatch <devpod> <story>` | Generate/execute dispatch command |
+| `bmad-orchestrator resume <devpod> <answer>` | Resume needs-input session |
 
 ### Configuration & Discovery
 
@@ -273,7 +289,7 @@ BMAD Dashboard is a hybrid CLI/developer tool:
 
 **Optional Config Override:**
 ```yaml
-# ~/.bmad-dashboard.yaml (optional)
+# ~/.bmad-orchestrator.yaml (optional)
 devpods:
   include: ["devpod-*"]
   exclude: ["devpod-test-*"]
@@ -292,16 +308,16 @@ workspaces_root: "~/.devpod/workspaces"
 
 - Leverage `yargs` or `commander` built-in completion support
 - Complete DevPod names, story IDs from discovered state
-- Install via: `bmad-dashboard completion >> ~/.bashrc`
+- Install via: `bmad-orchestrator completion >> ~/.bashrc`
 
 ### Installation Method
 
 ```bash
-# From monorepo root
+# From package root
 npm install
 
 # Or if published
-npm install -g @claude-devcontainer/bmad-dashboard
+npm install -g @zookanalytics/bmad-orchestrator
 ```
 
 ### Scripting Support
@@ -309,11 +325,11 @@ npm install -g @claude-devcontainer/bmad-dashboard
 CLI commands designed for pipeline integration:
 ```bash
 # Check if any DevPod needs input
-bmad-dashboard status --json | jq '.devpods[] | select(.status == "needs-input")'
+bmad-orchestrator status --json | jq '.devpods[] | select(.status == "needs-input")'
 
 # Auto-dispatch to idle workers
-for pod in $(bmad-dashboard list --idle); do
-  bmad-dashboard dispatch $pod --next-story
+for pod in $(bmad-orchestrator list --idle); do
+  bmad-orchestrator dispatch $pod --next-story
 done
 ```
 
@@ -392,6 +408,7 @@ done
 - FR6: User can see story status (done, running, needs-input, stale)
 - FR7: User can see time since last activity/heartbeat per DevPod
 - FR8: User can see task progress within a story (e.g., "3/7 tasks completed")
+- FR8a: User can see epic progress (overall completion percentage) for the epic containing the current story
 - FR9: User can see the backlog of unassigned stories
 - FR10: System can detect idle DevPods (completed story, no current assignment)
 
@@ -434,7 +451,7 @@ done
 
 ### Installation & Configuration
 
-- FR33: User can install via npm within monorepo
+- FR33: User can install via npm
 - FR34: User can run dashboard from any directory on host machine
 - FR35: System can read BMAD state files from DevPod workspaces on host filesystem
 
