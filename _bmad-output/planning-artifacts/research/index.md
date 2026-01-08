@@ -28,6 +28,7 @@ Assessments of external tools for potential adoption.
 - **[auto-claude-patterns.md](./auto-claude-patterns.md)** - Reusable patterns extracted from Auto-Claude project
 - **[quick-scans.md](./quick-scans.md)** - Quick evaluations of secondary tools (LangGraph, MARSYS, ClaudeBox, etc.)
 - **[prototype-decision.md](./prototype-decision.md)** - Phase 2 prototype selection: Claude Agent SDK chosen
+- **[autopilot-integration-architecture.md](./autopilot-integration-architecture.md)** - Autopilot as DevPod execution engine option (Phase 3+ consideration)
 
 ---
 
@@ -41,4 +42,4 @@ Deep-dive technical investigations.
 
 ---
 
-*Last updated: 2026-01-06*
+*Last updated: 2026-01-08*

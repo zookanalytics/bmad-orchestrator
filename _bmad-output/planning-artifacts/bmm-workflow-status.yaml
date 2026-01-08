@@ -78,8 +78,9 @@ workflow_status:
         name: "System Architecture"
         agent: "architect"
         command: "/bmad:bmm:workflows:create-architecture"
-        status: "required"
-        output: "System architecture document"
+        status: "_bmad-output/planning-artifacts/architecture.md"
+        completedAt: "2026-01-08"
+        note: "Complete - 7 steps, all FR/NFR coverage validated"
 
       - id: "create-epics-and-stories"
         name: "Epics and Stories"
