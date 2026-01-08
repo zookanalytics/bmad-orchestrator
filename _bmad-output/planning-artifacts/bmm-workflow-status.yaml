@@ -93,8 +93,9 @@ workflow_status:
         name: "Test Design"
         agent: "tea"
         command: "/bmad:bmm:workflows:testarch-test-design"
-        status: "optional"
-        output: "System-level testability review"
+        status: "_bmad-output/test-design-system.md"
+        completedAt: "2026-01-08"
+        note: "System-level testability review - PASS with recommendations for Sprint 0"
 
       - id: "implementation-readiness"
         name: "Implementation Readiness Check"
