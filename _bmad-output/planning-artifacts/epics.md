@@ -246,3 +246,617 @@ This epic adds the `status` CLI command with JSON output, shell completion, and 
 **ARs covered:** AR11 (scoped npm package)
 **NFR addressed:** NFR3 (CLI performance <500ms)
 **Deliverable:** Published npm package with full CLI
+
+---
+
+## Epic 1: Project Foundation & DevPod Discovery
+
+**Goal:** Establish the project with full quality gates and implement core DevPod discovery, delivering a working `bmad-orchestrator list` command.
+
+### Story 1.1: Project Initialization with Quality Gates
+
+As a **developer**,
+I want **a properly configured TypeScript project with CI, linting, and testing**,
+So that **code quality is enforced from the first commit**.
+
+**Acceptance Criteria:**
+
+**Given** a new project directory
+**When** I run `npm install`
+**Then** all dependencies install without errors
+**And** the following tooling is configured:
+- TypeScript 5.x with strict mode
+- ESLint with @typescript-eslint rules
+- Prettier for code formatting
+- Vitest for testing
+- Pre-commit hooks via husky/lint-staged
+
+**Given** the project is initialized
+**When** I run `npm run check`
+**Then** type-check, lint, and tests all pass
+
+**Given** a pull request is opened
+**When** CI runs on GitHub Actions
+**Then** the workflow executes type-check, lint, and test
+**And** fails if any check fails
+
+**Technical Notes:**
+- Package name: `@zookanalytics/bmad-orchestrator`
+- Entry point: `bin/bmad-orchestrator.js`
+- Use ESM modules with `.js` extensions for imports
+- Project structure: `src/`, `bin/`, `.github/workflows/`
+
+---
+
+### Story 1.2: Test Fixtures and Discovery Types
+
+As a **developer**,
+I want **test fixtures and type definitions for DevPod discovery**,
+So that **I can develop and test the discovery module with realistic data**.
+
+**Acceptance Criteria:**
+
+**Given** the project structure
+**When** I look in `src/lib/__fixtures__/`
+**Then** I find these fixture files:
+- `devPodList.json` - Normal response with 3 DevPods
+- `devPodListEmpty.json` - Empty array response
+- `devPodListError.json` - CLI error response
+
+**Given** the type definitions in `src/lib/types.ts`
+**When** I import DevPod-related types
+**Then** I can use:
+- `DevPod` interface (name, workspace path, status)
+- `DiscoveryResult` interface (devpods array, error)
+- `DevPodStatus` type (running, stopped, etc.)
+
+**Given** fixture files exist
+**When** tests import them
+**Then** they load correctly and match type definitions
+
+**Technical Notes:**
+- Fixtures based on actual `devpod list --output json` format
+- Types should align with DevPod CLI output structure
+
+---
+
+### Story 1.3: DevPod Discovery Module
+
+As a **developer**,
+I want **a discovery module that queries DevPod CLI for active containers**,
+So that **the application can find all DevPods on the host machine**.
+
+**Acceptance Criteria:**
+
+**Given** DevPod CLI is installed
+**When** I call `discoverDevPods()`
+**Then** it executes `devpod list --output json`
+**And** returns parsed DevPod array with name, workspace, status
+
+**Given** DevPod CLI returns an empty list
+**When** I call `discoverDevPods()`
+**Then** it returns `{ devpods: [], error: null }`
+
+**Given** DevPod CLI is not installed or fails
+**When** I call `discoverDevPods()`
+**Then** it returns `{ devpods: [], error: "DISCOVERY_FAILED: ..." }`
+**And** does not throw an exception
+
+**Given** the discovery module
+**When** I want to test it
+**Then** I can inject a mock executor via `createDiscovery(mockExecutor)`
+
+**Given** a 10-second timeout
+**When** DevPod CLI hangs
+**Then** the function returns an error result (not throws)
+
+**Technical Notes:**
+- Use execa 9.x with `reject: false` pattern
+- Factory function pattern: `createDiscovery(executor)`
+- Located at `src/lib/discovery.ts`
+- 90%+ test coverage required
+
+---
+
+### Story 1.4: List Command Implementation
+
+As a **user**,
+I want **to run `bmad-orchestrator list` and see my DevPods**,
+So that **I can verify the tool discovers my development containers**.
+
+**Acceptance Criteria:**
+
+**Given** I have DevPods running
+**When** I run `bmad-orchestrator list`
+**Then** I see a list of DevPod names and their workspace paths
+
+**Given** no DevPods are running
+**When** I run `bmad-orchestrator list`
+**Then** I see "No DevPods discovered"
+
+**Given** I run the command with `--json` flag
+**When** output is generated
+**Then** it returns valid JSON matching the output schema:
+```json
+{ "version": "1", "devpods": [...], "errors": [...] }
+```
+
+**Given** the package is installed globally
+**When** I run `bmad-orchestrator list` from any directory
+**Then** it executes successfully (FR34)
+
+**Given** DevPod CLI fails
+**When** I run `bmad-orchestrator list`
+**Then** I see an error message with suggestion to check DevPod installation
+
+**Technical Notes:**
+- Use Commander 14.x for CLI parsing
+- Entry point: `src/cli.ts`
+- Command handler: `src/commands/list.ts`
+- Plain text output by default, `--json` for structured output
+
+---
+
+## Epic 2: BMAD State Parsing & Activity Detection
+
+**Goal:** Add meaning to discovered DevPods by parsing BMAD state files and detecting activity, delivering enhanced `list` output with story assignments, progress, and inactive status.
+
+### Story 2.1: BMAD State Fixtures and Types
+
+As a **developer**,
+I want **test fixtures and type definitions for BMAD state parsing**,
+So that **I can develop and test state modules with realistic data**.
+
+**Acceptance Criteria:**
+
+**Given** the project structure
+**When** I look in `src/lib/__fixtures__/`
+**Then** I find these additional fixture files:
+- `sprintStatus.yaml` - Valid sprint with multiple stories in various statuses
+- `sprintStatusMinimal.yaml` - Minimal valid sprint (one story)
+- `sprintStatusMalformed.yaml` - Invalid YAML for error handling tests
+- `story-1-1.md` - Story with some tasks checked (3/7)
+- `story-1-1-complete.md` - Story with all tasks checked
+
+**Given** the type definitions in `src/lib/types.ts`
+**When** I import BMAD state types
+**Then** I can use:
+- `SprintStatus` interface (stories map, metadata)
+- `StoryStatus` type ('backlog' | 'ready-for-dev' | 'in-progress' | 'done')
+- `StoryState` interface (id, status, epic, title)
+- `TaskProgress` interface (completed, total)
+- `BmadState` interface (aggregated state per DevPod)
+
+**Given** fixture files exist
+**When** tests import them
+**Then** they parse correctly and match type definitions
+
+**Technical Notes:**
+- Sprint status path: `_bmad-output/implementation-artifacts/sprint-status.yaml`
+- Story files path: `_bmad-output/implementation-artifacts/stories/*.md`
+- Use `yaml` package for YAML parsing
+
+---
+
+### Story 2.2: Sprint Status Parser
+
+As a **developer**,
+I want **a module that parses sprint-status.yaml files**,
+So that **I can extract story assignments and statuses for each DevPod**.
+
+**Acceptance Criteria:**
+
+**Given** a valid sprint-status.yaml file
+**When** I call `parseSprintStatus(filePath)`
+**Then** it returns a `SprintStatus` object with:
+- Map of story IDs to their status
+- List of stories per status category
+- Current epic information
+
+**Given** a DevPod workspace path
+**When** I call `getSprintStatusPath(workspacePath)`
+**Then** it returns `{workspacePath}/_bmad-output/implementation-artifacts/sprint-status.yaml`
+
+**Given** sprint-status.yaml does not exist
+**When** I call `parseSprintStatus(filePath)`
+**Then** it returns `{ error: "NOT_BMAD_INITIALIZED", stories: [] }`
+
+**Given** sprint-status.yaml is malformed
+**When** I call `parseSprintStatus(filePath)`
+**Then** it returns `{ error: "PARSE_ERROR: ...", stories: [] }`
+**And** does not throw an exception
+
+**Given** sprint-status.yaml contains stories with various statuses
+**When** I extract the backlog
+**Then** I get stories with status 'ready-for-dev' or 'backlog' (FR9)
+
+**Technical Notes:**
+- Located at `src/lib/state.ts`
+- Use `yaml` package for parsing
+- Return error states, never throw
+- 90%+ test coverage required
+
+---
+
+### Story 2.3: Story File Parser
+
+As a **developer**,
+I want **a module that parses story markdown files**,
+So that **I can extract task progress within each story**.
+
+**Acceptance Criteria:**
+
+**Given** a story markdown file with task checkboxes
+**When** I call `parseStoryTasks(filePath)`
+**Then** it returns `TaskProgress` with completed and total counts
+**And** correctly parses `- [x]` as completed and `- [ ]` as incomplete
+
+**Given** a story file path pattern
+**When** I call `getStoryFilePath(workspacePath, storyId)`
+**Then** it returns `{workspacePath}/_bmad-output/implementation-artifacts/stories/{storyId}.md`
+
+**Given** a story file does not exist
+**When** I call `parseStoryTasks(filePath)`
+**Then** it returns `{ completed: 0, total: 0, error: "FILE_NOT_FOUND" }`
+
+**Given** a story file with no task checkboxes
+**When** I call `parseStoryTasks(filePath)`
+**Then** it returns `{ completed: 0, total: 0 }`
+
+**Given** an epic directory
+**When** I call `parseEpicProgress(workspacePath, epicId)`
+**Then** it returns overall completion percentage across all stories in that epic (FR8a)
+
+**Technical Notes:**
+- Located at `src/lib/state.ts` (same module as sprint parser)
+- Task regex: `/- \[(x| )\]/gi`
+- Epic files path: `_bmad-output/implementation-artifacts/epics/*.md`
+
+---
+
+### Story 2.4: Activity Detection Module
+
+As a **developer**,
+I want **a module that detects inactive DevPods via file modification time**,
+So that **users can identify DevPods that may need attention**.
+
+**Acceptance Criteria:**
+
+**Given** a DevPod workspace path
+**When** I call `checkActivity(workspacePath)`
+**Then** it returns the last modification time of BMAD state files
+
+**Given** a file was modified within the last hour
+**When** I call `isInactive(mtime, threshold)`
+**Then** it returns `false`
+
+**Given** a file was modified more than 1 hour ago
+**When** I call `isInactive(mtime, threshold)`
+**Then** it returns `true` (FR16)
+
+**Given** the default threshold
+**When** activity detection runs
+**Then** it uses 1 hour (3600000 ms) as the inactive threshold (AR15)
+
+**Given** activity detection completes
+**When** results are returned
+**Then** they include:
+- `lastActivity: Date` - timestamp of last file change
+- `isInactive: boolean` - whether threshold exceeded
+- `inactiveDuration: string` - human-readable duration (e.g., "2h ago")
+
+**Technical Notes:**
+- Located at `src/lib/activity.ts`
+- Use `fs.stat().mtime` for modification time
+- Check sprint-status.yaml and current story file
+- Use `timeago.js` for duration formatting
+
+---
+
+### Story 2.5: Enhanced List Output
+
+As a **user**,
+I want **to see BMAD state information when I run `bmad-orchestrator list`**,
+So that **I know what each DevPod is working on and whether it needs attention**.
+
+**Acceptance Criteria:**
+
+**Given** DevPods with BMAD state files
+**When** I run `bmad-orchestrator list`
+**Then** I see for each DevPod:
+- Current story assignment (FR5)
+- Story status (done, running, idle) (FR6)
+- Time since last activity (FR7)
+- Task progress (e.g., "3/7 tasks") (FR8)
+
+**Given** a DevPod with an in-progress story
+**When** the list displays
+**Then** I see the epic name and progress percentage (FR8a)
+
+**Given** a DevPod with no in-progress story
+**When** the list displays
+**Then** it shows as "Idle" with suggested next story (FR10, FR20)
+
+**Given** a DevPod inactive for more than 1 hour
+**When** the list displays
+**Then** I see a warning indicator "⚠ Inactive (2h)" (FR17)
+
+**Given** the backlog of unassigned stories
+**When** I run `bmad-orchestrator list`
+**Then** I see a summary line: "Backlog: 3 stories ready" (FR9)
+
+**Given** a DevPod without BMAD initialized
+**When** the list displays
+**Then** it shows "Not BMAD-initialized" instead of state
+
+**Given** I run with `--json` flag
+**When** output is generated
+**Then** JSON includes all state fields (story, progress, activity, backlog)
+
+**Technical Notes:**
+- Integrate state.ts and activity.ts into list command
+- Use Promise.allSettled for parallel state reads (AR7)
+- Status symbols: ● running, ✓ done, ○ idle, ⚠ inactive
+
+---
+
+## Epic 3: Dashboard Experience
+
+**Goal:** Create a persistent TUI dashboard using Ink that displays all DevPods at a glance with keyboard navigation, responsive layout, and auto-refresh.
+
+### Story 3.1: Orchestrator State Hook
+
+As a **developer**,
+I want **a single useOrchestrator hook that manages all dashboard state**,
+So that **state logic is centralized, testable, and separate from UI components**.
+
+**Acceptance Criteria:**
+
+**Given** the useOrchestrator hook
+**When** I call it in a component
+**Then** it returns:
+- `devpods: DevPod[]` - list of discovered DevPods with state
+- `selected: number` - index of currently selected pane
+- `loading: boolean` - whether refresh is in progress
+- `lastRefresh: Date | null` - timestamp of last successful refresh
+- `error: string | null` - any error message
+
+**Given** the hook initializes
+**When** the component mounts
+**Then** it triggers an initial discovery and state load
+
+**Given** the hook
+**When** I call `refresh()`
+**Then** it dispatches REFRESH_START, fetches data, then dispatches REFRESH_COMPLETE or REFRESH_ERROR
+
+**Given** the hook
+**When** I call `selectNext()` or `selectPrev()`
+**Then** it updates the selected index with wrap-around
+
+**Given** the hook uses useReducer
+**When** actions are dispatched
+**Then** state transitions follow this pattern:
+- `REFRESH_START` → `{ loading: true }`
+- `REFRESH_COMPLETE` → `{ loading: false, devpods: [...], lastRefresh: Date }`
+- `REFRESH_ERROR` → `{ loading: false, error: "..." }`
+- `SELECT_NEXT` / `SELECT_PREV` → `{ selected: newIndex }`
+
+**Technical Notes:**
+- Located at `src/hooks/useOrchestrator.ts`
+- Uses useReducer for complex state transitions
+- Composes discovery.ts, state.ts, and activity.ts
+- Testable in isolation without rendering
+
+---
+
+### Story 3.2: DevPodPane Component
+
+As a **developer**,
+I want **a pure display component that renders a single DevPod pane**,
+So that **pane rendering is consistent and testable via snapshots**.
+
+**Acceptance Criteria:**
+
+**Given** a DevPodPane component
+**When** I pass a DevPod with status "running"
+**Then** it displays:
+- Single-line border
+- Cyan ● indicator with "RUNNING"
+- Epic name and progress bar
+- Story name and task progress
+- Time since last activity
+
+**Given** a DevPod with status "done"
+**When** rendered
+**Then** it displays dimmed styling with green ✓ indicator
+
+**Given** a DevPod with status "needs-input"
+**When** rendered
+**Then** it displays double-line border (═) with yellow ⏸ indicator (UX13)
+
+**Given** a DevPod with status "inactive"
+**When** rendered
+**Then** it displays yellow ⚠ indicator with duration (e.g., "⚠ Inactive (2h)")
+
+**Given** a DevPod with status "idle"
+**When** rendered
+**Then** it displays dim ○ indicator with suggested next story
+
+**Given** the `selected` prop is true
+**When** rendered
+**Then** the pane has highlighted/inverted border style
+
+**Given** any status
+**When** rendered
+**Then** symbols convey meaning without relying on color alone (UX3)
+
+**Technical Notes:**
+- Located at `src/components/DevPodPane.tsx`
+- Props: `{ pod: DevPod, selected: boolean, width: number }`
+- Uses STATE_CONFIG from patterns for consistent visuals
+- Snapshot tests for each state
+
+---
+
+### Story 3.3: Dashboard Layout and Grid
+
+As a **user**,
+I want **a dashboard that displays all DevPods in a grid layout**,
+So that **I can see everything at a glance when I launch the tool**.
+
+**Acceptance Criteria:**
+
+**Given** I run `bmad-orchestrator` (no subcommand)
+**When** the dashboard launches
+**Then** I see:
+- Header with "BMAD Orchestrator" and refresh timestamp
+- Grid of DevPod panes
+- Footer with keybinding hints
+
+**Given** multiple DevPods are discovered
+**When** the dashboard renders
+**Then** panes are arranged in a 2-column grid (at ≥120 cols)
+
+**Given** DevPods maintain stable positions
+**When** the dashboard refreshes
+**Then** panes stay in the same order (sorted by name, not status) (UX12)
+
+**Given** no DevPods are discovered
+**When** the dashboard renders
+**Then** I see the empty state with BMAD-contextual guidance (UX5, UX10)
+
+**Given** the footer
+**When** displayed
+**Then** it shows: "j/k: navigate  Enter: detail  b: backlog  c: copy  q: quit"
+
+**Technical Notes:**
+- Located at `src/components/Dashboard.tsx`
+- Uses Ink's Box with flexDirection="row" and flexWrap="wrap"
+- Imports DevPodPane and useOrchestrator
+- Entry point switches between TUI (default) and CLI commands
+
+---
+
+### Story 3.4: Keyboard Navigation
+
+As a **user**,
+I want **to navigate the dashboard using keyboard shortcuts**,
+So that **I can quickly select and interact with DevPods without a mouse**.
+
+**Acceptance Criteria:**
+
+**Given** the dashboard is displayed
+**When** I press `j`
+**Then** selection moves to the next pane (down/right)
+
+**Given** the dashboard is displayed
+**When** I press `k`
+**Then** selection moves to the previous pane (up/left)
+
+**Given** a 2x2 grid layout
+**When** I press `h`
+**Then** selection moves left (1→0, 3→2)
+
+**Given** a 2x2 grid layout
+**When** I press `l`
+**Then** selection moves right (0→1, 2→3)
+
+**Given** selection is at the last pane
+**When** I press `j`
+**Then** selection wraps to the first pane
+
+**Given** a pane is selected
+**When** I press `Enter`
+**Then** I enter detail view for that DevPod (FR27)
+
+**Given** I am in detail view
+**When** I press `Esc`
+**Then** I return to the grid view (FR28)
+
+**Given** the dashboard is displayed
+**When** I press `q`
+**Then** the dashboard exits gracefully (FR25)
+
+**Given** the dashboard is displayed
+**When** I press `b`
+**Then** the backlog overlay opens (UX9)
+
+**Technical Notes:**
+- Use Ink's `useInput` hook for keyboard handling
+- Navigation logic in useOrchestrator hook
+- Detail view can be a modal overlay or separate render mode
+
+---
+
+### Story 3.5: Auto-Refresh and Loading States
+
+As a **user**,
+I want **the dashboard to automatically refresh and show loading states**,
+So that **data stays current without manual intervention**.
+
+**Acceptance Criteria:**
+
+**Given** the dashboard is running
+**When** 30 seconds pass
+**Then** data automatically refreshes (UX8)
+
+**Given** a refresh is in progress
+**When** the header renders
+**Then** it shows a spinner indicator "↻ Refreshing..."
+
+**Given** a refresh completes
+**When** the header renders
+**Then** it shows the timestamp "↻ 5s ago" using timeago format
+
+**Given** I press `R` (shift+r)
+**When** the dashboard is displayed
+**Then** a manual refresh is triggered (FR26)
+
+**Given** the initial load
+**When** discovery is in progress
+**Then** I see a centered spinner with "Discovering DevPods..."
+
+**Given** a partial failure occurs
+**When** one DevPod is unreachable
+**Then** other DevPods still display, and the failed one shows error state (NFR8)
+
+**Technical Notes:**
+- Use useEffect with setInterval for auto-refresh
+- Spinner from @inkjs/ui
+- Timestamp formatting with timeago.js
+- Clear interval on unmount
+
+---
+
+### Story 3.6: Responsive Breakpoints
+
+As a **user**,
+I want **the dashboard to adapt to my terminal size**,
+So that **it works well on different screen widths**.
+
+**Acceptance Criteria:**
+
+**Given** terminal width ≥120 columns
+**When** the dashboard renders
+**Then** panes display in a 2-column grid (UX1)
+
+**Given** terminal width 80-119 columns
+**When** the dashboard renders
+**Then** panes stack in a single column (UX1)
+
+**Given** terminal width <80 columns
+**When** the dashboard renders
+**Then** panes display in compact mode with minimal content (UX1)
+
+**Given** the terminal is resized
+**When** dimensions change
+**Then** the layout adapts automatically
+
+**Given** more than 4 DevPods in a 2-column layout
+**When** the grid overflows
+**Then** vertical scrolling is available with scroll indicators
+
+**Technical Notes:**
+- Use Ink's `useStdoutDimensions()` hook (UX2)
+- Calculate pane width based on available columns
+- Pass width prop to DevPodPane for internal layout adjustments
