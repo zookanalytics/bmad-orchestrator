@@ -1,9 +1,10 @@
 ---
-stepsCompleted: ['step-01-validate-prerequisites', 'step-02-design-epics']
+stepsCompleted: ['step-01-validate-prerequisites', 'step-02-design-epics', 'step-03-create-stories']
 inputDocuments:
   - '_bmad-output/planning-artifacts/prd.md'
   - '_bmad-output/planning-artifacts/architecture.md'
   - '_bmad-output/planning-artifacts/ux-design-specification.md'
+  - '_bmad-output/test-design-system.md'
 ---
 
 # BMAD Orchestrator - Epic Breakdown
@@ -153,6 +154,30 @@ This document provides the complete epic and story breakdown for BMAD Orchestrat
 - UX19: Success feedback: 3 seconds duration, green ✓
 - UX20: Error feedback: persistent until resolved, red ✗
 
+**From Test Design - Test Framework Requirements:**
+- TD1: Test framework: Vitest 4.0.16 with globals and node environment
+- TD2: TUI testing: ink-testing-library for component testing
+- TD3: Coverage targets: 80% global, 90% for lib modules
+- TD4: Test levels: 60% unit, 25% integration, 15% E2E
+- TD5: jscpd duplication check (<5% threshold)
+- TD6: CI workflow: type-check, lint, test on every commit
+
+**From Test Design - Required Test Fixtures:**
+- TD7: devPodList.json - Normal DevPod list (3 DevPods, mixed states)
+- TD8: devPodListEmpty.json - Empty array (no DevPods)
+- TD9: devPodListError.json - CLI error (stderr output)
+- TD10: sprintStatus.yaml - Normal sprint (multiple stories, various statuses)
+- TD11: sprintStatusMinimal.yaml - Minimal valid (one story)
+- TD12: sprintStatusMalformed.yaml - Invalid YAML (error handling)
+- TD13: story-1-1.md - In-progress story (some tasks checked)
+- TD14: story-1-1-complete.md - Completed story (all tasks checked)
+
+**From Test Design - Test Priority:**
+- TD15: Critical priority: lib/discovery.ts and lib/state.ts (90%+ coverage)
+- TD16: High priority: lib/activity.ts, hooks/useOrchestrator.ts (80%+ coverage)
+- TD17: Medium priority: components/*.tsx (snapshot + key interactions)
+- TD18: Low priority: cli.ts (integration test only)
+
 ### FR Coverage Map
 
 | FR | Epic | Description |
@@ -279,6 +304,11 @@ So that **code quality is enforced from the first commit**.
 **When** CI runs on GitHub Actions
 **Then** the workflow executes type-check, lint, and test
 **And** fails if any check fails
+
+**Given** the CI workflow runs tests
+**When** code coverage is calculated
+**Then** the build fails if coverage drops below 80% global threshold (TD3)
+**And** coverage report is generated for review
 
 **Technical Notes:**
 - Package name: `@zookanalytics/bmad-orchestrator`
@@ -860,3 +890,318 @@ So that **it works well on different screen widths**.
 - Use Ink's `useStdoutDimensions()` hook (UX2)
 - Calculate pane width based on available columns
 - Pass width prop to DevPodPane for internal layout adjustments
+
+---
+
+## Epic 4: Command Generation & Clipboard Actions
+
+**Goal:** Add command generation (dispatch, SSH, tmux attach) and clipboard integration, enabling users to see and copy actionable commands for any DevPod with a single keypress.
+
+### Story 4.1: Command Generation Module
+
+As a **developer**,
+I want **a module that generates contextual commands for DevPods**,
+So that **users get copy-paste ready commands without manual assembly**.
+
+**Acceptance Criteria:**
+
+**Given** a DevPod name and workspace path
+**When** I call `generateSSHCommand(devpodName)`
+**Then** it returns `devpod ssh {devpodName}`
+
+**Given** a DevPod name and a story ID
+**When** I call `generateDispatchCommand(devpodName, storyId)`
+**Then** it returns `devpod ssh {devpodName} -- claude -p "/bmad:bmm:workflows:dev-story {storyId}" --output-format json` (FR23)
+
+**Given** a DevPod name
+**When** I call `generateTmuxAttachCommand(devpodName)`
+**Then** it returns the command to attach to the tmux session (FR22)
+
+**Given** an idle DevPod with a suggested story
+**When** I call `generateNextStoryCommand(devpodName, suggestedStoryId)`
+**Then** it returns the dispatch command for that story (FR19, FR20)
+
+**Given** a DevPod that needs input (Phase 2 prep)
+**When** I call `generateResumeCommand(devpodName, sessionId, answer)`
+**Then** it returns the resume command structure (FR21)
+
+**Given** any generated command
+**When** the command is displayed
+**Then** it uses JSON output mode by default (FR23)
+
+**Technical Notes:**
+- Located at `src/lib/commands.ts`
+- Pure functions, no side effects
+- All commands are strings ready for copy-paste
+- Unit tests for all command variations
+
+---
+
+### Story 4.2: Command Bar Component
+
+As a **user**,
+I want **to see the relevant command for my selected DevPod**,
+So that **I know exactly what action I can take without thinking**.
+
+**Acceptance Criteria:**
+
+**Given** a DevPod is selected in the dashboard
+**When** the command bar renders
+**Then** it shows the contextual command for that DevPod's state
+
+**Given** an idle DevPod is selected
+**When** the command bar renders
+**Then** it shows the dispatch command with suggested next story
+
+**Given** a running DevPod is selected
+**When** the command bar renders
+**Then** it shows the SSH command to check on it
+
+**Given** an inactive DevPod is selected
+**When** the command bar renders
+**Then** it shows the SSH command with "investigate" context (FR18)
+
+**Given** a DevPod in needs-input state is selected
+**When** the command bar renders
+**Then** it shows the SSH command to provide input
+
+**Given** the command bar
+**When** displayed
+**Then** it shows:
+- Selected DevPod name: `▸ {devpodName} selected`
+- The command on its own line for easy selection
+
+**Technical Notes:**
+- Located at `src/components/CommandBar.tsx`
+- Receives selected DevPod from useOrchestrator
+- Uses commands.ts for command generation
+- Styled with single-line border
+
+---
+
+### Story 4.3: Clipboard Integration
+
+As a **user**,
+I want **to copy commands with a single keypress**,
+So that **I can quickly paste and execute them in my terminal**.
+
+**Acceptance Criteria:**
+
+**Given** a DevPod is selected
+**When** I press `c`
+**Then** the displayed command is copied to the system clipboard
+
+**Given** a command is successfully copied
+**When** the copy completes
+**Then** I see success feedback "✓ Copied to clipboard" for 3 seconds (UX19)
+
+**Given** clipboard access fails (e.g., SSH session without clipboard)
+**When** copy is attempted
+**Then** I see the command inline with message "Copy manually:" (UX15)
+**And** the error is not blocking
+
+**Given** a DevPod is selected
+**When** I press `Enter`
+**Then** the command is also copied (Enter = primary action)
+
+**Given** the copy feedback
+**When** displayed
+**Then** it appears in the command bar area, replacing the command temporarily
+
+**Technical Notes:**
+- Use `clipboardy` package for cross-platform clipboard access
+- Wrap in try/catch for graceful degradation
+- Feedback via temporary state in useOrchestrator
+- 3-second timeout via useEffect
+
+---
+
+### Story 4.4: Backlog Panel and Story Suggestions
+
+As a **user**,
+I want **to see unassigned stories and get suggestions for idle DevPods**,
+So that **I can quickly decide what work to dispatch next**.
+
+**Acceptance Criteria:**
+
+**Given** the dashboard is displayed
+**When** I look at the backlog bar
+**Then** I see: "Backlog: {N} stories ready │ {story-id-1}, {story-id-2}, ..." (FR9)
+
+**Given** the dashboard is displayed
+**When** I press `b`
+**Then** a backlog overlay opens showing all ready-for-dev stories (UX9)
+
+**Given** the backlog overlay is open
+**When** I look at it
+**Then** I see a table with: Story ID, Epic, Title
+
+**Given** the backlog overlay is open
+**When** I press `Esc`
+**Then** the overlay closes and I return to the grid
+
+**Given** the backlog overlay is open
+**When** I press `b` again
+**Then** the overlay closes (toggle behavior for muscle memory)
+
+**Given** an idle DevPod
+**When** rendered in the pane
+**Then** it shows "Suggested: {storyId}" with the next logical story (FR20)
+
+**Given** multiple idle DevPods
+**When** suggestions are calculated
+**Then** each gets a different story suggestion (no duplicates)
+
+**Given** the backlog is empty
+**When** the backlog bar renders
+**Then** it shows "Backlog: No stories ready"
+
+**Technical Notes:**
+- BacklogPanel component at `src/components/BacklogPanel.tsx`
+- Backlog bar is always visible, overlay triggered by 'b'
+- Story suggestions based on epic order, then story order
+- Overlay uses Ink's layering (position absolute or portal pattern)
+
+---
+
+## Epic 5: CLI Polish & Package Publishing
+
+**Goal:** Add the `status` CLI command with JSON output, shell completion, and publish the package to npm as @zookanalytics/bmad-orchestrator, completing the MVP.
+
+### Story 5.1: Status Command Implementation
+
+As a **user**,
+I want **to get a one-shot status dump via CLI command**,
+So that **I can script the orchestrator and integrate it with other tools**.
+
+**Acceptance Criteria:**
+
+**Given** DevPods are running with BMAD state
+**When** I run `bmad-orchestrator status`
+**Then** I see a summary of all DevPods with their current state (FR29)
+
+**Given** I run `bmad-orchestrator status`
+**When** output is generated
+**Then** it completes within 500ms (NFR3)
+
+**Given** I run `bmad-orchestrator status --json`
+**When** output is generated
+**Then** it returns valid JSON matching the schema (FR31):
+```json
+{
+  "version": "1",
+  "timestamp": "ISO-8601",
+  "devpods": [
+    {
+      "name": "string",
+      "workspace": "string",
+      "status": "running|done|idle|inactive|error",
+      "story": { "id": "string", "title": "string", "progress": "3/7" },
+      "epic": { "id": "string", "title": "string", "progress": 60 },
+      "lastActivity": "ISO-8601",
+      "isInactive": false
+    }
+  ],
+  "backlog": [{ "id": "string", "epic": "string", "title": "string" }],
+  "errors": []
+}
+```
+
+**Given** I run `bmad-orchestrator status` with no DevPods
+**When** output is generated
+**Then** I see "No DevPods discovered" (text) or empty arrays (JSON)
+
+**Given** partial failures occur
+**When** one DevPod is unreachable
+**Then** other DevPods still display with the failed one in errors array
+
+**Technical Notes:**
+- Located at `src/commands/status.ts`
+- Reuses discovery.ts, state.ts, activity.ts from Epic 2
+- Text output similar to enhanced list, JSON output structured
+- Measure performance in tests
+
+---
+
+### Story 5.2: Shell Completion
+
+As a **user**,
+I want **tab completion for commands and DevPod names**,
+So that **I can work faster in the terminal without typing full names**.
+
+**Acceptance Criteria:**
+
+**Given** shell completion is installed
+**When** I type `bmad-orchestrator <TAB>`
+**Then** I see available commands: `list`, `status`, `dispatch`, `--help`, `--version`
+
+**Given** shell completion is installed
+**When** I type `bmad-orchestrator status --<TAB>`
+**Then** I see available flags: `--json`, `--help`
+
+**Given** the package is installed
+**When** I run `bmad-orchestrator completion`
+**Then** it outputs the completion script for my shell (FR32)
+
+**Given** I run `bmad-orchestrator completion --shell bash`
+**When** output is generated
+**Then** it outputs bash-compatible completion script
+
+**Given** I run `bmad-orchestrator completion --shell zsh`
+**When** output is generated
+**Then** it outputs zsh-compatible completion script
+
+**Given** the README
+**When** I read installation instructions
+**Then** I see how to install completion: `bmad-orchestrator completion >> ~/.bashrc`
+
+**Technical Notes:**
+- Use Commander's built-in completion generation
+- Support bash and zsh (primary shells on Mac/Linux)
+- Document in README with one-liner installation
+
+---
+
+### Story 5.3: Package Publishing Preparation
+
+As a **developer**,
+I want **the package ready for npm publishing**,
+So that **users can install it globally with `npm install -g`**.
+
+**Acceptance Criteria:**
+
+**Given** the package.json
+**When** I review it
+**Then** it contains:
+- `"name": "@zookanalytics/bmad-orchestrator"` (AR11)
+- `"version": "0.1.0"` (initial release)
+- `"bin": { "bmad-orchestrator": "./bin/bmad-orchestrator.js" }`
+- `"type": "module"` (ESM)
+- `"files": ["dist", "bin"]` (published files only)
+- Proper `"description"`, `"keywords"`, `"repository"`, `"license"`
+
+**Given** I run `npm pack`
+**When** the tarball is created
+**Then** it contains only the necessary files (no src/, no tests)
+
+**Given** I install the package globally
+**When** I run `bmad-orchestrator --version`
+**Then** I see the version number
+
+**Given** I install the package globally
+**When** I run `bmad-orchestrator --help`
+**Then** I see usage information for all commands
+
+**Given** the bin entry point
+**When** I examine `bin/bmad-orchestrator.js`
+**Then** it has the correct shebang and imports dist/cli.js
+
+**Given** the package is ready
+**When** I run `npm publish --access public`
+**Then** it publishes successfully to npm (manual step, not automated)
+
+**Technical Notes:**
+- Ensure `prepublishOnly` script runs build
+- Add `"engines": { "node": ">=22" }` for Node version requirement
+- Include LICENSE file
+- Test with `npm link` before publishing
