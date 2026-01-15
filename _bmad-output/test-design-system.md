@@ -224,10 +224,10 @@ test('discovery completes within 3s for 10 DevPods', async () => {
 
 **CI Pipeline:**
 ```yaml
-- run: npm run type-check
-- run: npm run lint
-- run: npm run test:run -- --coverage
-- run: npx jscpd src/ --threshold 5
+- run: pnpm type-check
+- run: pnpm lint
+- run: pnpm test:run -- --coverage
+- run: pnpm dlx jscpd src/ --threshold 5
 ```
 
 ---

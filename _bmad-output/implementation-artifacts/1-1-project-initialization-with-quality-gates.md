@@ -12,7 +12,7 @@ So that **code quality is enforced from the first commit**.
 
 ### AC1: Dependencies Install Successfully
 **Given** a new project directory
-**When** I run `npm install`
+**When** I run `pnpm install`
 **Then** all dependencies install without errors
 **And** the following tooling is configured:
 - TypeScript 5.x with strict mode
@@ -23,7 +23,7 @@ So that **code quality is enforced from the first commit**.
 
 ### AC2: Quality Check Passes
 **Given** the project is initialized
-**When** I run `npm run check`
+**When** I run `pnpm check`
 **Then** type-check, lint, and tests all pass
 
 ### AC3: CI Workflow Executes
@@ -40,13 +40,13 @@ So that **code quality is enforced from the first commit**.
 
 ## Tasks / Subtasks
 
-- [ ] Task 1: Initialize npm package (AC: #1)
-  - [ ] 1.1 Run `npm init` with package name `@zookanalytics/bmad-orchestrator`
+- [ ] Task 1: Initialize pnpm package (AC: #1)
+  - [ ] 1.1 Run `pnpm init` with package name `@zookanalytics/bmad-orchestrator`
   - [ ] 1.2 Set `"type": "module"` for ESM
   - [ ] 1.3 Add `"engines": { "node": ">=22" }`
   - [ ] 1.4 Set entry point: `bin/bmad-orchestrator.js`
 
-- [ ] Task 2: Install dependencies (AC: #1)
+- [ ] Task 2: Install dependencies with pnpm (AC: #1)
   - [ ] 2.1 Install core deps: `ink@6 react@19 commander@14 @inkjs/ui yaml timeago.js execa@9 clipboardy`
   - [ ] 2.2 Install TypeScript deps: `typescript@5 @types/node @types/react tsx`
   - [ ] 2.3 Install testing deps: `vitest ink-testing-library`
@@ -76,7 +76,7 @@ So that **code quality is enforced from the first commit**.
   - [ ] 6.4 Configure coverage reporter: text, lcov
 
 - [ ] Task 7: Configure Git Hooks (AC: #1)
-  - [ ] 7.1 Initialize husky with `npx husky init`
+  - [ ] 7.1 Initialize husky with `pnpm exec husky init`
   - [ ] 7.2 Create pre-commit hook to run lint-staged
   - [ ] 7.3 Configure lint-staged in package.json for TypeScript/TSX files
 
@@ -87,7 +87,7 @@ So that **code quality is enforced from the first commit**.
   - [ ] 8.4 Create src/hooks/ directory for React hooks
   - [ ] 8.5 Create src/components/ directory for Ink components
   - [ ] 8.6 Create src/commands/ directory for CLI subcommands
-  - [ ] 8.7 Create bin/ directory for npm bin entry point
+  - [ ] 8.7 Create bin/ directory for CLI bin entry point
 
 - [ ] Task 9: Create Minimal Entry Points (AC: #2)
   - [ ] 9.1 Create bin/bmad-orchestrator.js with shebang and dist import
@@ -102,17 +102,17 @@ So that **code quality is enforced from the first commit**.
   - [ ] 10.5 Add "lint": "eslint src/"
   - [ ] 10.6 Add "format": "prettier --write src/"
   - [ ] 10.7 Add "type-check": "tsc --noEmit"
-  - [ ] 10.8 Add "check": "npm run type-check && npm run lint && npm run test:run"
+  - [ ] 10.8 Add "check": "pnpm type-check && pnpm lint && pnpm test:run"
 
 - [ ] Task 11: Create CI Workflow (AC: #3, #4)
   - [ ] 11.1 Create .github/workflows/ directory
-  - [ ] 11.2 Create ci.yml with checkout, setup-node@v4, npm ci, npm run check
+  - [ ] 11.2 Create ci.yml with checkout, setup-node@v4, pnpm install, pnpm check
   - [ ] 11.3 Configure coverage report upload as artifact
   - [ ] 11.4 Configure workflow to run on push and pull_request
 
 - [ ] Task 12: Verify All Quality Gates (AC: #1, #2, #3, #4)
-  - [ ] 12.1 Run `npm install` - verify no errors
-  - [ ] 12.2 Run `npm run check` - verify type-check, lint, test all pass
+  - [ ] 12.1 Run `pnpm install` - verify no errors
+  - [ ] 12.2 Run `pnpm check` - verify type-check, lint, test all pass
   - [ ] 12.3 Commit and verify pre-commit hook runs
   - [ ] 12.4 Verify coverage report generates
 
@@ -129,7 +129,7 @@ bmad-orchestrator/
 │   └── workflows/
 │       └── ci.yml
 ├── bin/
-│   └── bmad-orchestrator.js       # npm bin entry point
+│   └── bmad-orchestrator.js       # CLI bin entry point
 ├── src/
 │   ├── cli.ts                     # Entry point - Commander setup only
 │   ├── cli.test.ts
@@ -203,8 +203,11 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
-      - run: npm ci
-      - run: npm run check
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm check
 ```
 
 ### Naming Conventions (MANDATORY)

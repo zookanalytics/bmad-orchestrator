@@ -68,10 +68,10 @@ So that **I can develop and test the discovery module with realistic data**.
   - [ ] 6.2 Test that `devPodList.json` imports and matches `DevPod[]` type
   - [ ] 6.3 Test that `devPodListEmpty.json` imports as empty `DevPod[]`
   - [ ] 6.4 Test type narrowing works correctly for DevPodStatus
-  - [ ] 6.5 Ensure all tests pass with `npm run test:run`
+  - [ ] 6.5 Ensure all tests pass with `pnpm test:run`
 
 - [ ] Task 7: Verify integration with Story 1.1 (AC: #1, #2, #3)
-  - [ ] 7.1 Run `npm run check` to verify full quality gates pass
+  - [ ] 7.1 Run `pnpm check` to verify full quality gates pass
   - [ ] 7.2 Verify types.ts has no lint errors
   - [ ] 7.3 Verify fixtures are properly formatted (prettier)
 

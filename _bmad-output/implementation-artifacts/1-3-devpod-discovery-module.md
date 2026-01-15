@@ -86,7 +86,7 @@ So that **the application can find all DevPods on the host machine**.
   - [ ] 7.8 Achieve 90%+ code coverage for discovery.ts
 
 - [ ] Task 8: Verify integration with existing code (AC: #1, #2, #3, #4)
-  - [ ] 8.1 Run `npm run check` to verify all quality gates pass
+  - [ ] 8.1 Run `pnpm check` to verify all quality gates pass
   - [ ] 8.2 Verify imports work with `.js` extension (ESM)
   - [ ] 8.3 Verify types are correctly imported from types.ts
   - [ ] 8.4 Verify fixtures can be used in tests

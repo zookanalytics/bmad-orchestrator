@@ -266,7 +266,7 @@ BMAD Orchestrator is a hybrid CLI/developer tool:
 - Familiar ecosystem for owner modification
 
 **Package Structure:**
-- npm package
+- Node.js package
 - Entry point: `bmad-orchestrator` (persistent TUI)
 - Additional commands: `bmad-orchestrator status`, `bmad-orchestrator list`, etc.
 
@@ -314,10 +314,10 @@ workspaces_root: "~/.devpod/workspaces"
 
 ```bash
 # From package root
-npm install
+pnpm install
 
 # Or if published
-npm install -g @zookanalytics/bmad-orchestrator
+pnpm add -g @zookanalytics/bmad-orchestrator
 ```
 
 ### Scripting Support
@@ -451,7 +451,7 @@ done
 
 ### Installation & Configuration
 
-- FR33: User can install via npm
+- FR33: User can install via pnpm
 - FR34: User can run dashboard from any directory on host machine
 - FR35: System can read BMAD state files from DevPod workspaces on host filesystem
 
@@ -484,6 +484,6 @@ done
 
 - NFR15: Codebase is understandable by owner without extensive documentation
 - NFR16: Clear separation between TUI rendering, state aggregation, and command generation
-- NFR17: No external runtime dependencies beyond Node.js and npm packages
+- NFR17: No external runtime dependencies beyond Node.js packages
 - NFR18: Configuration schema is self-documenting (YAML with comments)
 

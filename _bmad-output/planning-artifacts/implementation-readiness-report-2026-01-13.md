@@ -63,7 +63,7 @@
 | FR30 | User can list discovered DevPods via CLI command |
 | FR31 | User can get output in JSON format for any CLI command |
 | FR32 | User can use shell completion for DevPod names and commands |
-| FR33 | User can install via npm |
+| FR33 | User can install via pnpm |
 | FR34 | User can run dashboard from any directory on host machine |
 | FR35 | System can read BMAD state files from DevPod workspaces on host filesystem |
 
@@ -100,7 +100,7 @@
 
 **Technical Constraints:**
 - Runtime: Node.js with TypeScript
-- Package: npm package with `bmad-orchestrator` entry point
+- Package: Node.js package with `bmad-orchestrator` entry point
 - Platform: Mac + Linux support
 
 ### PRD Completeness Assessment
@@ -152,7 +152,7 @@
 | FR30 | List DevPods CLI | Epic 1 | ✓ Covered |
 | FR31 | JSON output for CLI | Epic 5 | ✓ Covered |
 | FR32 | Shell completion | Epic 5 | ✓ Covered |
-| FR33 | Install via npm | Epic 1 | ✓ Covered |
+| FR33 | Install via pnpm | Epic 1 | ✓ Covered |
 | FR34 | Run from any directory | Epic 1 | ✓ Covered |
 | FR35 | Read BMAD state files | Epic 1 | ✓ Covered |
 

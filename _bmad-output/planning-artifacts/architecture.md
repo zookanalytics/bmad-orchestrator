@@ -40,7 +40,7 @@ _This document builds collaboratively through step-by-step discovery. Sections a
 - Command Generation (FR19-23): Copy-paste dispatch, SSH commands, tmux attach
 - Dashboard Interface (FR24-28): Persistent TUI, navigation, drill-down
 - CLI Commands (FR29-32): Scriptable status, list, JSON output, completion
-- Installation (FR33-35): npm package, host-based filesystem reads
+- Installation (FR33-35): pnpm package, host-based filesystem reads
 
 Core value proposition: Unified visibility across all DevPods with actionable commands, derived entirely from existing BMAD artifacts.
 
@@ -193,7 +193,6 @@ Epic 1 from the previous attempt provides a solid foundation pattern - comprehen
 
 **What to adapt:**
 - Standalone project structure (not `packages/bmad-dashboard/`)
-- No monorepo-specific tooling (pnpm workspace)
 - Simpler package scripts
 
 ### Technology Versions (Verified 2026-01-07)
@@ -222,23 +221,23 @@ Epic 1 from the previous attempt provides a solid foundation pattern - comprehen
 
 ```bash
 # Initialize project
-npm init -y
+pnpm init
 
 # Core dependencies
-npm install ink@6 react@19 commander@14 @inkjs/ui yaml timeago.js
+pnpm add ink@6 react@19 commander@14 @inkjs/ui yaml timeago.js
 
 # Dev dependencies - TypeScript
-npm install -D typescript@5 @types/node @types/react tsx
+pnpm add -D typescript@5 @types/node @types/react tsx
 
 # Dev dependencies - Testing
-npm install -D vitest ink-testing-library
+pnpm add -D vitest ink-testing-library
 
 # Dev dependencies - Code Quality
-npm install -D eslint @typescript-eslint/eslint-plugin @typescript-eslint/parser
-npm install -D prettier eslint-config-prettier
+pnpm add -D eslint @typescript-eslint/eslint-plugin @typescript-eslint/parser
+pnpm add -D prettier eslint-config-prettier
 
 # Dev dependencies - Git hooks (optional, can use git-workflow skill)
-npm install -D husky lint-staged
+pnpm add -D husky lint-staged
 ```
 
 **TypeScript Configuration (tsconfig.json):**
@@ -288,7 +287,7 @@ export default defineConfig({
     "lint": "eslint src/",
     "format": "prettier --write src/",
     "type-check": "tsc --noEmit",
-    "check": "npm run type-check && npm run lint && npm run test:run"
+    "check": "pnpm type-check && pnpm lint && pnpm test:run"
   }
 }
 ```
@@ -306,8 +305,11 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
-      - run: npm ci
-      - run: npm run check
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm check
 ```
 
 **Project Structure with Tests:**
@@ -344,7 +346,7 @@ bmad-orchestrator/
 **Critical Decisions (Block Implementation):**
 - State management approach: Single orchestrator hook
 - Subprocess handling: execa 9.x with thin wrapper
-- Distribution method: Scoped npm package
+- Distribution method: Scoped pnpm package
 
 **Already Decided (from Previous Steps):**
 - TUI Framework: Ink 6.6.0 + React 19.x
@@ -407,7 +409,7 @@ function Dashboard() {
 **Version:** 9.6.1 (verified 2026-01-07)
 
 **Rationale:**
-- 16,553+ npm dependents - battle-tested
+- 16,553+ package dependents - battle-tested
 - `reject: false` returns errors in values, not exceptions
 - Cleaner aggregation with Promise.allSettled
 - Dependency injection enables testing without global mocks
@@ -482,7 +484,7 @@ src/
 
 ### Distribution & Versioning
 
-**Decision:** Scoped npm package
+**Decision:** Scoped package
 
 **Package Name:** `@zookanalytics/bmad-orchestrator`
 
@@ -494,8 +496,8 @@ src/
 **Publishing:**
 
 ```bash
-npm publish --access public  # First publish
-npm publish                  # Subsequent
+pnpm publish --access public  # First publish
+pnpm publish                  # Subsequent
 ```
 
 ### Project Structure (Refined)
@@ -538,7 +540,7 @@ bmad-orchestrator/
 | Database | Filesystem reads only |
 | Authentication | Local CLI tool |
 | API Server | Subprocess consumer only |
-| Hosting | npm package, runs locally |
+| Hosting | Package runs locally |
 
 ### Implementation Sequence (Refined)
 
@@ -913,7 +915,7 @@ bmad-orchestrator/
 │   └── workflows/
 │       └── ci.yml                 # Quality gates: type-check, lint, test
 ├── bin/
-│   └── bmad-orchestrator.js       # npm bin entry point (FR33-35)
+│   └── bmad-orchestrator.js       # CLI bin entry point (FR33-35)
 ├── src/
 │   ├── cli.ts                     # Entry point - Commander setup only
 │   ├── cli.test.ts
@@ -1102,7 +1104,7 @@ import '../dist/cli.js';
 | NFR14 | tmux session naming | SSH command generation | ✓ |
 | NFR15 | Owner understandability | Clean module boundaries | ✓ |
 | NFR16 | Clear separation | lib/hooks/components/commands layers | ✓ |
-| NFR17 | No external deps | npm packages only | ✓ |
+| NFR17 | No external deps | Node.js packages only | ✓ |
 | NFR18 | Self-documenting config | Zero-config Phase 1 | ✓ |
 
 **NFR Coverage:** 17 of 18 NFRs addressed. NFR13 deferred with Phase 2+ features.
@@ -1175,7 +1177,7 @@ import '../dist/cli.js';
 2. **Epic 2: Discovery & State** - lib modules with fixtures
 3. **Epic 3: Dashboard Core** - TUI with useOrchestrator
 4. **Epic 4: CLI Commands** - status, list with JSON output
-5. **Epic 5: Polish & Publish** - npm package ready
+5. **Epic 5: Polish & Publish** - Package ready for publishing
 
 ## Phase 3+ Considerations: Execution Engine Architecture
 

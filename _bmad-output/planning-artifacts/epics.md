@@ -66,7 +66,7 @@ This document provides the complete epic and story breakdown for BMAD Orchestrat
 - FR32: User can use shell completion for DevPod names and commands
 
 **Installation & Configuration (FR33-35):**
-- FR33: User can install via npm
+- FR33: User can install via pnpm
 - FR34: User can run dashboard from any directory on host machine
 - FR35: System can read BMAD state files from DevPod workspaces on host filesystem
 
@@ -95,7 +95,7 @@ This document provides the complete epic and story breakdown for BMAD Orchestrat
 **Maintainability:**
 - NFR15: Codebase is understandable by owner without extensive documentation
 - NFR16: Clear separation between TUI rendering, state aggregation, and command generation
-- NFR17: No external runtime dependencies beyond Node.js and npm packages
+- NFR17: No external runtime dependencies beyond Node.js packages
 - NFR18: Configuration schema is self-documenting (YAML with comments)
 
 ### Additional Requirements
@@ -111,7 +111,7 @@ This document provides the complete epic and story breakdown for BMAD Orchestrat
 - AR8: execa 9.x with reject: false pattern for subprocess handling
 - AR9: Dependency injection pattern enabling testability without global mocks
 - AR10: Test fixtures required from day 1 (devPodList.json, sprintStatus.yaml, story files)
-- AR11: Scoped npm package: @zookanalytics/bmad-orchestrator
+- AR11: Scoped package: @zookanalytics/bmad-orchestrator
 
 **From Architecture - Data Sources:**
 - AR12: Sprint status from `_bmad-output/implementation-artifacts/sprint-status.yaml`
@@ -212,7 +212,7 @@ This document provides the complete epic and story breakdown for BMAD Orchestrat
 | FR30 | Epic 1 | List DevPods CLI (validates Epic 1 delivery) |
 | FR31 | Epic 5 | JSON output for CLI |
 | FR32 | Epic 5 | Shell completion |
-| FR33 | Epic 1 | Install via npm |
+| FR33 | Epic 1 | Install via pnpm |
 | FR34 | Epic 1 | Run from any directory |
 | FR35 | Epic 1 | Read BMAD state files |
 
@@ -264,14 +264,14 @@ This epic adds command generation (dispatch, SSH, tmux attach) and clipboard int
 ---
 
 ### Epic 5: CLI Polish & Package Publishing
-**User Outcome:** I can script the tool and install it globally from npm
+**User Outcome:** I can script the tool and install it globally
 
-This epic adds the `status` CLI command with JSON output, shell completion, and publishes the package to npm as @zookanalytics/bmad-orchestrator.
+This epic adds the `status` CLI command with JSON output, shell completion, and publishes the package as @zookanalytics/bmad-orchestrator.
 
 **FRs covered:** FR29, FR31, FR32
-**ARs covered:** AR11 (scoped npm package)
+**ARs covered:** AR11 (scoped package)
 **NFR addressed:** NFR3 (CLI performance <500ms)
-**Deliverable:** Published npm package with full CLI
+**Deliverable:** Published package with full CLI
 
 ---
 
@@ -288,7 +288,7 @@ So that **code quality is enforced from the first commit**.
 **Acceptance Criteria:**
 
 **Given** a new project directory
-**When** I run `npm install`
+**When** I run `pnpm install`
 **Then** all dependencies install without errors
 **And** the following tooling is configured:
 - TypeScript 5.x with strict mode
@@ -298,7 +298,7 @@ So that **code quality is enforced from the first commit**.
 - Pre-commit hooks via husky/lint-staged
 
 **Given** the project is initialized
-**When** I run `npm run check`
+**When** I run `pnpm check`
 **Then** type-check, lint, and tests all pass
 
 **Given** a pull request is opened
@@ -1067,7 +1067,7 @@ So that **I can quickly decide what work to dispatch next**.
 
 ## Epic 5: CLI Polish & Package Publishing
 
-**Goal:** Add the `status` CLI command with JSON output, shell completion, and publish the package to npm as @zookanalytics/bmad-orchestrator, completing the MVP.
+**Goal:** Add the `status` CLI command with JSON output, shell completion, and publish the package as @zookanalytics/bmad-orchestrator, completing the MVP.
 
 ### Story 5.1: Status Command Implementation
 
@@ -1166,8 +1166,8 @@ So that **I can work faster in the terminal without typing full names**.
 ### Story 5.3: Package Publishing Preparation
 
 As a **developer**,
-I want **the package ready for npm publishing**,
-So that **users can install it globally with `npm install -g`**.
+I want **the package ready for publishing**,
+So that **users can install it globally with `pnpm add -g`**.
 
 **Acceptance Criteria:**
 
@@ -1181,7 +1181,7 @@ So that **users can install it globally with `npm install -g`**.
 - `"files": ["dist", "bin"]` (published files only)
 - Proper `"description"`, `"keywords"`, `"repository"`, `"license"`
 
-**Given** I run `npm pack`
+**Given** I run `pnpm pack`
 **When** the tarball is created
 **Then** it contains only the necessary files (no src/, no tests)
 
@@ -1198,11 +1198,11 @@ So that **users can install it globally with `npm install -g`**.
 **Then** it has the correct shebang and imports dist/cli.js
 
 **Given** the package is ready
-**When** I run `npm publish --access public`
-**Then** it publishes successfully to npm (manual step, not automated)
+**When** I run `pnpm publish --access public`
+**Then** it publishes successfully (manual step, not automated)
 
 **Technical Notes:**
 - Ensure `prepublishOnly` script runs build
 - Add `"engines": { "node": ">=22" }` for Node version requirement
 - Include LICENSE file
-- Test with `npm link` before publishing
+- Test with `pnpm link` before publishing

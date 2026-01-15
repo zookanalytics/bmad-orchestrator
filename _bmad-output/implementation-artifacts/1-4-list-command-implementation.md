@@ -84,10 +84,10 @@ So that **I can verify the tool discovers my development containers**.
   - [ ] 6.4 Test: `--help` shows list command documentation
 
 - [ ] Task 7: Verify all quality gates pass (AC: #1-#5)
-  - [ ] 7.1 Run `npm run check` - all checks pass
-  - [ ] 7.2 Run `npm run test:run -- --coverage` - verify 80%+ coverage
+  - [ ] 7.1 Run `pnpm check` - all checks pass
+  - [ ] 7.2 Run `pnpm test:run -- --coverage` - verify 80%+ coverage
   - [ ] 7.3 Verify no lint errors in new files
-  - [ ] 7.4 Test manually: `npm run dev list` shows expected output
+  - [ ] 7.4 Test manually: `pnpm dev list` shows expected output
 
 ## Dev Notes
 
@@ -353,7 +353,7 @@ describe('listCommand', () => {
 - Project structure with `src/commands/` directory
 - Commander.js installed and configured
 - Vitest testing framework
-- Package scripts (`npm run check`, `npm run dev`)
+- Package scripts (`pnpm check`, `pnpm dev`)
 
 **Story 1.2 (Test Fixtures and Types):**
 - `DevPod` interface from `src/lib/types.ts`
@@ -434,10 +434,10 @@ src/
 ### Verification Checklist
 
 Before marking complete:
-- [ ] `npm run check` passes (type-check, lint, test)
-- [ ] Coverage remains at 80%+ (run `npm run test:run -- --coverage`)
-- [ ] `npm run dev list` shows expected output with mock
-- [ ] `npm run dev list --json` outputs valid JSON
+- [ ] `pnpm check` passes (type-check, lint, test)
+- [ ] Coverage remains at 80%+ (run `pnpm test:run -- --coverage`)
+- [ ] `pnpm dev list` shows expected output with mock
+- [ ] `pnpm dev list --json` outputs valid JSON
 - [ ] No lint warnings in new files
 - [ ] All imports use `.js` extension
 
