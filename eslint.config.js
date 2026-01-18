@@ -1,0 +1,21 @@
+import eslint from '@eslint/js';
+import tseslint from 'typescript-eslint';
+import perfectionist from 'eslint-plugin-perfectionist';
+
+export default tseslint.config(
+  eslint.configs.recommended,
+  ...tseslint.configs.strict,
+  {
+    plugins: {
+      perfectionist,
+    },
+    rules: {
+      'perfectionist/sort-imports': 'error',
+      'no-warning-comments': ['error', { terms: ['todo', 'fixme'] }],
+      complexity: ['error', 20],
+    },
+  },
+  {
+    ignores: ['dist/**', 'node_modules/**'],
+  }
+);

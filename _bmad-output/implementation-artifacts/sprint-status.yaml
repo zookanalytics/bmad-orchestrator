@@ -40,7 +40,7 @@ story_location: /workspace/_bmad-output/implementation-artifacts
 development_status:
   # Epic 1: Project Foundation & DevPod Discovery
   epic-1: in-progress
-  1-1-project-initialization-with-quality-gates: ready-for-dev
+  1-1-project-initialization-with-quality-gates: done
   1-2-test-fixtures-and-discovery-types: ready-for-dev
   1-3-devpod-discovery-module: ready-for-dev
   1-4-list-command-implementation: ready-for-dev
