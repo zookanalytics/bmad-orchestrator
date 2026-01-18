@@ -1,0 +1,118 @@
+# Workflow Status Template
+
+# This tracks progress through BMM methodology Analysis, Planning, and Solutioning phases.
+# Implementation phase is tracked separately in sprint-status.yaml
+
+# STATUS DEFINITIONS:
+# ==================
+# Initial Status (before completion):
+#   - required: Must be completed to progress
+#   - optional: Can be completed but not required
+#   - recommended: Strongly suggested but not required
+#   - conditional: Required only if certain conditions met (e.g., if_has_ui)
+#
+# Completion Status:
+#   - {file-path}: File created/found (e.g., "docs/product-brief.md")
+#   - skipped: Optional/conditional workflow that was skipped
+
+generated: "2026-01-06"
+project: "BMAD Orchestrator"
+project_type: "software"
+selected_track: "method"
+field_type: "greenfield"
+workflow_path: "method-greenfield.yaml"
+
+workflow_status:
+  # Phase 1: Analysis (Optional)
+  - phase: 1
+    name: "Analysis"
+    workflows:
+      - id: "brainstorm-project"
+        name: "Brainstorm"
+        agent: "analyst"
+        command: "/bmad:bmm:workflows:brainstorming"
+        status: "skipped"
+        note: "User did not select"
+
+      - id: "research"
+        name: "Research"
+        agent: "analyst"
+        command: "/bmad:bmm:workflows:research"
+        status: "_bmad-output/planning-artifacts/research/"
+        completedAt: "2026-01-06"
+        note: "Completed manually - 16 documents"
+
+      - id: "product-brief"
+        name: "Product Brief"
+        agent: "analyst"
+        command: "/bmad:bmm:workflows:create-product-brief"
+        status: "_bmad-output/planning-artifacts/product-brief-bmad-orchestrator-2026-01-06.md"
+        completedAt: "2026-01-06"
+        note: "Complete - 5 sections with party mode refinements"
+
+  # Phase 2: Planning
+  - phase: 2
+    name: "Planning"
+    workflows:
+      - id: "prd"
+        name: "Product Requirements Document"
+        agent: "pm"
+        command: "/bmad:bmm:workflows:create-prd"
+        status: "_bmad-output/planning-artifacts/prd.md"
+        completedAt: "2026-01-06"
+        note: "Complete - verified alignment with brief"
+
+      - id: "create-ux-design"
+        name: "UX Design"
+        agent: "ux-designer"
+        command: "/bmad:bmm:workflows:create-ux-design"
+        status: "_bmad-output/planning-artifacts/ux-design-specification.md"
+        completedAt: "2026-01-06"
+        note: "Complete - verified alignment with brief"
+
+  # Phase 3: Solutioning
+  - phase: 3
+    name: "Solutioning"
+    workflows:
+      - id: "create-architecture"
+        name: "System Architecture"
+        agent: "architect"
+        command: "/bmad:bmm:workflows:create-architecture"
+        status: "_bmad-output/planning-artifacts/architecture.md"
+        completedAt: "2026-01-08"
+        note: "Complete - 7 steps, all FR/NFR coverage validated"
+
+      - id: "create-epics-and-stories"
+        name: "Epics and Stories"
+        agent: "pm"
+        command: "/bmad:bmm:workflows:create-epics-and-stories"
+        status: "_bmad-output/planning-artifacts/epics.md"
+        completedAt: "2026-01-13"
+        note: "Complete - 5 epics, 17 stories, all FRs covered"
+
+      - id: "test-design"
+        name: "Test Design"
+        agent: "tea"
+        command: "/bmad:bmm:workflows:testarch-test-design"
+        status: "_bmad-output/test-design-system.md"
+        completedAt: "2026-01-08"
+        note: "System-level testability review - PASS with recommendations for Sprint 0"
+
+      - id: "implementation-readiness"
+        name: "Implementation Readiness Check"
+        agent: "architect"
+        command: "/bmad:bmm:workflows:check-implementation-readiness"
+        status: "_bmad-output/planning-artifacts/implementation-readiness-report-2026-01-13.md"
+        completedAt: "2026-01-13"
+        note: "READY FOR IMPLEMENTATION - 0 critical/major issues"
+
+  # Phase 4: Implementation
+  - phase: 4
+    name: "Implementation"
+    workflows:
+      - id: "sprint-planning"
+        name: "Sprint Planning"
+        agent: "sm"
+        command: "/bmad:bmm:workflows:sprint-planning"
+        status: "required"
+        note: "Creates sprint plan - subsequent work tracked there"

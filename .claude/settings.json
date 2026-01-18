@@ -1,0 +1,19 @@
+{
+  "includeCoAuthoredBy": false,
+  "permissions": {
+    "defaultMode": "bypassPermissions"
+  },
+  "enabledMcpjsonServers": [],
+  "hooks": {},
+  "enabledPlugins": {
+    "git-workflow@claude-devcontainer": true
+  },
+  "extraKnownMarketplaces": {
+    "claude-devcontainer": {
+      "source": {
+        "source": "git",
+        "url": "https://github.com/zookanalytics/claude-devcontainer.git"
+      }
+    }
+  }
+}

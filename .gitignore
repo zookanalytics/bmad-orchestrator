@@ -1,0 +1,32 @@
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Docker
+.docker/
+
+# Logs
+*.log
+
+# Claude local files
+.claude/settings.local.json
+.claude/.commit-state.json
+
+# Python cache (hooks are Python)
+__pycache__/
+*.pyc
+
+# Node files
+node_modules
+.pnpm-store
+
+# Linting caches
+.eslintcache
+.cspellcache
+.prettiercache
