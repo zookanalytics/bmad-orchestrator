@@ -1,6 +1,6 @@
 # Story 1.1: Project Initialization with Quality Gates
 
-Status: review
+Status: done
 
 ## Story
 
@@ -393,6 +393,42 @@ N/A - No debugging required
 ### Change Log
 
 - 2026-01-15: Initial project setup complete - all quality gates verified passing
+- 2026-01-18: Code review #1 - 3 HIGH issues fixed (coverage enforcement, test quality, eslint-config-prettier)
+- 2026-01-18: Code review #2 - Improved test quality (spy on real Command.prototype.parse instead of full mock)
+
+## Senior Developer Review (AI)
+
+**Reviewer:** Claude Opus 4.5 (code-review workflow)
+**Date:** 2026-01-18
+**Outcome:** APPROVED
+
+### Review Pass #2 Summary
+
+All HIGH issues from previous review have been resolved. This pass found:
+- 0 HIGH issues
+- 3 MEDIUM issues (non-blocking)
+- 2 LOW issues (nice-to-have)
+
+| Severity | Issue | Resolution |
+|----------|-------|------------|
+| MEDIUM | Test mock replaced entire Command class instead of just spying on parse | Fixed: Refactored to spy on Command.prototype.parse, tests now exercise real Commander setup |
+| MEDIUM | Empty __fixtures__ directory | Noted: Required for Story 1.2+, not blocking for 1.1 |
+| MEDIUM | Story File List includes build artifacts (dist/) | Noted: Documentation clarity issue only |
+| LOW | cli.ts doesn't export program for direct testing | Noted: Future stories may need exports |
+| LOW | No explicit @vitest/coverage-v8 dependency | Noted: Current setup works via vitest built-in |
+
+### Verification Results
+
+```
+pnpm check → PASS
+- type-check: PASS (no TypeScript errors)
+- lint: PASS (ESLint with strict rules)
+- test:run --coverage: PASS (100% coverage on cli.ts, 2 tests passing)
+
+pnpm build → PASS
+node bin/bmad-orchestrator.js --help → PASS
+node bin/bmad-orchestrator.js --version → "0.1.0" ✓
+```
 
 ### File List
 
@@ -424,3 +460,103 @@ N/A - No debugging required
 - bin/
 - .github/workflows/
 - dist/ (build output)
+
+### Package.json Required Fields
+
+```json
+{
+  "name": "@zookanalytics/bmad-orchestrator",
+  "version": "0.1.0",
+  "type": "module",
+  "bin": {
+    "bmad-orchestrator": "./bin/bmad-orchestrator.js"
+  },
+  "engines": {
+    "node": ">=22"
+  },
+  "files": ["dist", "bin"],
+  "scripts": {
+    "dev": "tsx src/cli.ts",
+    "build": "tsc",
+    "test": "vitest",
+    "test:run": "vitest run --coverage",
+    "lint": "eslint src/",
+    "format": "prettier --write src/",
+    "type-check": "tsc --noEmit",
+    "check": "pnpm type-check && pnpm lint && pnpm test:run"
+  }
+}
+```
+
+### ESLint Configuration (MANDATORY)
+
+Use flat config format (eslint.config.js), NOT .eslintrc:
+
+```javascript
+import eslint from '@eslint/js';
+import tseslint from 'typescript-eslint';
+import perfectionist from 'eslint-plugin-perfectionist';
+import prettierConfig from 'eslint-config-prettier';
+
+export default tseslint.config(
+  eslint.configs.recommended,
+  ...tseslint.configs.strict,
+  prettierConfig, // Added prettierConfig
+  {
+    plugins: {
+      perfectionist,
+    },
+    rules: {
+      'perfectionist/sort-imports': 'error',
+      'no-warning-comments': ['error', { terms: ['todo', 'fixme'] }],
+      complexity: ['error', 20],
+    },
+  },
+  {
+    ignores: ['dist/**', 'node_modules/**'],
+  }
+);
+```
+
+### Minimal Test for Coverage
+
+```typescript
+// src/cli.test.ts
+import { describe, it, expect } from 'vitest';
+import { Command } from 'commander';
+import { program } from '../src/cli.js'; // Assuming cli.ts exports program
+
+describe('cli', () => {
+  it('should be importable and return a Commander program instance', () => {
+    expect(program).toBeInstanceOf(Command);
+    expect(program.name()).toBe('bmad-orchestrator');
+  });
+
+  it('should display help message with --help flag', async () => {
+    // Temporarily override process.exit to prevent test runner from exiting
+    const originalExit = process.exit;
+    let exitCode: number | undefined;
+    process.exit = ((code?: number) => {
+      exitCode = code;
+      throw new Error('process.exit was called'); // Stop execution
+    }) as (code?: number) => never;
+
+    const mockStdoutWrite = vi.spyOn(process.stdout, 'write').mockImplementation(() => true);
+
+    try {
+      await program.parseAsync(['--help'], { from: 'node' });
+    } catch (error: any) {
+      // Expected to catch the thrown error from process.exit
+      expect(error.message).toBe('process.exit was called');
+    } finally {
+      process.exit = originalExit; // Restore original process.exit
+      mockStdoutWrite.mockRestore();
+    }
+
+    expect(exitCode).toBe(0);
+    const output = mockStdoutWrite.mock.calls.join('');
+    expect(output).toContain('Usage: bmad-orchestrator');
+    expect(output).toContain('display help for command');
+  });
+});
+

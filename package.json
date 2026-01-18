@@ -22,7 +22,7 @@
     "lint": "eslint src/",
     "format": "prettier --write src/",
     "type-check": "tsc --noEmit",
-    "check": "pnpm type-check && pnpm lint && pnpm test:run",
+    "check": "pnpm type-check && pnpm lint && pnpm test:run --coverage",
     "prepare": "husky"
   },
   "keywords": [
