@@ -129,3 +129,8 @@ export interface DiscoveryResult {
   /** Error message if discovery failed, null otherwise */
   error: string | null;
 }
+
+/**
+ * Generic raw object type for parsing unknown JSON structures.
+ */
+export type RawObject = Record<string, unknown>;

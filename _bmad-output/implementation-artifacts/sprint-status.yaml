@@ -42,7 +42,7 @@ development_status:
   epic-1: in-progress
   1-1-project-initialization-with-quality-gates: done
   1-2-test-fixtures-and-discovery-types: done
-  1-3-devpod-discovery-module: ready-for-dev
+  1-3-devpod-discovery-module: done
   1-4-list-command-implementation: ready-for-dev
   epic-1-retrospective: optional
 
