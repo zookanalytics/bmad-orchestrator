@@ -26,6 +26,13 @@ __pycache__/
 node_modules
 .pnpm-store
 
+# Build output
+dist/
+*.tsbuildinfo
+
+# Test coverage
+coverage/
+
 # Linting caches
 .eslintcache
 .cspellcache

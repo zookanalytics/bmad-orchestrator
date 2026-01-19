@@ -1,6 +1,6 @@
 # Story 1.2: Test Fixtures and Discovery Types
 
-Status: ready-for-dev
+Status: done
 
 ## Story
 
@@ -33,47 +33,53 @@ So that **I can develop and test the discovery module with realistic data**.
 
 ## Tasks / Subtasks
 
-- [ ] Task 1: Create DevPod type definitions (AC: #2)
-  - [ ] 1.1 Create `src/lib/types.ts` file
-  - [ ] 1.2 Define `DevPodStatus` type union: `'running' | 'stopped' | 'pending' | 'error'`
-  - [ ] 1.3 Define `DevPod` interface with fields: `name`, `workspacePath`, `status`, `ide?`, `machine?`
-  - [ ] 1.4 Define `DiscoveryResult` interface with fields: `devpods: DevPod[]`, `error: string | null`
-  - [ ] 1.5 Export all types with named exports
+- [x] Task 1: Create DevPod type definitions (AC: #2)
+  - [x] 1.1 Create `src/lib/types.ts` file
+  - [x] 1.2 Define `DevPodStatus` type union: `'Running' | 'Stopped' | 'Busy' | 'NotFound'` (updated to match actual DevPod CLI)
+  - [x] 1.3 Define `DevPod` interface with fields matching actual CLI output: `id`, `source`, `provider`, `ide?`, `machine?`, etc.
+  - [x] 1.4 Define `DiscoveryResult` interface with fields: `devpods: DevPod[]`, `error: string | null`
+  - [x] 1.5 Export all types with named exports
 
-- [ ] Task 2: Research DevPod CLI output format (AC: #1, #3)
-  - [ ] 2.1 Run `devpod list --output json` locally or research docs to get exact field names
-  - [ ] 2.2 Document the actual JSON schema DevPod CLI outputs
-  - [ ] 2.3 Ensure types match CLI output (may need to adjust field names)
+- [x] Task 2: Research DevPod CLI output format (AC: #1, #3)
+  - [x] 2.1 Run `devpod list --output json` locally and researched DevPod GitHub source code
+  - [x] 2.2 Document the actual JSON schema DevPod CLI outputs (fields: id, uid, source, provider, ide, machine, timestamps, etc.)
+  - [x] 2.3 Ensure types match CLI output - adjusted field names to match actual DevPod CLI (e.g., `id` not `name`, status values are PascalCase)
 
-- [ ] Task 3: Create normal DevPod list fixture (AC: #1, #3)
-  - [ ] 3.1 Create `src/lib/__fixtures__/devPodList.json`
-  - [ ] 3.2 Include 3 DevPods with mixed states:
-    - DevPod 1: running state, with workspace path
-    - DevPod 2: stopped state, with workspace path
-    - DevPod 3: running state, different workspace path
-  - [ ] 3.3 Use realistic naming convention (e.g., `devpod-myproject`, `devpod-another`)
-  - [ ] 3.4 Include workspace paths pointing to `~/.devpod/workspaces/` or similar
+- [x] Task 3: Create normal DevPod list fixture (AC: #1, #3)
+  - [x] 3.1 Create `src/lib/__fixtures__/devPodList.json`
+  - [x] 3.2 Include 3 DevPods with mixed configurations:
+    - DevPod 1: git repository source, docker provider, vscode IDE
+    - DevPod 2: local folder source, docker provider
+    - DevPod 3: git repository source, kubernetes provider, cursor IDE
+  - [x] 3.3 Use realistic naming convention (e.g., `bmad-orchestrator`, `other-project`)
+  - [x] 3.4 Include realistic source configurations (gitRepository, localFolder)
 
-- [ ] Task 4: Create empty DevPod list fixture (AC: #1, #3)
-  - [ ] 4.1 Create `src/lib/__fixtures__/devPodListEmpty.json`
-  - [ ] 4.2 Content should be an empty array `[]`
+- [x] Task 4: Create empty DevPod list fixture (AC: #1, #3)
+  - [x] 4.1 Create `src/lib/__fixtures__/devPodListEmpty.json`
+  - [x] 4.2 Content is an empty array `[]`
 
-- [ ] Task 5: Create error response fixture (AC: #1, #3)
-  - [ ] 5.1 Create `src/lib/__fixtures__/devPodListError.json`
-  - [ ] 5.2 Include realistic error structure from DevPod CLI
-  - [ ] 5.3 Simulate "devpod not found" or connection error
+- [x] Task 5: Create error response fixture (AC: #1, #3)
+  - [x] 5.1 Create `src/lib/__fixtures__/devPodListError.json`
+  - [x] 5.2 Include realistic error structure with error, code, stderr fields
+  - [x] 5.3 Simulates "devpod command not found" error
 
-- [ ] Task 6: Create fixture type tests (AC: #3)
-  - [ ] 6.1 Create `src/lib/types.test.ts`
-  - [ ] 6.2 Test that `devPodList.json` imports and matches `DevPod[]` type
-  - [ ] 6.3 Test that `devPodListEmpty.json` imports as empty `DevPod[]`
-  - [ ] 6.4 Test type narrowing works correctly for DevPodStatus
-  - [ ] 6.5 Ensure all tests pass with `pnpm test:run`
+- [x] Task 6: Create fixture type tests (AC: #3)
+  - [x] 6.1 Create `src/lib/types.test.ts`
+  - [x] 6.2 Test that `devPodList.json` imports and matches `DevPod[]` type
+  - [x] 6.3 Test that `devPodListEmpty.json` imports as empty `DevPod[]`
+  - [x] 6.4 Test type narrowing works correctly for DevPodStatus
+  - [x] 6.5 All 10 tests pass with `pnpm test:run`
 
-- [ ] Task 7: Verify integration with Story 1.1 (AC: #1, #2, #3)
-  - [ ] 7.1 Run `pnpm check` to verify full quality gates pass
-  - [ ] 7.2 Verify types.ts has no lint errors
-  - [ ] 7.3 Verify fixtures are properly formatted (prettier)
+- [x] Task 7: Verify integration with Story 1.1 (AC: #1, #2, #3)
+  - [x] 7.1 Run `pnpm check` - all quality gates pass (type-check, lint, test with 100% coverage)
+  - [x] 7.2 Verify types.ts has no lint errors
+  - [x] 7.3 Verify fixtures are properly formatted (prettier)
+
+### Review Follow-ups (AI)
+
+- [ ] [AI-Review][Low] Documentation Gap: The reason for including `esModuleInterop: true` in `tsconfig.json` is not explicitly documented as a task or AC. Consider adding a task to clarify its necessity for JSON imports.
+- [ ] [AI-Review][Low] Code Quality / Naming Consistency: The `DevPodStatus` type union uses PascalCase string literals (e.g., `'Running'`). While claimed to match CLI output, verify if this is consistent with broader DevPod CLI output conventions for string enums. If not, consider standardizing to `snake_case` or `lowercase` for robustness.
+- [ ] [AI-Review][Low] Test Quality / Exhaustive Fixture Validation: The tests in `src/lib/types.test.ts` do not exhaustively validate all fields of all 3 DevPods in `devPodList.json` against the detailed descriptions provided in Task 3.2. Enhance tests to ensure full coverage of fixture data as per story requirements.
 
 ## Dev Notes
 
@@ -315,11 +321,70 @@ Expected structure (may vary):
 
 ### Agent Model Used
 
-{{agent_model_name_version}}
+Claude Opus 4.5 (claude-opus-4-5-20251101)
 
 ### Debug Log References
 
+- DevPod CLI research: Analyzed DevPod GitHub source code (pkg/provider/workspace.go, pkg/client/client.go)
+- Status values confirmed: Running, Stopped, Busy, NotFound (PascalCase)
+- JSON structure verified from DevPod source: id, uid, source, provider, ide, machine, timestamps
+
 ### Completion Notes List
+
+- ✅ Created comprehensive type definitions based on actual DevPod CLI output structure
+- ✅ DevPodStatus type uses actual CLI values: 'Running' | 'Stopped' | 'Busy' | 'NotFound'
+- ✅ DevPod interface matches CLI JSON output with id, source, provider, ide, machine, timestamps
+- ✅ Added supporting types: DevPodSource, DevPodMachineConfig, DevPodProviderConfig, DevPodIDEConfig, DevPodTimestamp
+- ✅ Created 3 realistic fixtures matching actual CLI structure
+- ✅ All 10 tests passing with 100% code coverage
+- ✅ Added `resolveJsonModule: true` to tsconfig.json for JSON imports
+- ✅ Used `with { type: 'json' }` import attribute for NodeNext module compliance
 
 ### File List
 
+- `src/lib/types.ts` (new) - Type definitions for DevPod discovery
+- `src/lib/types.test.ts` (new) - Test suite for types and fixtures (10 tests)
+- `src/lib/__fixtures__/devPodList.json` (new) - Normal response fixture with 3 DevPods
+- `src/lib/__fixtures__/devPodListEmpty.json` (new) - Empty array fixture
+- `src/lib/__fixtures__/devPodListError.json` (new) - Error response fixture
+- `tsconfig.json` (modified) - Added resolveJsonModule: true
+- `_bmad-output/implementation-artifacts/sprint-status.yaml` (modified) - Updated sprint status
+
+## Senior Developer Review (AI)
+
+**Reviewer:** Claude Opus 4.5 (code-review workflow)
+**Date:** 2026-01-18
+**Outcome:** ✅ APPROVED
+
+### Verification Summary
+
+| Check | Result |
+|-------|--------|
+| All ACs Implemented | ✓ 3/3 verified |
+| All Tasks Complete | ✓ 18/18 audited |
+| Quality Gates | ✓ `pnpm check` passes |
+| Test Coverage | ✓ 100% on types.ts |
+| Architecture Compliance | ✓ lib/__fixtures__/ pattern followed |
+| Code Quality | ✓ Clean types, proper JSDoc |
+| Security | ✓ No vulnerabilities (type definitions only) |
+
+### Findings
+
+**High/Medium Issues:** None
+
+**Low Issues (4):**
+1. Alphabetic ordering of DevPodStatus values (cosmetic preference)
+2. JSON fixtures show 0% coverage (expected - not executable code)
+3. devPodListError.json not tested yet (reserved for Story 1.3)
+4. Import attribute syntax is modern (correct usage)
+
+### Notes
+
+- Implementation improved upon Dev Notes specification based on actual DevPod CLI research
+- Types match real DevPod CLI output structure (id, source, provider vs simplified name/workspacePath/status)
+- All previously logged Review Follow-ups remain valid low-priority items
+
+## Change Log
+
+- 2026-01-18: Senior Developer Review (AI) - APPROVED, status updated to done
+- 2026-01-18: Story 1.2 implemented - test fixtures and discovery types created with comprehensive type definitions matching actual DevPod CLI output
