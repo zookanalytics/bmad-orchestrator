@@ -85,6 +85,10 @@ importers:
         specifier: ^4.0.17
         version: 4.0.17(@types/node@25.0.8)(tsx@4.21.0)(yaml@2.8.2)
 
+  packages/agent-env: {}
+
+  packages/orchestrator: {}
+
   packages/shared: {}
 
 packages:

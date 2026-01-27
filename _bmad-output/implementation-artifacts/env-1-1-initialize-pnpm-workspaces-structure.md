@@ -192,9 +192,13 @@ None
 | CREATE | `tsconfig.base.json` |
 | MODIFY | `tsconfig.json` (now extends base) |
 | CREATE | `packages/orchestrator/.gitkeep` |
+| CREATE | `packages/orchestrator/package.json` |
 | CREATE | `packages/agent-env/.gitkeep` |
+| CREATE | `packages/agent-env/package.json` |
 | CREATE | `packages/shared/.gitkeep` |
 | CREATE | `packages/shared/package.json` |
+| MODIFY | `vitest.config.ts` |
+| MODIFY | `eslint.config.js` |
 | MODIFY | `pnpm-lock.yaml` |
 
 ## Senior Developer Review (AI)
@@ -265,6 +269,47 @@ The implementation successfully establishes pnpm workspaces infrastructure. Mino
 - [x] AC#1: pnpm recognizes workspace config, packages/ exists ✅
 - [x] AC#2: Fresh clone → pnpm install works, packages linked, no errors ✅
 
+---
+
+### Review #3 Outcome: ✅ APPROVED (with fixes applied)
+
+**Reviewer:** Code Review Agent (Claude Opus 4.5)
+**Date:** 2026-01-27
+
+#### Issues Found & Resolved
+
+| Severity | Issue | Resolution |
+|----------|-------|------------|
+| MEDIUM | `packages/orchestrator/` and `packages/agent-env/` lack `package.json` stubs - pnpm doesn't recognize them as workspace packages | ✅ FIXED: Created package.json files with `type: "module"` and placeholder scripts |
+| MEDIUM | `vitest.config.ts` only includes `src/**/*.test.ts`, missing `packages/**/src/**/*.test.ts` pattern | ✅ FIXED: Added packages test file patterns |
+| MEDIUM | `eslint.config.js` ignores only `dist/**`, not `packages/**/dist/**` | ✅ FIXED: Added packages dist ignore pattern |
+| LOW | tsconfig.base.json has more options than spec (declaration, declarationMap, resolveJsonModule) | Acceptable deviation - more complete than spec |
+| LOW | Missing vitest.workspace.ts per Architecture spec | Acceptable - single config works for MVP |
+
+#### Verification Results (Post-Fix)
+
+```
+✓ pnpm install - succeeds (recognizes all 4 workspace packages)
+✓ pnpm ls -r --depth -1 - shows root + shared + orchestrator + agent-env (4 projects)
+✓ pnpm type-check - passes
+✓ pnpm lint - passes
+✓ pnpm test:run - 51 tests pass
+```
+
+#### Acceptance Criteria Verification
+
+- [x] AC#1: pnpm recognizes workspace config, packages/ exists ✅
+- [x] AC#2: Fresh clone → pnpm install works, all 4 packages linked, no errors ✅
+
+#### File List Update
+
+| Action | File |
+|--------|------|
+| CREATE | `packages/orchestrator/package.json` |
+| CREATE | `packages/agent-env/package.json` |
+| MODIFY | `vitest.config.ts` |
+| MODIFY | `eslint.config.js` |
+
 ## Change Log
 
 | Date | Change |
@@ -272,3 +317,4 @@ The implementation successfully establishes pnpm workspaces infrastructure. Mino
 | 2026-01-27 | Initial implementation - pnpm workspaces structure created with placeholder directories |
 | 2026-01-27 | Code review #1 - Fixed: removed bin/main/files from package.json, corrected completion notes, updated File List |
 | 2026-01-27 | Code review #2 - Fixed: packages/shared/package.json now includes `type: "module"` and script stubs for workspace commands to traverse correctly |
+| 2026-01-27 | Code review #3 - Fixed: Added package.json stubs for orchestrator and agent-env packages, updated vitest/eslint configs for workspace patterns |
