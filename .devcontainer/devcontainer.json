@@ -1,19 +1,57 @@
 {
-  "name": "bmad-orchestrator - ${localWorkspaceFolderBasename}",
+  // VS Code DevContainers configuration for Agent Tools
+  // ===================================================
+  // This config is for VS Code's DevContainers extension (not DevPod).
+  // For DevPod, use .devcontainer/devpod/devcontainer.json instead.
+  //
+  // Note: remoteUser and postCreateCommand are duplicated from the image LABEL
+  // for VS Code compatibility (VS Code may not reliably read LABEL metadata).
+  "name": "Agent Tools - ${localWorkspaceFolderBasename}",
   "image": "ghcr.io/zookanalytics/claude-devcontainer:latest",
   "runArgs": [
-    "--name=bmad-orchestrator-${localWorkspaceFolderBasename}",
+    "--name=agenttools-${localWorkspaceFolderBasename}",
     "--cap-add=NET_ADMIN",
     "--cap-add=NET_RAW",
-    "--cap-add=SYSLOG"
+    "--cap-add=SYSLOG",
+    // OrbStack DNS routing for local development
+    "--label=dev.orbstack.domains=${localWorkspaceFolderBasename}.agenttools.local",
+    "--label=dev.orbstack.http-port=3000",
+    // Chromium needs adequate shared memory for visual regression tests
+    "--shm-size=1gb"
   ],
+  "portsAttributes": {
+    // Disable auto-forwarding for Storybook - use OrbStack direct access instead
+    // Access via: http://agenttools-<instancename>.orb.local:6006
+    "6006": {
+      "onAutoForward": "ignore"
+    }
+  },
+  // Project-specific mounts (override image defaults for VS Code /workspace path)
+  "mounts": [
+    "source=claude-devcontainer-shared-data,target=/shared-data,type=volume",
+    "source=pnpm-store,target=/workspaces/.pnpm-store,type=volume",
+    "source=agent-tools-node-modules-${localWorkspaceFolderBasename},target=/workspaces/${localWorkspaceFolderBasename}/node_modules,type=volume"
+  ],
+  // Project-specific environment variables (additions to image defaults)
+  "containerEnv": {
+    "CLAUDE_INSTANCE": "${localWorkspaceFolderBasename}",
+    "DEVPOD_WORKSPACE_ID": "${localWorkspaceFolderBasename}", // Temporary during migration from DevPod
+    "PROJECT_NAME": "agent-tools",
+    "NODE_OPTIONS": "--max-old-space-size=4096",
+    "POWERLEVEL9K_DISABLE_GITSTATUS": "true",
+    "SHARED_DATA_DIR": "/shared-data",
+    // Override pnpm paths for VS Code's /workspace convention (image uses /workspaces)
+    "npm_config_store_dir": "/workspaces/.pnpm-store",
+    "npm_config_virtual_store_dir": ".pnpm-store/container/${localWorkspaceFolderBasename}"
+  },
+  // Container user and lifecycle commands
+  // (Also in image LABEL, but explicit here for VS Code DevContainers compatibility)
+  "remoteUser": "node",
+  "postCreateCommand": "/usr/local/bin/post-create.sh",
   "customizations": {
     "vscode": {
-      // vscode settings applicable explicitly to dev containers. Common logic in settings.json
       "settings": {
-        // Window title shows instance name for easy identification when switching windows
-        "window.title": "bmad-orchestrator - ${containerEnv:CLAUDE_INSTANCE}${separator}${activeRepositoryBranchName}${dirty}",
-        // Terminal profiles: zsh default for normal use, tmux for persistent/shared sessions
+        "window.title": "Agent Tools - ${containerEnv:CLAUDE_INSTANCE}${separator}${activeRepositoryBranchName}${dirty}",
         "terminal.integrated.defaultProfile.linux": "zsh",
         "terminal.integrated.profiles.linux": {
           "zsh": {
@@ -26,43 +64,20 @@
         "geminicodeassist.agentYoloMode": true
       },
       "extensions": [
-        "Anthropic.claude-code",
+        // Project-specific extensions (base image provides Claude, Gemini, GitLens, ESLint, Prettier)
         "appulate.filewatcher",
         "bierner.markdown-mermaid",
         "bierner.markdown-footnotes",
+        "bradlc.vscode-tailwindcss",
         "DavidAnson.vscode-markdownlint",
-        "dbaeumer.vscode-eslint",
-        "eamodio.gitlens",
-        "esbenp.prettier-vscode",
         "github.vscode-github-actions",
         "ms-playwright.playwright",
+        "ms-vscode.live-server",
         "RobertOstermann.better-status-bar",
         "usernamehw.errorlens",
-        "google.gemini-cli-vscode-ide-companion"
+        "vitest.explorer",
+        "yoavbls.pretty-ts-errors"
       ]
     }
-  },
-  "remoteUser": "node",
-  "mounts": [
-    "source=bmad-orchestrator-bashhistory-${localWorkspaceFolderBasename},target=/commandhistory,type=volume",
-    "source=bmad-orchestrator-claude-config,target=/home/node/.claude,type=volume",
-    "source=bmad-orchestrator-gemini-config,target=/home/node/.gemini,type=volume",
-    "source=bmad-orchestrator-shared-config,target=/home/node/.config,type=volume",
-    "source=pnpm-store,target=/workspace/.pnpm-store,type=volume",
-    "source=bmad-orchestrator-node-modules-${localWorkspaceFolderBasename},target=/workspace/node_modules,type=volume"
-  ],
-  "containerEnv": {
-    "CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC": "1",
-    "CLAUDE_CODE_VERSION": "latest",
-    "CLAUDE_CONFIG_DIR": "/home/node/.claude",
-    "CLAUDE_INSTANCE": "${localWorkspaceFolderBasename}",
-    "GEMINI_CLI_VERSION": "latest",
-    "PNPM_HOME": "/pnpm",
-    "PROJECT_NAME": "bmad-orchestrator",
-    "npm_config_store_dir": "/workspace/.pnpm-store",
-    "npm_config_virtual_store_dir": ".pnpm-store/container/${localWorkspaceFolderBasename}"
-  },
-  "workspaceMount": "source=${localWorkspaceFolder},target=/workspace,type=bind,consistency=delegated",
-  "workspaceFolder": "/workspace",
-  "postCreateCommand": "/usr/local/bin/post-create.sh"
+  }
 }

@@ -1,7 +1,61 @@
-# Project-specific domains
-# Base domains (npm, GitHub, Anthropic, Google APIs) provided by base image
+# Signal Loom project-specific domains
+# Base domains are provided by the claude-devcontainer image
+# See: https://github.com/zookanalytics/claude-devcontainer/blob/main/.devcontainer/allowed-domains.txt
 
-# Add your project's API endpoints, services, etc.
-# Example:
-# api.your-service.com
-# your-backend.example.com
+# Firecrawl MCP
+api.firecrawl.dev
+mcp.firecrawl.dev
+
+# Convex
+api.convex.dev
+version.convex.dev
+auth.convex.dev
+first-magpie-968.convex.cloud
+docs.convex.dev
+stack.convex.dev
+
+# Clerk
+clerk.com
+api.clerk.com
+worker.clerkprod-cloudflare.net
+
+# Vercel
+vercel.com
+api.vercel.com
+
+# Playwright
+playwright.dev
+
+# Google Cloud Storage (Claude Code installer)
+storage.googleapis.com
+
+# Google Fonts
+fonts.gstatic.com
+fonts.googleapis.com
+
+# VS Code extensions
+main.vscode-cdn.net
+configs.gitkraken.dev
+anthropic.gallery.vsassets.io
+anthropic.gallerycdn.vsassets.io
+
+# JSON schema validation
+unpkg.com
+json.schemastore.org
+
+# Error tracking / analytics
+sentry.io
+statsig.com
+
+# Certificate validation
+crl3.digicert.com
+ocsp.digicert.com
+
+# Local services
+host.docker.internal
+
+# OpenAI (if needed)
+api.openai.com
+
+# GitHub artifacts
+productionresultssa1.blob.core.windows.net

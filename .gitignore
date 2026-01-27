@@ -37,3 +37,5 @@ coverage/
 .eslintcache
 .cspellcache
 .prettiercache
+
+.keystone
