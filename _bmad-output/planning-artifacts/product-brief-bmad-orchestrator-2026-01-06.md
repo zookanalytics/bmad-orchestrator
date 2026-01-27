@@ -1,5 +1,7 @@
 ---
-stepsCompleted: [1, 2, 3, 4, 5]
+stepsCompleted: [1, 2, 3, 4, 5, 6]
+workflowComplete: true
+completedAt: "2026-01-26"
 inputDocuments:
   - 'docs/reference/project-context.md'
   - 'docs/reference/architecture.md'
