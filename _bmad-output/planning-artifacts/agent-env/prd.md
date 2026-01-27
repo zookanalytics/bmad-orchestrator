@@ -1,7 +1,7 @@
 ---
 stepsCompleted: [1, 2, 3, 4, 7, 9, 10, 11]
 inputDocuments:
-  - '_bmad-output/planning-artifacts/product-brief-instance-manager-2026-01-26.md'
+  - '_bmad-output/planning-artifacts/agent-env/product-brief.md'
   - '_bmad-output/planning-artifacts/research/technical-ai-dev-environment-tools-research-2026-01-03.md'
   - '_bmad-output/planning-artifacts/research/technical-state-management-devcontainers-research-2026-01-03.md'
 documentCounts:

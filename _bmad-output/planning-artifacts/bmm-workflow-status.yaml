@@ -17,11 +17,14 @@
 
 monorepo:
   name: "bmad-orchestrator"
+  # Artifact organization: component subdirectories under shared planning-artifacts
+  artifact_structure: "component-subdirectories"
   components:
     - id: orchestrator
       name: "BMAD Orchestrator"
       description: "CLI dashboard for managing BMAD workflow across agent instances"
       prefix: "orch-"
+      planning_path: "_bmad-output/planning-artifacts/orchestrator"
       planning_status: complete
       implementation_status: in-progress
 
@@ -29,6 +32,7 @@ monorepo:
       name: "agent-env"
       description: "CLI for creating isolated, AI-ready development environments"
       prefix: "env-"
+      planning_path: "_bmad-output/planning-artifacts/agent-env"
       planning_status: in-progress
       implementation_status: not-started
 
@@ -67,7 +71,7 @@ orchestrator:
 
         - id: "product-brief"
           name: "Product Brief"
-          status: "_bmad-output/planning-artifacts/product-brief-bmad-orchestrator-2026-01-06.md"
+          status: "_bmad-output/planning-artifacts/orchestrator/product-brief.md"
           completedAt: "2026-01-06"
 
     # Phase 2: Planning
@@ -77,12 +81,12 @@ orchestrator:
       workflows:
         - id: "prd"
           name: "Product Requirements Document"
-          status: "_bmad-output/planning-artifacts/prd.md"
+          status: "_bmad-output/planning-artifacts/orchestrator/prd.md"
           completedAt: "2026-01-06"
 
         - id: "create-ux-design"
           name: "UX Design"
-          status: "_bmad-output/planning-artifacts/ux-design-specification.md"
+          status: "_bmad-output/planning-artifacts/orchestrator/ux-design-specification.md"
           completedAt: "2026-01-06"
 
     # Phase 3: Solutioning
@@ -92,12 +96,12 @@ orchestrator:
       workflows:
         - id: "create-architecture"
           name: "System Architecture"
-          status: "_bmad-output/planning-artifacts/architecture.md"
+          status: "_bmad-output/planning-artifacts/orchestrator/architecture.md"
           completedAt: "2026-01-08"
 
         - id: "create-epics-and-stories"
           name: "Epics and Stories"
-          status: "_bmad-output/planning-artifacts/epics.md"
+          status: "_bmad-output/planning-artifacts/orchestrator/epics.md"
           completedAt: "2026-01-13"
 
         - id: "test-design"
@@ -107,7 +111,7 @@ orchestrator:
 
         - id: "implementation-readiness"
           name: "Implementation Readiness Check"
-          status: "_bmad-output/planning-artifacts/implementation-readiness-report-2026-01-13.md"
+          status: "_bmad-output/planning-artifacts/orchestrator/implementation-readiness-report-2026-01-13.md"
           completedAt: "2026-01-13"
           note: "READY FOR IMPLEMENTATION"
 
@@ -150,45 +154,48 @@ agent-env:
 
         - id: "product-brief"
           name: "Product Brief"
-          status: "_bmad-output/planning-artifacts/product-brief-instance-manager-2026-01-26.md"
+          status: "_bmad-output/planning-artifacts/agent-env/product-brief.md"
           completedAt: "2026-01-26"
 
     # Phase 2: Planning
     - phase: 2
       name: "Planning"
-      status: not-started
+      status: complete
       workflows:
         - id: "prd"
           name: "Product Requirements Document"
           command: "/bmad:bmm:workflows:create-prd"
-          status: "required"
-          note: "Next step"
+          status: "_bmad-output/planning-artifacts/agent-env/prd.md"
+          completedAt: "2026-01-26"
 
         - id: "create-ux-design"
           name: "UX Design"
           command: "/bmad:bmm:workflows:create-ux-design"
-          status: "optional"
-          note: "CLI-focused, may skip or minimal"
+          status: "skipped"
+          note: "CLI-focused tool, UX not required"
 
     # Phase 3: Solutioning
     - phase: 3
       name: "Solutioning"
-      status: not-started
+      status: in-progress
       workflows:
         - id: "create-architecture"
           name: "System Architecture"
           command: "/bmad:bmm:workflows:create-architecture"
-          status: "required"
+          status: "_bmad-output/planning-artifacts/agent-env/architecture.md"
+          completedAt: "2026-01-27"
 
         - id: "create-epics-and-stories"
           name: "Epics and Stories"
           command: "/bmad:bmm:workflows:create-epics-and-stories"
-          status: "required"
+          status: "_bmad-output/planning-artifacts/agent-env/epics.md"
+          completedAt: "2026-01-27"
 
         - id: "test-design"
           name: "Test Design"
           command: "/bmad:bmm:workflows:testarch-test-design"
-          status: "recommended"
+          status: "_bmad-output/planning-artifacts/agent-env/test-design-system.md"
+          completedAt: "2026-01-27"
 
         - id: "implementation-readiness"
           name: "Implementation Readiness Check"
