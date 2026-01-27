@@ -1,5 +1,8 @@
-# generated: 2026-01-13
-# project: BMAD Orchestrator
+# Unified Sprint Status - bmad-orchestrator Monorepo
+# Tracks both components: orchestrator CLI and agent-env
+#
+# generated: 2026-01-13 (orchestrator), 2026-01-26 (unified)
+# project: bmad-orchestrator monorepo
 # tracking_system: file-system
 # story_location: /workspace/_bmad-output/implementation-artifacts
 
@@ -9,10 +12,7 @@
 #   - backlog: Epic not yet started
 #   - in-progress: Epic actively being worked on
 #   - done: All stories in epic completed
-#
-# Epic Status Transitions:
-#   - backlog → in-progress: Automatically when first story is created (via create-story)
-#   - in-progress → done: Manually when all stories reach 'done' status
+#   - planning: Component still in planning phase (no epics yet)
 #
 # Story Status:
 #   - backlog: Story only exists in epic file
@@ -24,58 +24,101 @@
 # Retrospective Status:
 #   - optional: Can be completed but not required
 #   - done: Retrospective has been completed
-#
-# WORKFLOW NOTES:
-# ===============
-# - Epic transitions to 'in-progress' automatically when first story is created
-# - Stories can be worked in parallel if team capacity allows
-# - SM typically creates next story after previous one is 'done' to incorporate learnings
-# - Dev moves story to 'review', then runs code-review (fresh context, different LLM recommended)
 
-generated: 2026-01-13
-project: BMAD Orchestrator
-tracking_system: file-system
-story_location: /workspace/_bmad-output/implementation-artifacts
+# ══════════════════════════════════════════════════════════════════════════════
+# COMPONENT: BMAD Orchestrator (orch-)
+# ══════════════════════════════════════════════════════════════════════════════
+# CLI tool for managing BMAD workflow across multiple agent-env instances
+# Planning artifacts: _bmad-output/planning-artifacts/
+# Product brief: product-brief-bmad-orchestrator-2026-01-06.md
 
 development_status:
-  # Epic 1: Project Foundation & DevPod Discovery
-  epic-1: done
-  1-1-project-initialization-with-quality-gates: done
-  1-2-test-fixtures-and-discovery-types: done
-  1-3-devpod-discovery-module: done
-  1-4-list-command-implementation: done
-  epic-1-retrospective: done
+  # ─── Orchestrator Epic 1: Project Foundation & DevPod Discovery ───
+  orch-epic-1: done
+  orch-1-1-project-initialization-with-quality-gates: done
+  orch-1-2-test-fixtures-and-discovery-types: done
+  orch-1-3-devpod-discovery-module: done
+  orch-1-4-list-command-implementation: done
+  orch-epic-1-retrospective: done
 
-  # Epic 2: BMAD State Parsing & Activity Detection
-  epic-2: backlog
-  2-1-bmad-state-fixtures-and-types: backlog
-  2-2-sprint-status-parser: backlog
-  2-3-story-file-parser: backlog
-  2-4-activity-detection-module: backlog
-  2-5-enhanced-list-output: backlog
-  epic-2-retrospective: optional
+  # ─── Orchestrator Epic 2: BMAD State Parsing & Activity Detection ───
+  orch-epic-2: backlog
+  orch-2-1-bmad-state-fixtures-and-types: backlog
+  orch-2-2-sprint-status-parser: backlog
+  orch-2-3-story-file-parser: backlog
+  orch-2-4-activity-detection-module: backlog
+  orch-2-5-enhanced-list-output: backlog
+  orch-epic-2-retrospective: optional
 
-  # Epic 3: Dashboard Experience
-  epic-3: backlog
-  3-1-orchestrator-state-hook: backlog
-  3-2-devpodpane-component: backlog
-  3-3-dashboard-layout-and-grid: backlog
-  3-4-keyboard-navigation: backlog
-  3-5-auto-refresh-and-loading-states: backlog
-  3-6-responsive-breakpoints: backlog
-  epic-3-retrospective: optional
+  # ─── Orchestrator Epic 3: Dashboard Experience ───
+  orch-epic-3: backlog
+  orch-3-1-orchestrator-state-hook: backlog
+  orch-3-2-devpodpane-component: backlog
+  orch-3-3-dashboard-layout-and-grid: backlog
+  orch-3-4-keyboard-navigation: backlog
+  orch-3-5-auto-refresh-and-loading-states: backlog
+  orch-3-6-responsive-breakpoints: backlog
+  orch-epic-3-retrospective: optional
 
-  # Epic 4: Command Generation & Clipboard Actions
-  epic-4: backlog
-  4-1-command-generation-module: backlog
-  4-2-command-bar-component: backlog
-  4-3-clipboard-integration: backlog
-  4-4-backlog-panel-and-story-suggestions: backlog
-  epic-4-retrospective: optional
+  # ─── Orchestrator Epic 4: Command Generation & Clipboard Actions ───
+  orch-epic-4: backlog
+  orch-4-1-command-generation-module: backlog
+  orch-4-2-command-bar-component: backlog
+  orch-4-3-clipboard-integration: backlog
+  orch-4-4-backlog-panel-and-story-suggestions: backlog
+  orch-epic-4-retrospective: optional
 
-  # Epic 5: CLI Polish & Package Publishing
-  epic-5: backlog
-  5-1-status-command-implementation: backlog
-  5-2-shell-completion: backlog
-  5-3-package-publishing-preparation: backlog
-  epic-5-retrospective: optional
+  # ─── Orchestrator Epic 5: CLI Polish & Package Publishing ───
+  orch-epic-5: backlog
+  orch-5-1-status-command-implementation: backlog
+  orch-5-2-shell-completion: backlog
+  orch-5-3-package-publishing-preparation: backlog
+  orch-epic-5-retrospective: optional
+
+# ══════════════════════════════════════════════════════════════════════════════
+# COMPONENT: agent-env (env-)
+# ══════════════════════════════════════════════════════════════════════════════
+# CLI for creating isolated, AI-ready development environments
+# Planning artifacts: _bmad-output/planning-artifacts/
+# Product brief: product-brief-instance-manager-2026-01-26.md
+# Status: PLANNING PHASE - requires PRD, Architecture, Epics before implementation
+
+  # ─── agent-env: Planning Phase ───
+  env-planning: in-progress
+  env-product-brief: done          # product-brief-instance-manager-2026-01-26.md
+  env-prd: backlog                 # Next: /bmad:bmm:workflows:create-prd
+  env-architecture: backlog        # Requires: env-prd
+  env-epics-and-stories: backlog   # Requires: env-architecture
+  env-implementation-readiness: backlog
+
+  # ─── agent-env Epics: TBD after planning completes ───
+  # Epic structure will be added here once epics-and-stories workflow completes
+
+# ══════════════════════════════════════════════════════════════════════════════
+# CROSS-COMPONENT DEPENDENCIES
+# ══════════════════════════════════════════════════════════════════════════════
+# Format: blocker → blocked (blocker must complete before blocked can start)
+#
+# These dependencies track where work in one component enables work in another.
+# Update as dependencies are discovered or resolved.
+
+cross_dependencies:
+  # agent-env MVP enables orchestrator integration
+  - blocker: env-mvp-complete        # agent-env list --json working
+    blocked: orch-epic-2             # State parsing needs real instances to test
+    note: "Orchestrator can mock agent-env for early development, but integration testing requires env MVP"
+
+  - blocker: env-mvp-complete
+    blocked: orch-epic-3             # Dashboard needs live data
+    note: "Dashboard development can proceed with mocks, real integration at epic end"
+
+  # Orchestrator Epic 1 is independent (uses DevPod, not agent-env)
+  # This allows parallel development of both components
+
+# ══════════════════════════════════════════════════════════════════════════════
+# NOTES
+# ══════════════════════════════════════════════════════════════════════════════
+# - Orchestrator Epic 1 (done) used DevPod as discovery target
+# - agent-env will eventually replace/supplement DevPod as primary target
+# - Both components can be developed in parallel with mocking at boundaries
+# - Update cross_dependencies as new blockers are discovered

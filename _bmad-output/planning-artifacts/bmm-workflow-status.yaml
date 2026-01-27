@@ -1,118 +1,208 @@
-# Workflow Status Template
-
-# This tracks progress through BMM methodology Analysis, Planning, and Solutioning phases.
-# Implementation phase is tracked separately in sprint-status.yaml
+# BMM Workflow Status - bmad-orchestrator Monorepo
+#
+# This tracks progress through BMM methodology phases for ALL components.
+# Implementation phase is tracked in sprint-status.yaml (unified)
 
 # STATUS DEFINITIONS:
 # ==================
-# Initial Status (before completion):
-#   - required: Must be completed to progress
-#   - optional: Can be completed but not required
-#   - recommended: Strongly suggested but not required
-#   - conditional: Required only if certain conditions met (e.g., if_has_ui)
-#
 # Completion Status:
-#   - {file-path}: File created/found (e.g., "docs/product-brief.md")
+#   - {file-path}: Workflow complete, artifact created
 #   - skipped: Optional/conditional workflow that was skipped
+#   - required: Must be completed to progress
+#   - in-progress: Currently being worked on
 
-generated: "2026-01-06"
-project: "BMAD Orchestrator"
-project_type: "software"
-selected_track: "method"
-field_type: "greenfield"
-workflow_path: "method-greenfield.yaml"
+# ══════════════════════════════════════════════════════════════════════════════
+# MONOREPO STRUCTURE
+# ══════════════════════════════════════════════════════════════════════════════
 
-workflow_status:
-  # Phase 1: Analysis (Optional)
-  - phase: 1
-    name: "Analysis"
-    workflows:
-      - id: "brainstorm-project"
-        name: "Brainstorm"
-        agent: "analyst"
-        command: "/bmad:bmm:workflows:brainstorming"
-        status: "skipped"
-        note: "User did not select"
+monorepo:
+  name: "bmad-orchestrator"
+  components:
+    - id: orchestrator
+      name: "BMAD Orchestrator"
+      description: "CLI dashboard for managing BMAD workflow across agent instances"
+      prefix: "orch-"
+      planning_status: complete
+      implementation_status: in-progress
 
-      - id: "research"
-        name: "Research"
-        agent: "analyst"
-        command: "/bmad:bmm:workflows:research"
-        status: "_bmad-output/planning-artifacts/research/"
-        completedAt: "2026-01-06"
-        note: "Completed manually - 16 documents"
+    - id: agent-env
+      name: "agent-env"
+      description: "CLI for creating isolated, AI-ready development environments"
+      prefix: "env-"
+      planning_status: in-progress
+      implementation_status: not-started
 
-      - id: "product-brief"
-        name: "Product Brief"
-        agent: "analyst"
-        command: "/bmad:bmm:workflows:create-product-brief"
-        status: "_bmad-output/planning-artifacts/product-brief-bmad-orchestrator-2026-01-06.md"
-        completedAt: "2026-01-06"
-        note: "Complete - 5 sections with party mode refinements"
+  # Cross-component relationship
+  relationship: |
+    orchestrator consumes agent-env to discover and manage isolated dev environments.
+    agent-env can be used standalone. orchestrator requires agent-env for full functionality.
+    Both can be developed in parallel with mocking at boundaries.
 
-  # Phase 2: Planning
-  - phase: 2
-    name: "Planning"
-    workflows:
-      - id: "prd"
-        name: "Product Requirements Document"
-        agent: "pm"
-        command: "/bmad:bmm:workflows:create-prd"
-        status: "_bmad-output/planning-artifacts/prd.md"
-        completedAt: "2026-01-06"
-        note: "Complete - verified alignment with brief"
+# ══════════════════════════════════════════════════════════════════════════════
+# COMPONENT: BMAD Orchestrator
+# ══════════════════════════════════════════════════════════════════════════════
 
-      - id: "create-ux-design"
-        name: "UX Design"
-        agent: "ux-designer"
-        command: "/bmad:bmm:workflows:create-ux-design"
-        status: "_bmad-output/planning-artifacts/ux-design-specification.md"
-        completedAt: "2026-01-06"
-        note: "Complete - verified alignment with brief"
+orchestrator:
+  generated: "2026-01-06"
+  project_type: "software"
+  selected_track: "method"
+  field_type: "greenfield"
 
-  # Phase 3: Solutioning
-  - phase: 3
-    name: "Solutioning"
-    workflows:
-      - id: "create-architecture"
-        name: "System Architecture"
-        agent: "architect"
-        command: "/bmad:bmm:workflows:create-architecture"
-        status: "_bmad-output/planning-artifacts/architecture.md"
-        completedAt: "2026-01-08"
-        note: "Complete - 7 steps, all FR/NFR coverage validated"
+  workflow_status:
+    # Phase 1: Analysis
+    - phase: 1
+      name: "Analysis"
+      status: complete
+      workflows:
+        - id: "brainstorm-project"
+          name: "Brainstorm"
+          status: "skipped"
+          note: "User did not select"
 
-      - id: "create-epics-and-stories"
-        name: "Epics and Stories"
-        agent: "pm"
-        command: "/bmad:bmm:workflows:create-epics-and-stories"
-        status: "_bmad-output/planning-artifacts/epics.md"
-        completedAt: "2026-01-13"
-        note: "Complete - 5 epics, 17 stories, all FRs covered"
+        - id: "research"
+          name: "Research"
+          status: "_bmad-output/planning-artifacts/research/"
+          completedAt: "2026-01-06"
+          note: "16 research documents"
 
-      - id: "test-design"
-        name: "Test Design"
-        agent: "tea"
-        command: "/bmad:bmm:workflows:testarch-test-design"
-        status: "_bmad-output/test-design-system.md"
-        completedAt: "2026-01-08"
-        note: "System-level testability review - PASS with recommendations for Sprint 0"
+        - id: "product-brief"
+          name: "Product Brief"
+          status: "_bmad-output/planning-artifacts/product-brief-bmad-orchestrator-2026-01-06.md"
+          completedAt: "2026-01-06"
 
-      - id: "implementation-readiness"
-        name: "Implementation Readiness Check"
-        agent: "architect"
-        command: "/bmad:bmm:workflows:check-implementation-readiness"
-        status: "_bmad-output/planning-artifacts/implementation-readiness-report-2026-01-13.md"
-        completedAt: "2026-01-13"
-        note: "READY FOR IMPLEMENTATION - 0 critical/major issues"
+    # Phase 2: Planning
+    - phase: 2
+      name: "Planning"
+      status: complete
+      workflows:
+        - id: "prd"
+          name: "Product Requirements Document"
+          status: "_bmad-output/planning-artifacts/prd.md"
+          completedAt: "2026-01-06"
 
-  # Phase 4: Implementation
-  - phase: 4
-    name: "Implementation"
-    workflows:
-      - id: "sprint-planning"
-        name: "Sprint Planning"
-        agent: "sm"
-        command: "/bmad:bmm:workflows:sprint-planning"
-        status: "required"
-        note: "Creates sprint plan - subsequent work tracked there"
+        - id: "create-ux-design"
+          name: "UX Design"
+          status: "_bmad-output/planning-artifacts/ux-design-specification.md"
+          completedAt: "2026-01-06"
+
+    # Phase 3: Solutioning
+    - phase: 3
+      name: "Solutioning"
+      status: complete
+      workflows:
+        - id: "create-architecture"
+          name: "System Architecture"
+          status: "_bmad-output/planning-artifacts/architecture.md"
+          completedAt: "2026-01-08"
+
+        - id: "create-epics-and-stories"
+          name: "Epics and Stories"
+          status: "_bmad-output/planning-artifacts/epics.md"
+          completedAt: "2026-01-13"
+
+        - id: "test-design"
+          name: "Test Design"
+          status: "_bmad-output/test-design-system.md"
+          completedAt: "2026-01-08"
+
+        - id: "implementation-readiness"
+          name: "Implementation Readiness Check"
+          status: "_bmad-output/planning-artifacts/implementation-readiness-report-2026-01-13.md"
+          completedAt: "2026-01-13"
+          note: "READY FOR IMPLEMENTATION"
+
+    # Phase 4: Implementation
+    - phase: 4
+      name: "Implementation"
+      status: in-progress
+      note: "Tracked in sprint-status.yaml"
+      workflows:
+        - id: "sprint-planning"
+          name: "Sprint Planning"
+          status: "_bmad-output/implementation-artifacts/sprint-status.yaml"
+          completedAt: "2026-01-13"
+
+# ══════════════════════════════════════════════════════════════════════════════
+# COMPONENT: agent-env
+# ══════════════════════════════════════════════════════════════════════════════
+
+agent-env:
+  generated: "2026-01-26"
+  project_type: "software"
+  selected_track: "method"
+  field_type: "greenfield"
+
+  workflow_status:
+    # Phase 1: Analysis
+    - phase: 1
+      name: "Analysis"
+      status: complete
+      workflows:
+        - id: "brainstorm-project"
+          name: "Brainstorm"
+          status: "skipped"
+          note: "Concept proven via claude-instance bash script"
+
+        - id: "research"
+          name: "Research"
+          status: "skipped"
+          note: "Leveraged orchestrator research + claude-instance experience"
+
+        - id: "product-brief"
+          name: "Product Brief"
+          status: "_bmad-output/planning-artifacts/product-brief-instance-manager-2026-01-26.md"
+          completedAt: "2026-01-26"
+
+    # Phase 2: Planning
+    - phase: 2
+      name: "Planning"
+      status: not-started
+      workflows:
+        - id: "prd"
+          name: "Product Requirements Document"
+          command: "/bmad:bmm:workflows:create-prd"
+          status: "required"
+          note: "Next step"
+
+        - id: "create-ux-design"
+          name: "UX Design"
+          command: "/bmad:bmm:workflows:create-ux-design"
+          status: "optional"
+          note: "CLI-focused, may skip or minimal"
+
+    # Phase 3: Solutioning
+    - phase: 3
+      name: "Solutioning"
+      status: not-started
+      workflows:
+        - id: "create-architecture"
+          name: "System Architecture"
+          command: "/bmad:bmm:workflows:create-architecture"
+          status: "required"
+
+        - id: "create-epics-and-stories"
+          name: "Epics and Stories"
+          command: "/bmad:bmm:workflows:create-epics-and-stories"
+          status: "required"
+
+        - id: "test-design"
+          name: "Test Design"
+          command: "/bmad:bmm:workflows:testarch-test-design"
+          status: "recommended"
+
+        - id: "implementation-readiness"
+          name: "Implementation Readiness Check"
+          command: "/bmad:bmm:workflows:check-implementation-readiness"
+          status: "required"
+
+    # Phase 4: Implementation
+    - phase: 4
+      name: "Implementation"
+      status: not-started
+      note: "Will be tracked in unified sprint-status.yaml with env- prefix"
+      workflows:
+        - id: "sprint-planning"
+          name: "Sprint Planning"
+          command: "/bmad:bmm:workflows:sprint-planning"
+          status: "required"
+          note: "Will add env- epics to sprint-status.yaml"
