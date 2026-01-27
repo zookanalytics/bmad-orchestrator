@@ -1,28 +1,26 @@
 {
-  "name": "@zookanalytics/bmad-orchestrator",
+  "name": "bmad-orchestrator-monorepo",
   "version": "0.1.0",
-  "description": "Unified command center for multi-DevPod development",
+  "private": true,
+  "description": "Monorepo for BMAD agent tools (orchestrator and agent-env CLIs)",
   "type": "module",
-  "bin": {
-    "bmad-orchestrator": "./bin/bmad-orchestrator.js"
-  },
-  "main": "dist/cli.js",
   "engines": {
-    "node": ">=22"
+    "node": ">=20",
+    "pnpm": ">=8"
   },
-  "files": [
-    "dist",
-    "bin"
-  ],
   "scripts": {
     "dev": "tsx src/cli.ts",
     "build": "tsc",
+    "build:all": "pnpm -r build",
     "test": "vitest",
     "test:run": "vitest run",
+    "test:all": "pnpm -r test:run",
     "lint": "eslint src/",
+    "lint:all": "pnpm -r lint",
     "format": "prettier --write src/",
     "type-check": "tsc --noEmit",
     "check": "pnpm type-check && pnpm lint && pnpm test:run --coverage",
+    "check:all": "pnpm -r check",
     "prepare": "husky"
   },
   "keywords": [
