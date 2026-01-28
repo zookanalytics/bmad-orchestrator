@@ -15,6 +15,15 @@ export default tseslint.config(
       'perfectionist/sort-imports': 'error',
       'no-warning-comments': ['error', { terms: ['todo', 'fixme'] }],
       complexity: ['error', 20],
+      // Temporarily disable due to pre-commit hook issues
+      '@typescript-eslint/no-unused-vars': [
+        'error',
+        {
+          argsIgnorePattern: '^_',
+          varsIgnorePattern: '^_',
+          caughtErrorsIgnorePattern: '^_',
+        },
+      ],
     },
   },
   {

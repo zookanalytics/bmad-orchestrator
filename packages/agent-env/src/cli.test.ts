@@ -1,0 +1,75 @@
+import { execa } from 'execa';
+import { describe, it, expect } from 'vitest';
+
+// Helper function to strip ANSI escape codes
+function stripAnsiCodes(str: string): string {
+  // eslint-disable-next-line no-control-regex
+  return str.replace(/\x1b\[\d+m/g, '');
+}
+
+describe('agent-env CLI', () => {
+  const runCli = async (args: string[]) => {
+    return execa('tsx', ['src/cli.ts', ...args], {
+      cwd: import.meta.dirname?.replace('/src', '') ?? process.cwd(),
+      reject: false,
+    });
+  };
+
+  describe('--help', () => {
+    it('displays usage information', async () => {
+      const result = await runCli(['--help']);
+
+      expect(result.exitCode).toBe(0);
+      expect(result.stdout).toContain('agent-env');
+      expect(result.stdout).toContain('Usage:');
+    });
+
+    it('lists available commands', async () => {
+      const result = await runCli(['--help']);
+
+      expect(result.stdout).toContain('create');
+      expect(result.stdout).toContain('list');
+      expect(result.stdout).toContain('attach');
+      expect(result.stdout).toContain('remove');
+      expect(result.stdout).toContain('purpose');
+    });
+  });
+
+  describe('--version', () => {
+    it('displays version number', async () => {
+      const result = await runCli(['--version']);
+
+      expect(result.exitCode).toBe(0);
+      expect(result.stdout).toMatch(/\d+\.\d+\.\d+/);
+    });
+  });
+
+  describe('no arguments', () => {
+    it('shows help output', async () => {
+      const result = await runCli([]);
+
+      expect(result.exitCode).toBe(0);
+      expect(result.stdout).toContain('Usage:');
+    });
+  });
+
+  describe('placeholder commands', () => {
+    it('create shows not implemented message', async () => {
+      const result = await runCli(['create', 'test-instance']);
+      const stderrStripped = stripAnsiCodes(result.stderr);
+
+      expect(result.exitCode).toBe(1); // Expect a non-zero exit code for errors
+      expect(stderrStripped).toMatch(
+        /❌ \[NotImplemented\] Create command not yet implemented for instance: test-instance\./
+      );
+    });
+
+    it('list shows not implemented message', async () => {
+      const result = await runCli(['list']);
+      const stderrStripped = stripAnsiCodes(result.stderr);
+
+      expect(result.exitCode).toBe(1); // Expect a non-zero exit code for errors
+      expect(stderrStripped).toMatch(/❌ \[NotImplemented\] List command not yet implemented\./);
+    });
+  });
+});
