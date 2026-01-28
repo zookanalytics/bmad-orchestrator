@@ -3,6 +3,8 @@
  *
  * @module commands/list
  */
+import { createError, formatError } from '@zookanalytics/shared';
+
 import type { DevPod, DiscoveryResult } from '../lib/types.js';
 
 import { createDiscovery } from '../lib/discovery.js';
@@ -17,26 +19,6 @@ export interface ListJsonOutput {
   version: '1';
   devpods: DevPod[];
   errors: string[];
-}
-
-/** Error format for user-friendly error display */
-interface AppError {
-  code: string;
-  context?: string;
-  suggestion?: string;
-}
-
-/**
- * Format an error for display to the user
- *
- * @param error - Error details to format
- * @returns Formatted error string with code, context, and suggestion
- */
-function formatError(error: AppError): string {
-  const parts = [`✗ ${error.code}`];
-  if (error.context) parts[0] += `: ${error.context}`;
-  if (error.suggestion) parts.push(`  Suggestion: ${error.suggestion}`);
-  return parts.join('\n');
 }
 
 /**
@@ -93,11 +75,13 @@ function formatJsonOutput(result: DiscoveryResult): string {
  */
 function formatTextOutput(result: DiscoveryResult): string {
   if (result.error) {
-    return formatError({
-      code: 'DISCOVERY_FAILED',
-      context: result.error.replace('DISCOVERY_FAILED: ', ''),
-      suggestion: 'Check if DevPod CLI is installed with `devpod version`',
-    });
+    return formatError(
+      createError(
+        'DISCOVERY_FAILED',
+        result.error.replace('DISCOVERY_FAILED: ', ''),
+        'Check if DevPod CLI is installed with `devpod version`'
+      )
+    );
   }
 
   if (result.devpods.length === 0) {

@@ -63,9 +63,9 @@ describe('listCommand', () => {
 
       const output = await listCommand({});
 
-      expect(output).toContain('✗ DISCOVERY_FAILED');
+      // Uses @zookanalytics/shared formatError format
+      expect(output).toContain('DISCOVERY_FAILED');
       expect(output).toContain('devpod: command not found');
-      expect(output).toContain('Suggestion:');
       expect(output).toContain('devpod version');
     });
 

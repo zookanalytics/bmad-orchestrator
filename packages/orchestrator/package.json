@@ -1,16 +1,50 @@
 {
   "name": "@zookanalytics/bmad-orchestrator",
   "version": "0.1.0",
-  "private": true,
+  "description": "Unified command center for multi-DevPod development",
   "type": "module",
-  "main": "dist/index.js",
-  "types": "dist/index.d.ts",
+  "bin": {
+    "bmad-orchestrator": "./bin/bmad-orchestrator.js"
+  },
+  "main": "dist/cli.js",
+  "types": "dist/cli.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/cli.d.ts",
+      "import": "./dist/cli.js"
+    }
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "files": [
+    "dist",
+    "bin"
+  ],
   "scripts": {
-    "build": "echo 'No build step yet - package is a placeholder'",
-    "test": "echo 'No tests yet - package is a placeholder'",
-    "test:run": "echo 'No tests yet - package is a placeholder'",
-    "lint": "echo 'No lint yet - package is a placeholder'",
-    "type-check": "echo 'No type-check yet - package is a placeholder'",
-    "check": "echo 'No check yet - package is a placeholder'"
+    "dev": "tsx src/cli.ts",
+    "build": "tsc",
+    "test": "vitest",
+    "test:run": "vitest run",
+    "lint": "eslint src/",
+    "type-check": "tsc --noEmit",
+    "check": "pnpm type-check && pnpm lint && pnpm test:run"
+  },
+  "dependencies": {
+    "@zookanalytics/shared": "workspace:*",
+    "@inkjs/ui": "^2.0.0",
+    "clipboardy": "^5.0.2",
+    "commander": "^14.0.2",
+    "execa": "^9.6.1",
+    "ink": "^6.6.0",
+    "react": "^19.2.3",
+    "timeago.js": "^4.0.2",
+    "yaml": "^2.8.2"
+  },
+  "devDependencies": {
+    "@types/node": "^25.0.8",
+    "@types/react": "^19.2.8",
+    "ink-testing-library": "^4.0.0",
+    "tsx": "^4.21.0"
   }
 }
