@@ -55,8 +55,8 @@ jobs:
       - name: Lint all packages
         run: pnpm -r lint
 
-      - name: Run all tests
-        run: pnpm -r test:run
+      - name: Run all tests with coverage
+        run: pnpm -r test:coverage
 
       - name: Upload coverage reports
         uses: actions/upload-artifact@v4

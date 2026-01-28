@@ -98,12 +98,12 @@ development_status:
 # Product brief: product-brief-instance-manager-2026-01-26.md
 
   # ─── agent-env Epic 1: Monorepo Setup & agent-env CLI Scaffold ───
-  env-epic-1: in-progress
+  env-epic-1: done
   env-1-1-initialize-pnpm-workspaces-structure: done
   env-1-2-create-shared-utilities-package: done
   env-1-3-migrate-orchestrator-to-packages: done
   env-1-4-create-agent-env-cli-scaffold: done
-  env-1-5-update-ci-for-workspaces: review
+  env-1-5-update-ci-for-workspaces: done
   env-epic-1-retrospective: optional
 
   # ─── agent-env Epic 2: Instance Creation & Baseline Environment ───

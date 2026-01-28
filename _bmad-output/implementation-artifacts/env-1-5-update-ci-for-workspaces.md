@@ -1,6 +1,6 @@
 # Story 1.5: Update CI for Workspaces
 
-Status: review
+Status: done
 
 ## Story
 
@@ -497,7 +497,13 @@ claude-opus-4-5-20251101
 ### File List
 
 - `.github/workflows/ci.yml` - Updated CI workflow with pnpm workspaces support
+- `packages/orchestrator/vitest.config.ts` - Added coverage configuration (code review fix)
+- `packages/agent-env/vitest.config.ts` - Added coverage configuration (code review fix)
+- `packages/orchestrator/package.json` - Added test:coverage script (code review fix)
+- `packages/agent-env/package.json` - Added test:coverage script (code review fix)
+- `package.json` - Fixed root type-check script to use recursive command (code review fix)
 
 ### Change Log
 
 - 2026-01-28: Updated CI workflow for pnpm workspaces monorepo support
+- 2026-01-28: Code review fixes - Added missing coverage configuration to orchestrator and agent-env vitest configs, added test:coverage scripts to all packages, updated CI to use test:coverage for proper coverage collection, fixed root type-check script

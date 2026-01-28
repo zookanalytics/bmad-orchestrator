@@ -14,7 +14,7 @@
     "test:run": "pnpm -r test:run",
     "lint": "pnpm -r lint",
     "check": "pnpm -r check",
-    "type-check": "tsc --noEmit",
+    "type-check": "pnpm -r type-check",
     "dev:orchestrator": "pnpm --filter @zookanalytics/bmad-orchestrator dev",
     "dev:agent-env": "pnpm --filter @zookanalytics/agent-env dev",
     "prepare": "husky"
