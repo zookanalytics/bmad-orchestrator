@@ -1,16 +1,30 @@
 {
   "name": "@zookanalytics/shared",
-  "version": "0.1.0",
   "private": true,
+  "version": "0.1.0",
   "type": "module",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
   "scripts": {
-    "build": "echo 'No build step yet - package is a placeholder'",
-    "test": "echo 'No tests yet - package is a placeholder'",
-    "test:run": "echo 'No tests yet - package is a placeholder'",
-    "lint": "echo 'No lint yet - package is a placeholder'",
-    "type-check": "echo 'No type-check yet - package is a placeholder'",
-    "check": "echo 'No check yet - package is a placeholder'"
+    "build": "tsc",
+    "test": "vitest",
+    "test:run": "vitest run",
+    "test:coverage": "vitest run --coverage",
+    "type-check": "tsc --noEmit",
+    "lint": "eslint src/",
+    "check": "pnpm type-check && pnpm lint && pnpm test:run"
+  },
+  "dependencies": {
+    "execa": "^9.0.0"
+  },
+  "devDependencies": {
+    "vitest": "^4.0.0",
+    "@vitest/coverage-v8": "^4.0.0"
   }
 }

@@ -89,7 +89,18 @@ importers:
 
   packages/orchestrator: {}
 
-  packages/shared: {}
+  packages/shared:
+    dependencies:
+      execa:
+        specifier: ^9.0.0
+        version: 9.6.1
+    devDependencies:
+      '@vitest/coverage-v8':
+        specifier: ^4.0.0
+        version: 4.0.17(vitest@4.0.17(@types/node@25.0.8)(tsx@4.21.0)(yaml@2.8.2))
+      vitest:
+        specifier: ^4.0.0
+        version: 4.0.17(@types/node@25.0.8)(tsx@4.21.0)(yaml@2.8.2)
 
 packages:
 
