@@ -71,5 +71,35 @@ describe('agent-env CLI', () => {
       expect(result.exitCode).toBe(1); // Expect a non-zero exit code for errors
       expect(stderrStripped).toMatch(/❌ \[NotImplemented\] List command not yet implemented\./);
     });
+
+    it('attach shows not implemented message', async () => {
+      const result = await runCli(['attach', 'test-instance']);
+      const stderrStripped = stripAnsiCodes(result.stderr);
+
+      expect(result.exitCode).toBe(1);
+      expect(stderrStripped).toMatch(
+        /❌ \[NotImplemented\] Attach command not yet implemented for instance: test-instance\./
+      );
+    });
+
+    it('remove shows not implemented message', async () => {
+      const result = await runCli(['remove', 'test-instance']);
+      const stderrStripped = stripAnsiCodes(result.stderr);
+
+      expect(result.exitCode).toBe(1);
+      expect(stderrStripped).toMatch(
+        /❌ \[NotImplemented\] Remove command not yet implemented for instance: test-instance\./
+      );
+    });
+
+    it('purpose shows not implemented message', async () => {
+      const result = await runCli(['purpose', 'test-instance']);
+      const stderrStripped = stripAnsiCodes(result.stderr);
+
+      expect(result.exitCode).toBe(1);
+      expect(stderrStripped).toMatch(
+        /❌ \[NotImplemented\] Purpose command not yet implemented for instance: test-instance\./
+      );
+    });
   });
 });
