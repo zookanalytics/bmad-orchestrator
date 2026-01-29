@@ -1,0 +1,11 @@
+code: bmm
+name: "Retro Followup"
+header: "Transform retrospective action items into executable workflows"
+subheader: "Parse retros, route to BMM workflows, track completion"
+default_selected: false
+
+# Variables from Core Config inserted:
+## user_name
+## communication_language
+## document_output_language
+## output_folder
