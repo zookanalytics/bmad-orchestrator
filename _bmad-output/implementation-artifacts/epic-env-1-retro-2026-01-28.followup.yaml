@@ -1,0 +1,98 @@
+source: _bmad-output/implementation-artifacts/epic-env-1-retro-2026-01-28.md
+generated: 2026-01-30
+
+items:
+  - id: 1
+    action_item: 1
+    workflow: bmad:bmm:workflows:quick-dev
+    status: skipped
+    summary: |
+      Integrate TEA-first test design into Epic env-2 development workflow.
+      Before each dev-story runs, TEA (Test Architect) must define acceptance
+      tests using the existing testarch-atdd workflow. The sequence is:
+      SM creates story -> TEA runs testarch-atdd -> failing test stubs committed ->
+      dev-story implements until tests pass -> code review validates quality.
+      Success: Every env-2 story has pre-defined acceptance tests committed
+      before implementation begins.
+    notes: |
+      TEA focuses on playwright based testing and investigation said it wouldn't
+      immediately be useful.
+
+  - id: 2
+    action_item: 2
+    workflow: bmad:bmm:workflows:quick-dev
+    status: skipped
+    summary: |
+      Create a verify-story-completion workflow that runs between dev-story
+      completion and code review. It parses the story file for task checkboxes,
+      File List, and completion notes, then validates claims against git status
+      (files exist/deleted/modified), runs pnpm test:run, and greps for
+      specific claims (removed X, added Y). Outputs PASS or FAIL with specific
+      mismatches. Goal: catch "completion notes don't match reality" before
+      expensive code review cycles.
+    notes: |
+      The time to create a workflow with BMB was non-trivial. Defering for now
+      while focusing on other work.
+
+  - id: 3
+    action_item: 3
+    workflow: bmad:bmm:workflows:research
+    status: done
+    summary: |
+      Analyze the existing bash script for creating claude instances and capture
+      all external command invocations with expected inputs and outputs. Create
+      fixture files in packages/agent-env/src/lib/__fixtures__/ with JSON
+      format: { command, args, stdout, stderr, exitCode }. Cover devcontainer up
+      (success/failure), docker ps/inspect, git clone, and OrbStack-specific
+      commands. Fixtures will be used with the createExecutor() DI pattern from
+      @zookanalytics/shared.
+
+  - id: 4
+    action_item: 4
+    workflow: bmad:bmm:workflows:research
+    status: done
+    summary: |
+      Research and document the @devcontainers/cli package API for agent-env
+      integration. Cover: devcontainer up (signature, flags, output format,
+      exit codes), devcontainer exec, error codes and failure modes,
+      OrbStack-specific macOS considerations, SSH agent forwarding config,
+      and devcontainer.json features. Deliverable: research document at
+      _bmad-output/planning-artifacts/agent-env/env-2-devcontainer-cli-research.md
+
+  - id: 5
+    action_item: 5
+    workflow: bmad:bmm:workflows:research
+    status: done
+    summary: |
+      Define the testing/mocking strategy for agent-env container operations
+      given the constraint that development happens inside a devcontainer with
+      no Docker or devcontainer CLI access during automated testing. Document:
+      which functions need mocking, how to use createExecutor() pattern from
+      @zookanalytics/shared, fixture structure per operation, integration test
+      strategy requiring human validation, and example mock implementations.
+      Deliverable: _bmad-output/planning-artifacts/agent-env/env-2-container-mock-strategy.md
+
+  - id: 6
+    action_item: 6
+    workflow: bmad:bmm:workflows:research
+    status: done
+    summary: |
+      Define what Epic env-2 functionality requires manual human testing on a
+      real host machine (outside devcontainer). Document: features that cannot
+      be validated through automated tests, manual test checklist per feature
+      (steps + expected results), when in the dev cycle these should occur,
+      how to document manual test results, and go/no-go criteria for Epic
+      env-2 completion. Deliverable:
+      _bmad-output/planning-artifacts/agent-env/env-2-human-validation-protocol.md
+
+  - id: 7
+    action_item: 7
+    workflow: bmad:bmm:workflows:research
+    status: done
+    summary: |
+      Analyze Epic env-1 execution to document what made planning artifacts
+      comprehensive enough for AI agents to execute all 5 stories autonomously
+      without human intervention. Analyze: PRD structure and detail level,
+      architecture document completeness, epic/story specification patterns,
+      acceptance criteria clarity, and dev notes/technical context provided.
+      Deliverable: _bmad-output/planning-artifacts/agent-env/env-2-autonomous-execution-patterns.md
