@@ -1,6 +1,6 @@
-# Workflow Specification: retro-item-execute
+# Workflow Specification: item-execute
 
-**Module:** bmm (extension)
+**Module:** retro
 **Status:** Placeholder — To be created via workflow-builder workflow
 **Created:** 2026-01-29
 
@@ -22,10 +22,10 @@
 
 ```yaml
 ---
-name: retro-item-execute
+name: item-execute
 description: Execute a single retro action item via its routed workflow
 web_bundle: true
-installed_path: '{project-root}/_bmad/bmm/workflows/retro-item-execute'
+installed_path: '{project-root}/_bmad/retro/workflows/item-execute'
 ---
 ```
 

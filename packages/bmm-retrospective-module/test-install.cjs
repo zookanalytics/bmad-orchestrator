@@ -29,7 +29,7 @@ install({
   console.log(`\nResult: ${ok ? 'SUCCESS' : 'FAILED'}`);
 
   // Show what was written
-  const dest = path.join(projectRoot, '_bmad', 'bmm', 'workflows');
+  const dest = path.join(projectRoot, '_bmad', 'retro', 'workflows');
   if (fs.existsSync(dest)) {
     console.log(`\nInstalled files under ${dest}:`);
     listTree(dest, '');

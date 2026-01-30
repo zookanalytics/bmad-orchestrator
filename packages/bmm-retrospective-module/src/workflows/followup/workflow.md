@@ -1,5 +1,5 @@
 ---
-name: retro-followup
+name: followup
 description: Parse retrospective action items and generate followup YAML for orchestrated execution
 web_bundle: true
 ---

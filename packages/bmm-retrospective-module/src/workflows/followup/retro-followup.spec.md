@@ -1,6 +1,6 @@
-# Workflow Specification: retro-followup
+# Workflow Specification: followup
 
-**Module:** bmm (extension)
+**Module:** retro
 **Status:** Placeholder — To be created via workflow-builder workflow
 **Created:** 2026-01-29
 
@@ -22,10 +22,10 @@
 
 ```yaml
 ---
-name: retro-followup
+name: followup
 description: Parse retrospective action items and generate followup YAML for orchestrated execution
 web_bundle: true
-installed_path: '{project-root}/_bmad/bmm/workflows/retro-followup'
+installed_path: '{project-root}/_bmad/retro/workflows/followup'
 ---
 ```
 

@@ -4,7 +4,7 @@ const path = require('node:path');
 /**
  * BMM Retrospective Module Installer
  *
- * Copies workflow files into the target project's _bmad/bmm/workflows/ directory.
+ * Copies workflow files into the target project's _bmad/retro/workflows/ directory.
  *
  * @param {Object} options - Installation options
  * @param {string} options.projectRoot - The root directory of the target project
@@ -29,9 +29,9 @@ async function install(options) {
       }
     }
 
-    // Copy workflows into _bmad/bmm/workflows/
+    // Copy workflows into _bmad/retro/workflows/
     const srcWorkflows = path.join(__dirname, '..', 'src', 'workflows');
-    const destWorkflows = path.join(projectRoot, '_bmad', 'bmm', 'workflows');
+    const destWorkflows = path.join(projectRoot, '_bmad', 'retro', 'workflows');
 
     fs.mkdirSync(destWorkflows, { recursive: true });
     copyDirSync(srcWorkflows, destWorkflows);

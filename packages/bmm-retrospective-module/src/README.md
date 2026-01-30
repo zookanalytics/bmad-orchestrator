@@ -35,12 +35,12 @@ bmad install bmm-retrospective-module
 After completing a retrospective:
 
 ```
-/bmad-bmm-retro-followup <retro-file-path>
+/bmad-retro-followup <retro-file-path>
 ```
 
 **Example:**
 ```
-/bmad-bmm-retro-followup _bmad-output/implementation-artifacts/epic-1-retro.md
+/bmad-retro-followup _bmad-output/implementation-artifacts/epic-1-retro.md
 ```
 
 **Output:** `epic-1-retro.followup.yaml` (sibling file)
@@ -50,12 +50,12 @@ After completing a retrospective:
 Execute items one at a time:
 
 ```
-/bmad-bmm-retro-item-execute <yaml-file> [item-id]
+/bmad-retro-item-execute <yaml-file> [item-id]
 ```
 
 **Example:**
 ```
-/bmad-bmm-retro-item-execute _bmad-output/implementation-artifacts/epic-1-retro.followup.yaml
+/bmad-retro-item-execute _bmad-output/implementation-artifacts/epic-1-retro.followup.yaml
 ```
 
 Omit `item-id` to execute the next pending item.
@@ -66,8 +66,8 @@ Omit `item-id` to execute the next pending item.
 
 | Workflow | Purpose |
 |----------|---------|
-| `retro-followup` | Parse retro → AI-route items → generate YAML |
-| `retro-item-execute` | Execute item → invoke workflow → confirm done |
+| `followup` | Parse retro → AI-route items → generate YAML |
+| `item-execute` | Execute item → invoke workflow → confirm done |
 
 ---
 
@@ -109,9 +109,9 @@ bmm-retrospective-module/
     ├── README.md
     ├── TODO.md
     └── workflows/
-        ├── retro-followup/
+        ├── followup/
         │   └── workflow.md
-        └── retro-item-execute/
+        └── item-execute/
             └── workflow.md
 ```
 
@@ -119,8 +119,8 @@ bmm-retrospective-module/
 
 ## Development Status
 
-- [ ] `retro-followup` workflow
-- [ ] `retro-item-execute` workflow
+- [ ] `followup` workflow
+- [ ] `item-execute` workflow
 
 See TODO.md for details.
 
