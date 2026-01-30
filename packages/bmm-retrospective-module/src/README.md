@@ -19,10 +19,11 @@ Retrospectives generate action items. This module closes the gap between "we sho
 
 ## Installation
 
-This module extends BMM. Install via BMAD:
+This module extends BMM. Install via npm + BMAD:
 
 ```bash
-bmad install bmm-workflow-retro-followup
+npm install @zookanalytics/bmm-retrospective-module
+bmad install bmm-retrospective-module
 ```
 
 ---
@@ -99,15 +100,19 @@ items:
 ## Module Structure
 
 ```
-bmm-workflow-retro-followup/
-├── module.yaml
-├── README.md
-├── TODO.md
-└── workflows/
-    ├── retro-followup/
-    │   └── workflow.md
-    └── retro-item-execute/
-        └── workflow.md
+bmm-retrospective-module/
+├── package.json
+├── _module-installer/
+│   └── installer.js
+└── src/
+    ├── module.yaml
+    ├── README.md
+    ├── TODO.md
+    └── workflows/
+        ├── retro-followup/
+        │   └── workflow.md
+        └── retro-item-execute/
+            └── workflow.md
 ```
 
 ---

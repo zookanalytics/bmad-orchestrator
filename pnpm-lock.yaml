@@ -94,6 +94,8 @@ importers:
         specifier: ^4.21.0
         version: 4.21.0
 
+  packages/bmm-retrospective-module: {}
+
   packages/orchestrator:
     dependencies:
       '@inkjs/ui':

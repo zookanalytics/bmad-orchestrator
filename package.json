@@ -17,6 +17,7 @@
     "type-check": "pnpm -r type-check",
     "dev:orchestrator": "pnpm --filter @zookanalytics/bmad-orchestrator dev",
     "dev:agent-env": "pnpm --filter @zookanalytics/agent-env dev",
+    "test:install:retro": "node packages/bmm-retrospective-module/test-install.cjs",
     "prepare": "husky"
   },
   "keywords": [
