@@ -34,3 +34,5 @@ name,description,module,path
 "module","Quad-modal workflow for creating BMAD modules (Brief + Create + Edit + Validate)","bmb","_bmad/bmb/workflows/module/workflow.md"
 "workflow","Create structured standalone workflows using markdown-based step architecture (tri-modal: create, validate, edit)","bmb","_bmad/bmb/workflows/workflow/workflow.md"
 "qa-automate","Generate tests quickly for existing features using standard test patterns","bmm","_bmad/bmm/workflows/qa/automate/workflow.yaml"
+"followup","Parse retrospective action items and generate followup YAML for orchestrated execution","retro","_bmad/retro/workflows/followup/workflow.md"
+"item-execute","Execute a single retro action item via its routed workflow","retro","_bmad/retro/workflows/item-execute/workflow.md"
