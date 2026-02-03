@@ -18,25 +18,22 @@ export const listCommand = new Command('list')
     const result = await listInstances();
 
     if (!result.ok) {
+      const error = createError(
+        result.error.code,
+        result.error.message,
+        'Check if ~/.agent-env/workspaces/ is accessible.'
+      );
       if (options.json) {
         const output: JsonOutput<never> = {
           ok: false,
           data: null,
-          error: { code: result.error.code, message: result.error.message },
+          error: { code: error.code, message: error.message, suggestion: error.suggestion },
         };
         console.log(JSON.stringify(output, null, 2));
       } else {
-        console.error(
-          formatError(
-            createError(
-              result.error.code,
-              result.error.message,
-              'Check if ~/.agent-env/workspaces/ is accessible.'
-            )
-          )
-        );
+        console.error(formatError(error));
       }
-      process.exit(1);
+      process.exitCode = 1;
       return;
     }
 
@@ -64,7 +61,7 @@ export const listCommand = new Command('list')
       })
     );
 
-    // Static render — unmount immediately after first render
+    // Static render — unmount immediately, then wait for cleanup.
     unmount();
     await waitUntilExit();
   });
