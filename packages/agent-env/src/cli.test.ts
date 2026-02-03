@@ -84,15 +84,33 @@ describe('agent-env CLI', () => {
     });
   });
 
-  describe('placeholder commands', () => {
-    it('list shows not implemented message', async () => {
+  describe('list command', () => {
+    it('list shows no instances when workspace directory does not exist', async () => {
       const result = await runCli(['list']);
-      const stderrStripped = stripAnsiCodes(result.stderr);
 
-      expect(result.exitCode).toBe(1); // Expect a non-zero exit code for errors
-      expect(stderrStripped).toMatch(/❌ \[NotImplemented\] List command not yet implemented\./);
+      expect(result.exitCode).toBe(0);
+      expect(result.stdout).toContain('No instances found');
     });
 
+    it('list --json returns valid JSON with empty data when no instances', async () => {
+      const result = await runCli(['list', '--json']);
+
+      expect(result.exitCode).toBe(0);
+      const output = JSON.parse(result.stdout);
+      expect(output.ok).toBe(true);
+      expect(output.data).toEqual([]);
+      expect(output.error).toBeNull();
+    });
+
+    it('ps alias works identically to list', async () => {
+      const result = await runCli(['ps']);
+
+      expect(result.exitCode).toBe(0);
+      expect(result.stdout).toContain('No instances found');
+    });
+  });
+
+  describe('placeholder commands', () => {
     it('attach shows not implemented message', async () => {
       const result = await runCli(['attach', 'test-instance']);
       const stderrStripped = stripAnsiCodes(result.stderr);

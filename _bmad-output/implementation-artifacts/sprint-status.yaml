@@ -118,7 +118,7 @@ development_status:
   # ─── agent-env Epic 3: Instance Discovery & Git State ───
   env-epic-3: in-progress
   env-3-1-implement-git-state-detection: done
-  env-3-2-implement-list-command-basic: backlog
+  env-3-2-implement-list-command-basic: done
   env-3-3-add-git-state-indicators-to-list: backlog
   env-3-4-implement-json-output: backlog
   env-epic-3-retrospective: optional
