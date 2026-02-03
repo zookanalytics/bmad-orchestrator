@@ -40,9 +40,10 @@
     "NODE_OPTIONS": "--max-old-space-size=4096",
     "POWERLEVEL9K_DISABLE_GITSTATUS": "true",
     "SHARED_DATA_DIR": "/shared-data",
-    // Override pnpm paths for VS Code's /workspace convention (image uses /workspaces)
-    "npm_config_store_dir": "/workspaces/.pnpm-store",
-    "npm_config_virtual_store_dir": ".pnpm-store/container/${localWorkspaceFolderBasename}"
+    // Override pnpm store path for VS Code's /workspace convention (image uses /workspaces).
+    // Virtual store uses default (node_modules/.pnpm) — per-container Docker volume mounts
+    // already isolate each container's node_modules, so no custom path needed.
+    "npm_config_store_dir": "/workspaces/.pnpm-store"
   },
   // Container user and lifecycle commands
   // (Also in image LABEL, but explicit here for VS Code DevContainers compatibility)

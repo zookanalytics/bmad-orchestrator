@@ -6,7 +6,7 @@
   "type": "module",
   "engines": {
     "node": ">=20",
-    "pnpm": ">=8"
+    "pnpm": ">=10"
   },
   "scripts": {
     "build": "pnpm -r build",
@@ -54,5 +54,8 @@
       "eslint --fix",
       "prettier --write"
     ]
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": ["esbuild", "rollup"]
   }
 }
