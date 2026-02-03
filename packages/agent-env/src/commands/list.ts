@@ -48,6 +48,7 @@ export const listCommand = new Command('list')
           status: i.status,
           lastAttached: i.lastAttached,
           purpose: i.purpose,
+          gitState: i.gitState,
         })),
         error: null,
       };

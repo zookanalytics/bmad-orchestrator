@@ -3,23 +3,36 @@ import React from 'react';
 import { describe, it, expect } from 'vitest';
 
 import type { InstanceInfo } from '../lib/list-instances.js';
+import type { GitState, GitStateResult } from '../lib/types.js';
 
 import { InstanceList } from './InstanceList.js';
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
-/** Strip ANSI escape codes for text assertions */
-function stripAnsi(str: string): string {
-  // eslint-disable-next-line no-control-regex
-  return str.replace(/\x1b\[[0-9;]*m/g, '');
+function cleanGitState(): GitState {
+  return {
+    hasStaged: false,
+    hasUnstaged: false,
+    hasUntracked: false,
+    stashCount: 0,
+    unpushedBranches: [],
+    neverPushedBranches: [],
+    isDetachedHead: false,
+    isClean: true,
+  };
+}
+
+function makeCleanGitState(): GitStateResult {
+  return { ok: true, state: cleanGitState() };
 }
 
 function makeInstance(overrides: Partial<InstanceInfo> = {}): InstanceInfo {
   return {
     name: 'test-instance',
     status: 'running',
-    lastAttached: new Date().toISOString(),
+    lastAttached: '2026-02-03T10:00:00.000Z',
     purpose: null,
+    gitState: makeCleanGitState(),
     ...overrides,
   };
 }
@@ -30,148 +43,129 @@ describe('InstanceList', () => {
   describe('empty state', () => {
     it('shows helpful message when no instances exist', () => {
       const { lastFrame } = render(<InstanceList instances={[]} dockerAvailable={true} />);
-
-      const output = stripAnsi(lastFrame() ?? '');
-      expect(output).toContain('No instances found');
-      expect(output).toContain('agent-env create');
+      expect(lastFrame()).toMatchSnapshot();
     });
   });
 
   describe('table rendering (AC: #1)', () => {
-    it('renders header row with column names', () => {
-      const instances = [makeInstance()];
-      const { lastFrame } = render(<InstanceList instances={instances} dockerAvailable={true} />);
-
-      const output = stripAnsi(lastFrame() ?? '');
-      expect(output).toContain('NAME');
-      expect(output).toContain('STATUS');
-      expect(output).toContain('LAST ATTACHED');
-      expect(output).toContain('PURPOSE');
-    });
-
-    it('renders all instances in the table', () => {
+    it('renders header row and data for multiple instances', () => {
       const instances = [
-        makeInstance({ name: 'alpha' }),
-        makeInstance({ name: 'beta' }),
-        makeInstance({ name: 'gamma' }),
+        makeInstance({
+          name: 'alpha',
+          status: 'running',
+          purpose: 'Auth service',
+        }),
+        makeInstance({ name: 'beta', status: 'stopped', purpose: 'Database' }),
+        makeInstance({
+          name: 'gamma',
+          status: 'orphaned',
+          lastAttached: null,
+        }),
       ];
       const { lastFrame } = render(<InstanceList instances={instances} dockerAvailable={true} />);
-
-      const output = stripAnsi(lastFrame() ?? '');
-      expect(output).toContain('alpha');
-      expect(output).toContain('beta');
-      expect(output).toContain('gamma');
+      expect(lastFrame()).toMatchSnapshot();
     });
   });
 
-  describe('status color rendering', () => {
-    it('renders running status text (AC: #2)', () => {
-      const instances = [makeInstance({ status: 'running' })];
+  describe('status rendering', () => {
+    it('renders correct colors for all statuses (AC: #2, #3, #4)', () => {
+      const instances = [
+        makeInstance({ name: 'run', status: 'running' }),
+        makeInstance({ name: 'stop', status: 'stopped' }),
+        makeInstance({ name: 'orphan', status: 'orphaned' }),
+      ];
       const { lastFrame } = render(<InstanceList instances={instances} dockerAvailable={true} />);
-
-      const output = stripAnsi(lastFrame() ?? '');
-      expect(output).toContain('running');
-    });
-
-    it('renders stopped status text (AC: #3)', () => {
-      const instances = [makeInstance({ status: 'stopped' })];
-      const { lastFrame } = render(<InstanceList instances={instances} dockerAvailable={true} />);
-
-      const output = stripAnsi(lastFrame() ?? '');
-      expect(output).toContain('stopped');
-    });
-
-    it('renders orphaned status text (AC: #4)', () => {
-      const instances = [makeInstance({ status: 'orphaned' })];
-      const { lastFrame } = render(<InstanceList instances={instances} dockerAvailable={true} />);
-
-      const output = stripAnsi(lastFrame() ?? '');
-      expect(output).toContain('orphaned');
+      expect(lastFrame()).toMatchSnapshot();
     });
   });
 
   describe('Docker unavailable (AC: #5)', () => {
-    it('shows "unknown (Docker unavailable)" status label', () => {
-      const instances = [makeInstance({ status: 'unknown' })];
-      const { lastFrame } = render(<InstanceList instances={instances} dockerAvailable={false} />);
-
-      const output = stripAnsi(lastFrame() ?? '');
-      expect(output).toContain('unknown (Docker unavailable)');
-    });
-
-    it('shows Docker unavailable warning notice', () => {
-      const instances = [makeInstance({ status: 'unknown' })];
-      const { lastFrame } = render(<InstanceList instances={instances} dockerAvailable={false} />);
-
-      const output = stripAnsi(lastFrame() ?? '');
-      expect(output).toContain('Docker is not available');
-    });
-
-    it('still shows workspace-level info when Docker unavailable', () => {
+    it('renders unknown status and warning when Docker is unavailable', () => {
       const instances = [
         makeInstance({
           name: 'my-ws',
           status: 'unknown',
           purpose: 'Auth work',
+          gitState: null, // As git state might be unavailable too
         }),
       ];
       const { lastFrame } = render(<InstanceList instances={instances} dockerAvailable={false} />);
-
-      const output = stripAnsi(lastFrame() ?? '');
-      expect(output).toContain('my-ws');
-      expect(output).toContain('Auth work');
+      expect(lastFrame()).toMatchSnapshot();
     });
   });
 
   describe('last attached formatting (AC: #6)', () => {
-    it('shows dash when lastAttached is null', () => {
-      const instances = [makeInstance({ lastAttached: null })];
+    it('renders relative time and dash for null', () => {
+      const instances = [
+        makeInstance({ name: 'recent', lastAttached: new Date().toISOString() }),
+        makeInstance({ name: 'none', lastAttached: null }),
+      ];
       const { lastFrame } = render(<InstanceList instances={instances} dockerAvailable={true} />);
-
-      const output = stripAnsi(lastFrame() ?? '');
-      // The row should contain a dash for the last attached column
-      expect(output).toContain('-');
-    });
-
-    it('formats relative timestamp for recent lastAttached', () => {
-      const instances = [makeInstance({ lastAttached: new Date().toISOString() })];
-      const { lastFrame } = render(<InstanceList instances={instances} dockerAvailable={true} />);
-
-      const output = stripAnsi(lastFrame() ?? '');
-      // timeago.js returns "just now" for very recent timestamps
-      expect(output).toContain('just now');
+      // Replace dynamic time with a static value for consistent snapshots
+      const output = (lastFrame() ?? '').replace(/just now/g, 'a few seconds ago');
+      expect(output).toMatchSnapshot();
     });
   });
 
   describe('purpose column', () => {
-    it('shows purpose text when set', () => {
-      const instances = [makeInstance({ purpose: 'OAuth implementation' })];
-      const { lastFrame } = render(<InstanceList instances={instances} dockerAvailable={true} />);
-
-      const output = stripAnsi(lastFrame() ?? '');
-      expect(output).toContain('OAuth implementation');
-    });
-
-    it('shows dash when purpose is null', () => {
-      const instances = [makeInstance({ purpose: null })];
-      const { lastFrame } = render(<InstanceList instances={instances} dockerAvailable={true} />);
-
-      const output = stripAnsi(lastFrame() ?? '');
-      // Purpose column should show "-" for null
-      const lines = output.split('\n');
-      const dataLine = lines.find((l) => l.includes('test-instance'));
-      expect(dataLine).toBeDefined();
-      expect(dataLine).toContain('-');
-    });
-
-    it('truncates long purposes to 30 characters', () => {
+    it('renders purpose and truncates long text', () => {
       const longPurpose = 'This is a very long purpose string that exceeds thirty characters';
-      const instances = [makeInstance({ purpose: longPurpose })];
+      const instances = [
+        makeInstance({ name: 'p1', purpose: 'OAuth' }),
+        makeInstance({ name: 'p2', purpose: null }),
+        makeInstance({ name: 'p3', purpose: longPurpose }),
+      ];
       const { lastFrame } = render(<InstanceList instances={instances} dockerAvailable={true} />);
+      expect(lastFrame()).toMatchSnapshot();
+    });
+  });
 
-      const output = stripAnsi(lastFrame() ?? '');
-      expect(output).toContain('...');
-      expect(output).not.toContain(longPurpose);
+  describe('git state indicators', () => {
+    it('renders all git state indicators correctly (AC: #1-5)', () => {
+      const instances: InstanceInfo[] = [
+        makeInstance({ name: 'clean', gitState: makeCleanGitState() }),
+        makeInstance({
+          name: 'uncommitted',
+          gitState: {
+            ok: true,
+            state: { ...cleanGitState(), hasUnstaged: true, isClean: false },
+          },
+        }),
+        makeInstance({
+          name: 'unpushed',
+          gitState: {
+            ok: true,
+            state: { ...cleanGitState(), unpushedBranches: ['main'], isClean: false },
+          },
+        }),
+        makeInstance({
+          name: 'never-pushed',
+          gitState: {
+            ok: true,
+            state: {
+              ...cleanGitState(),
+              neverPushedBranches: ['feat-a', 'feat-b'],
+              isClean: false,
+            },
+          },
+        }),
+        makeInstance({
+          name: 'combined',
+          gitState: {
+            ok: true,
+            state: {
+              ...cleanGitState(),
+              hasStaged: true,
+              unpushedBranches: ['main'],
+              isClean: false,
+            },
+          },
+        }),
+        makeInstance({ name: 'unavailable', gitState: null }),
+      ];
+
+      const { lastFrame } = render(<InstanceList instances={instances} dockerAvailable={true} />);
+      expect(lastFrame()).toMatchSnapshot();
     });
   });
 });

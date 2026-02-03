@@ -3,8 +3,9 @@ import type { Dirent, Stats } from 'node:fs';
 import { describe, it, expect, vi } from 'vitest';
 
 import type { ContainerLifecycle } from './container.js';
+import type { GitStateDetector } from './git.js';
 import type { ListResult, ListSuccess } from './list-instances.js';
-import type { InstanceState } from './types.js';
+import type { GitStateResult, InstanceState } from './types.js';
 
 import { listInstances } from './list-instances.js';
 
@@ -46,6 +47,23 @@ function makeState(overrides: Partial<InstanceState> = {}): InstanceState {
   };
 }
 
+/** Create a clean GitStateResult */
+function makeCleanGitState(): GitStateResult {
+  return {
+    ok: true,
+    state: {
+      hasStaged: false,
+      hasUnstaged: false,
+      hasUntracked: false,
+      stashCount: 0,
+      unpushedBranches: [],
+      neverPushedBranches: [],
+      isDetachedHead: false,
+      isClean: true,
+    },
+  };
+}
+
 /** Create mock container lifecycle */
 function mockContainer(overrides: Partial<ContainerLifecycle> = {}): ContainerLifecycle {
   return {
@@ -61,6 +79,13 @@ function mockContainer(overrides: Partial<ContainerLifecycle> = {}): ContainerLi
       containerId: 'abc123',
     }),
     ...overrides,
+  };
+}
+
+/** Create mock git state detector */
+function mockGitDetector(result: GitStateResult = makeCleanGitState()): GitStateDetector {
+  return {
+    getGitState: vi.fn().mockResolvedValue(result),
   };
 }
 
@@ -113,7 +138,12 @@ describe('listInstances', () => {
         'repo-gamma': makeState({ name: 'repo-gamma', containerName: 'ae-repo-gamma' }),
       });
 
-      const result = await listInstances({ container, workspaceFsDeps: wsFsDeps, stateFsDeps });
+      const result = await listInstances({
+        container,
+        gitDetector: mockGitDetector(),
+        workspaceFsDeps: wsFsDeps,
+        stateFsDeps,
+      });
 
       expect(result.ok).toBe(true);
       assertSuccess(result);
@@ -134,7 +164,12 @@ describe('listInstances', () => {
         'my-instance': makeState({ name: 'my-instance', containerName: 'ae-my-instance' }),
       });
 
-      const result = await listInstances({ container, workspaceFsDeps: wsFsDeps, stateFsDeps });
+      const result = await listInstances({
+        container,
+        gitDetector: mockGitDetector(),
+        workspaceFsDeps: wsFsDeps,
+        stateFsDeps,
+      });
       assertSuccess(result);
 
       expect(result.instances[0].status).toBe('running');
@@ -151,7 +186,12 @@ describe('listInstances', () => {
         'my-instance': makeState({ name: 'my-instance', containerName: 'ae-my-instance' }),
       });
 
-      const result = await listInstances({ container, workspaceFsDeps: wsFsDeps, stateFsDeps });
+      const result = await listInstances({
+        container,
+        gitDetector: mockGitDetector(),
+        workspaceFsDeps: wsFsDeps,
+        stateFsDeps,
+      });
       assertSuccess(result);
 
       expect(result.instances[0].status).toBe('stopped');
@@ -172,7 +212,12 @@ describe('listInstances', () => {
         'orphaned-ws': makeState({ name: 'orphaned-ws', containerName: 'ae-orphaned-ws' }),
       });
 
-      const result = await listInstances({ container, workspaceFsDeps: wsFsDeps, stateFsDeps });
+      const result = await listInstances({
+        container,
+        gitDetector: mockGitDetector(),
+        workspaceFsDeps: wsFsDeps,
+        stateFsDeps,
+      });
       assertSuccess(result);
 
       expect(result.instances[0].status).toBe('orphaned');
@@ -193,7 +238,12 @@ describe('listInstances', () => {
         }),
       });
 
-      const result = await listInstances({ container, workspaceFsDeps: wsFsDeps, stateFsDeps });
+      const result = await listInstances({
+        container,
+        gitDetector: mockGitDetector(),
+        workspaceFsDeps: wsFsDeps,
+        stateFsDeps,
+      });
       assertSuccess(result);
 
       expect(result.dockerAvailable).toBe(false);
@@ -215,9 +265,37 @@ describe('listInstances', () => {
         'my-instance': makeState({ name: 'my-instance', containerName: 'ae-my-instance' }),
       });
 
-      await listInstances({ container, workspaceFsDeps: wsFsDeps, stateFsDeps });
+      await listInstances({
+        container,
+        gitDetector: mockGitDetector(),
+        workspaceFsDeps: wsFsDeps,
+        stateFsDeps,
+      });
 
       expect(statusFn).not.toHaveBeenCalled();
+    });
+
+    it('still detects git state when Docker is unavailable', async () => {
+      const cleanState = makeCleanGitState();
+      const gitDetector = mockGitDetector(cleanState);
+      const container = mockContainer({
+        isDockerAvailable: vi.fn().mockResolvedValue(false),
+      });
+      const wsFsDeps = mockFsDeps(['my-instance']);
+      const stateFsDeps = mockStateFsDeps({
+        'my-instance': makeState({ name: 'my-instance', containerName: 'ae-my-instance' }),
+      });
+
+      const result = await listInstances({
+        container,
+        gitDetector,
+        workspaceFsDeps: wsFsDeps,
+        stateFsDeps,
+      });
+      assertSuccess(result);
+
+      expect(result.instances[0].gitState).toEqual(cleanState);
+      expect(gitDetector.getGitState).toHaveBeenCalledTimes(1);
     });
   });
 
@@ -233,7 +311,12 @@ describe('listInstances', () => {
         }),
       });
 
-      const result = await listInstances({ container, workspaceFsDeps: wsFsDeps, stateFsDeps });
+      const result = await listInstances({
+        container,
+        gitDetector: mockGitDetector(),
+        workspaceFsDeps: wsFsDeps,
+        stateFsDeps,
+      });
       assertSuccess(result);
 
       expect(result.instances[0].lastAttached).toBe('2026-02-03T06:30:00.000Z');
@@ -249,7 +332,12 @@ describe('listInstances', () => {
         .fn()
         .mockRejectedValue(Object.assign(new Error('ENOENT'), { code: 'ENOENT' }));
 
-      const result = await listInstances({ container, workspaceFsDeps: wsFsDeps, stateFsDeps });
+      const result = await listInstances({
+        container,
+        gitDetector: mockGitDetector(),
+        workspaceFsDeps: wsFsDeps,
+        stateFsDeps,
+      });
       assertSuccess(result);
 
       expect(result.instances[0].lastAttached).toBeNull();
@@ -261,7 +349,11 @@ describe('listInstances', () => {
       const container = mockContainer();
       const wsFsDeps = mockFsDeps([]);
 
-      const result = await listInstances({ container, workspaceFsDeps: wsFsDeps });
+      const result = await listInstances({
+        container,
+        gitDetector: mockGitDetector(),
+        workspaceFsDeps: wsFsDeps,
+      });
 
       expect(result.ok).toBe(true);
       assertSuccess(result);
@@ -284,7 +376,12 @@ describe('listInstances', () => {
         'my-instance': makeState({ name: 'my-instance', containerName: 'ae-my-instance' }),
       });
 
-      const result = await listInstances({ container, workspaceFsDeps: wsFsDeps, stateFsDeps });
+      const result = await listInstances({
+        container,
+        gitDetector: mockGitDetector(),
+        workspaceFsDeps: wsFsDeps,
+        stateFsDeps,
+      });
       assertSuccess(result);
 
       expect(result.instances[0].status).toBe('unknown');
@@ -303,7 +400,12 @@ describe('listInstances', () => {
         }),
       });
 
-      const result = await listInstances({ container, workspaceFsDeps: wsFsDeps, stateFsDeps });
+      const result = await listInstances({
+        container,
+        gitDetector: mockGitDetector(),
+        workspaceFsDeps: wsFsDeps,
+        stateFsDeps,
+      });
       assertSuccess(result);
 
       expect(result.instances[0].purpose).toBe('OAuth implementation');
@@ -320,7 +422,12 @@ describe('listInstances', () => {
         }),
       });
 
-      const result = await listInstances({ container, workspaceFsDeps: wsFsDeps, stateFsDeps });
+      const result = await listInstances({
+        container,
+        gitDetector: mockGitDetector(),
+        workspaceFsDeps: wsFsDeps,
+        stateFsDeps,
+      });
       assertSuccess(result);
 
       expect(result.instances[0].purpose).toBeNull();
@@ -341,11 +448,141 @@ describe('listInstances', () => {
         'ws-two': makeState({ name: 'ws-two', containerName: 'ae-ws-two' }),
       });
 
-      await listInstances({ container, workspaceFsDeps: wsFsDeps, stateFsDeps });
+      await listInstances({
+        container,
+        gitDetector: mockGitDetector(),
+        workspaceFsDeps: wsFsDeps,
+        stateFsDeps,
+      });
 
       expect(statusFn).toHaveBeenCalledTimes(2);
       expect(statusFn).toHaveBeenCalledWith('ae-ws-one');
       expect(statusFn).toHaveBeenCalledWith('ae-ws-two');
+    });
+  });
+
+  describe('git state detection', () => {
+    it('includes git state for each instance when Docker is available', async () => {
+      const cleanState = makeCleanGitState();
+      const gitDetector = mockGitDetector(cleanState);
+      const container = mockContainer();
+      const wsFsDeps = mockFsDeps(['my-instance']);
+      const stateFsDeps = mockStateFsDeps({
+        'my-instance': makeState({ name: 'my-instance', containerName: 'ae-my-instance' }),
+      });
+
+      const result = await listInstances({
+        container,
+        gitDetector,
+        workspaceFsDeps: wsFsDeps,
+        stateFsDeps,
+      });
+      assertSuccess(result);
+
+      expect(result.instances[0].gitState).toEqual(cleanState);
+      expect(gitDetector.getGitState).toHaveBeenCalledTimes(1);
+    });
+
+    it('calls getGitState with workspace root path', async () => {
+      const gitDetector = mockGitDetector();
+      const container = mockContainer();
+      const wsFsDeps = mockFsDeps(['my-ws']);
+      const stateFsDeps = mockStateFsDeps({
+        'my-ws': makeState({ name: 'my-ws', containerName: 'ae-my-ws' }),
+      });
+
+      await listInstances({
+        container,
+        gitDetector,
+        workspaceFsDeps: wsFsDeps,
+        stateFsDeps,
+      });
+
+      expect(gitDetector.getGitState).toHaveBeenCalledWith(expect.stringContaining('/my-ws'));
+    });
+
+    it('detects git state in parallel for multiple instances', async () => {
+      const gitFn = vi.fn().mockResolvedValue(makeCleanGitState());
+      const gitDetector: GitStateDetector = { getGitState: gitFn };
+      const container = mockContainer();
+      const wsFsDeps = mockFsDeps(['ws-a', 'ws-b', 'ws-c']);
+      const stateFsDeps = mockStateFsDeps({
+        'ws-a': makeState({ name: 'ws-a', containerName: 'ae-ws-a' }),
+        'ws-b': makeState({ name: 'ws-b', containerName: 'ae-ws-b' }),
+        'ws-c': makeState({ name: 'ws-c', containerName: 'ae-ws-c' }),
+      });
+
+      await listInstances({
+        container,
+        gitDetector,
+        workspaceFsDeps: wsFsDeps,
+        stateFsDeps,
+      });
+
+      expect(gitFn).toHaveBeenCalledTimes(3);
+    });
+
+    it('includes dirty git state in instance info', async () => {
+      const dirtyState: GitStateResult = {
+        ok: true,
+        state: {
+          hasStaged: true,
+          hasUnstaged: false,
+          hasUntracked: true,
+          stashCount: 0,
+          unpushedBranches: ['main'],
+          neverPushedBranches: [],
+          isDetachedHead: false,
+          isClean: false,
+        },
+      };
+      const gitDetector = mockGitDetector(dirtyState);
+      const container = mockContainer();
+      const wsFsDeps = mockFsDeps(['my-instance']);
+      const stateFsDeps = mockStateFsDeps({
+        'my-instance': makeState({ name: 'my-instance', containerName: 'ae-my-instance' }),
+      });
+
+      const result = await listInstances({
+        container,
+        gitDetector,
+        workspaceFsDeps: wsFsDeps,
+        stateFsDeps,
+      });
+      assertSuccess(result);
+
+      expect(result.instances[0].gitState).toEqual(dirtyState);
+      expect(result.instances[0].gitState?.ok).toBe(true);
+      if (result.instances[0].gitState?.ok) {
+        expect(result.instances[0].gitState.state.hasStaged).toBe(true);
+        expect(result.instances[0].gitState.state.unpushedBranches).toEqual(['main']);
+      }
+    });
+
+    it('includes git error state gracefully', async () => {
+      const errorState: GitStateResult = {
+        ok: false,
+        state: null,
+        error: { code: 'GIT_ERROR', message: 'Not a git repo' },
+      };
+      const gitDetector = mockGitDetector(errorState);
+      const container = mockContainer();
+      const wsFsDeps = mockFsDeps(['my-instance']);
+      const stateFsDeps = mockStateFsDeps({
+        'my-instance': makeState({ name: 'my-instance', containerName: 'ae-my-instance' }),
+      });
+
+      const result = await listInstances({
+        container,
+        gitDetector,
+        workspaceFsDeps: wsFsDeps,
+        stateFsDeps,
+      });
+      assertSuccess(result);
+
+      // List should still succeed even if git state detection fails
+      expect(result.instances[0].gitState).toEqual(errorState);
+      expect(result.instances[0].gitState?.ok).toBe(false);
     });
   });
 });

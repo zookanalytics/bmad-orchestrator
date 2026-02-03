@@ -11,6 +11,8 @@ import { format as timeago } from 'timeago.js';
 
 import type { InstanceInfo, InstanceDisplayStatus } from '../lib/list-instances.js';
 
+import { formatGitIndicators } from './StatusIndicator.js';
+
 // ─── Props ──────────────────────────────────────────────────────────────────
 
 export interface InstanceListProps {
@@ -79,12 +81,21 @@ export function InstanceList({
     );
   }
 
+  // Pre-calculate expensive-to-render data
+  const augmentedInstances = instances.map((instance) => {
+    const indicators = formatGitIndicators(instance.gitState);
+    const indicatorText = indicators.map((ind) => ind.symbol).join(' ');
+    return { ...instance, indicators, indicatorText };
+  });
+
   // Calculate column widths
-  const nameWidth = Math.max(4, ...instances.map((i) => i.name.length)) + 2;
+  const nameWidth = Math.max(4, ...augmentedInstances.map((i) => i.name.length)) + 2;
   const statusWidth =
-    Math.max(6, ...instances.map((i) => statusLabel(i.status, dockerAvailable).length)) + 2;
+    Math.max(6, ...augmentedInstances.map((i) => statusLabel(i.status, dockerAvailable).length)) +
+    2;
+  const gitWidth = Math.max(3, ...augmentedInstances.map((i) => i.indicatorText.length)) + 2;
   const lastAttachedWidth =
-    Math.max(13, ...instances.map((i) => formatLastAttached(i.lastAttached).length)) + 2;
+    Math.max(13, ...augmentedInstances.map((i) => formatLastAttached(i.lastAttached).length)) + 2;
 
   return (
     <Box flexDirection="column">
@@ -92,17 +103,26 @@ export function InstanceList({
       <Box>
         <Text bold>{pad('NAME', nameWidth)}</Text>
         <Text bold>{pad('STATUS', statusWidth)}</Text>
+        <Text bold>{pad('GIT', gitWidth)}</Text>
         <Text bold>{pad('LAST ATTACHED', lastAttachedWidth)}</Text>
         <Text bold>PURPOSE</Text>
       </Box>
 
       {/* Rows */}
-      {instances.map((instance) => (
+      {augmentedInstances.map((instance) => (
         <Box key={instance.name}>
           <Text>{pad(instance.name, nameWidth)}</Text>
           <Text color={statusColor(instance.status)}>
             {pad(statusLabel(instance.status, dockerAvailable), statusWidth)}
           </Text>
+          <Box width={gitWidth}>
+            {instance.indicators.map((ind, idx) => (
+              <Text key={idx} color={ind.color}>
+                {idx > 0 ? ' ' : ''}
+                {ind.symbol}
+              </Text>
+            ))}
+          </Box>
           <Text>{pad(formatLastAttached(instance.lastAttached), lastAttachedWidth)}</Text>
           <Text color="gray">{formatPurpose(instance.purpose)}</Text>
         </Box>

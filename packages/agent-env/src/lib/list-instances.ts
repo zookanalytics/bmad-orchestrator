@@ -7,11 +7,13 @@
  */
 
 import type { ContainerLifecycle } from './container.js';
+import type { GitStateDetector } from './git.js';
 import type { StateFsDeps } from './state.js';
-import type { ContainerStatus, InstanceState, WorkspacePath } from './types.js';
+import type { ContainerStatus, GitStateResult, InstanceState, WorkspacePath } from './types.js';
 import type { FsDeps } from './workspace.js';
 
 import { createContainerLifecycle } from './container.js';
+import { createGitStateDetector } from './git.js';
 import { readState } from './state.js';
 import { getWorkspacePathByName, scanWorkspaces } from './workspace.js';
 
@@ -30,6 +32,8 @@ export interface InstanceInfo {
   lastAttached: string | null;
   /** User-set purpose, or null */
   purpose: string | null;
+  /** Git state result, or null if unavailable (e.g., Docker down) */
+  gitState: GitStateResult | null;
 }
 
 /** Successful result from listing instances */
@@ -53,6 +57,7 @@ export type ListResult = ListSuccess | ListError;
 /** Dependencies for the instance lister */
 export interface ListInstancesDeps {
   container: ContainerLifecycle;
+  gitDetector: GitStateDetector;
   workspaceFsDeps: FsDeps;
   stateFsDeps: Pick<StateFsDeps, 'readFile'>;
 }
@@ -71,6 +76,7 @@ export interface ListInstancesDeps {
 export async function listInstances(deps?: Partial<ListInstancesDeps>): Promise<ListResult> {
   try {
     const container = deps?.container ?? createContainerLifecycle();
+    const gitDetector = deps?.gitDetector ?? createGitStateDetector();
     const wsFsDeps = deps?.workspaceFsDeps;
     const stateFsDeps = deps?.stateFsDeps;
 
@@ -84,28 +90,32 @@ export async function listInstances(deps?: Partial<ListInstancesDeps>): Promise<
     // Step 2: Check Docker availability once
     const dockerAvailable = await container.isDockerAvailable();
 
-    // Step 3: For each workspace, read state and check container status in parallel
+    // Step 3: For each workspace, read state, check container status, and detect git state in parallel
     const instancePromises = workspaceNames.map(async (wsName): Promise<InstanceInfo> => {
       const wsPath: WorkspacePath = getWorkspacePathByName(wsName, wsFsDeps);
       const state: InstanceState = await readState(wsPath, stateFsDeps);
 
+      // Run container status check and git state detection in parallel
+      const containerPromise = dockerAvailable
+        ? container.containerStatus(state.containerName)
+        : Promise.resolve(null);
+      const gitPromise = gitDetector.getGitState(wsPath.root);
+
+      const [containerResult, gitState] = await Promise.all([containerPromise, gitPromise]);
+
       // Determine display status
       let status: InstanceDisplayStatus;
 
-      if (!dockerAvailable) {
+      if (!dockerAvailable || containerResult === null) {
         status = 'unknown';
+      } else if (!containerResult.ok) {
+        // Error checking container — treat as unknown
+        status = 'unknown';
+      } else if (containerResult.status === 'not-found') {
+        // Workspace exists but no container — orphaned
+        status = 'orphaned';
       } else {
-        const containerResult = await container.containerStatus(state.containerName);
-
-        if (!containerResult.ok) {
-          // Error checking container — treat as unknown
-          status = 'unknown';
-        } else if (containerResult.status === 'not-found') {
-          // Workspace exists but no container — orphaned
-          status = 'orphaned';
-        } else {
-          status = containerResult.status;
-        }
+        status = containerResult.status;
       }
 
       return {
@@ -113,6 +123,7 @@ export async function listInstances(deps?: Partial<ListInstancesDeps>): Promise<
         status,
         lastAttached: state.lastAttached !== 'unknown' ? state.lastAttached : null,
         purpose: state.purpose,
+        gitState,
       };
     });
 

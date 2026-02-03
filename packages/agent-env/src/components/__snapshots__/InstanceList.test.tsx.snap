@@ -1,0 +1,50 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`InstanceList > Docker unavailable (AC: #5) > renders unknown status and warning when Docker is unavailable 1`] = `
+"NAME   STATUS                        GIT  LAST ATTACHED  PURPOSE
+my-ws  unknown (Docker unavailable)  ?    in 3 hours     Auth work
+
+⚠ Docker is not available. Container status cannot be determined."
+`;
+
+exports[`InstanceList > empty state > shows helpful message when no instances exist 1`] = `
+"No instances found.
+Create one with: agent-env create <name> --repo <url>"
+`;
+
+exports[`InstanceList > git state indicators > renders all git state indicators correctly (AC: #1-5) 1`] = `
+"NAME          STATUS   GIT  LAST ATTACHED  PURPOSE
+clean         running  ✓    in 3 hours     -
+uncommitted   running  ●    in 3 hours     -
+unpushed      running  ↑    in 3 hours     -
+never-pushed  running  ⚠ 2  in 3 hours     -
+combined      running  ● ↑  in 3 hours     -
+unavailable   running  ?    in 3 hours     -"
+`;
+
+exports[`InstanceList > last attached formatting (AC: #6) > renders relative time and dash for null 1`] = `
+"NAME    STATUS   GIT  LAST ATTACHED  PURPOSE
+recent  running  ✓    a few seconds ago       -
+none    running  ✓    -              -"
+`;
+
+exports[`InstanceList > purpose column > renders purpose and truncates long text 1`] = `
+"NAME  STATUS   GIT  LAST ATTACHED  PURPOSE
+p1    running  ✓    in 3 hours     OAuth
+p2    running  ✓    in 3 hours     -
+p3    running  ✓    in 3 hours     This is a very long purpose..."
+`;
+
+exports[`InstanceList > status rendering > renders correct colors for all statuses (AC: #2, #3, #4) 1`] = `
+"NAME    STATUS    GIT  LAST ATTACHED  PURPOSE
+run     running   ✓    in 3 hours     -
+stop    stopped   ✓    in 3 hours     -
+orphan  orphaned  ✓    in 3 hours     -"
+`;
+
+exports[`InstanceList > table rendering (AC: #1) > renders header row and data for multiple instances 1`] = `
+"NAME   STATUS    GIT  LAST ATTACHED  PURPOSE
+alpha  running   ✓    in 3 hours     Auth service
+beta   stopped   ✓    in 3 hours     Database
+gamma  orphaned  ✓    -              -"
+`;
