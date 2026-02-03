@@ -50,6 +50,7 @@ Scopes are **encouraged** for most commit types but **optional** for inherently 
 
 | Scope              | Description                                                             | Example                                                  |
 | ------------------ | ----------------------------------------------------------------------- | -------------------------------------------------------- |
+| `agent-env`        | Agent environment management CLI package                                | `feat(agent-env): add workspace management`              |
 | `ai-tools`         | Claude Code, Gemini CLI, custom commands, skills, prompts               | `feat(ai-tools): add documentation review skill`         |
 | `bmad-dashboard`   | TUI dashboard package for DevPod orchestration                          | `feat(bmad-dashboard): add worker list component`        |
 | `bmad-orchestrator`| BMAD workflow automation package                                        | `feat(bmad-orchestrator): add task queue`                |
@@ -65,6 +66,7 @@ Scopes are **encouraged** for most commit types but **optional** for inherently 
 
 | Directory/File Pattern                    | Scope              |
 | ----------------------------------------- | ------------------ |
+| `packages/agent-env/`                     | `agent-env`        |
 | `.claude/`, `.gemini/`                    | `ai-tools`         |
 | `packages/bmad-dashboard/`                | `bmad-dashboard`   |
 | `packages/bmad-orchestrator/`             | `bmad-orchestrator`|

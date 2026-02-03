@@ -1,0 +1,523 @@
+import type { ExecuteResult } from '@zookanalytics/shared';
+
+import { mkdir, readFile, rename, rm, stat, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+
+import type { ContainerLifecycle } from './container.js';
+import type { CreateInstanceDeps } from './create-instance.js';
+
+import {
+  extractRepoName,
+  createInstance,
+  resolveRepoUrl,
+  attachToInstance,
+} from './create-instance.js';
+import { getBaselineConfigPath } from './devcontainer.js';
+import { AGENT_ENV_DIR, WORKSPACES_DIR } from './types.js';
+
+// ─── extractRepoName tests ──────────────────────────────────────────────────
+
+describe('extractRepoName', () => {
+  it('extracts name from HTTPS URL with .git suffix', () => {
+    expect(extractRepoName('https://github.com/user/bmad-orch.git')).toBe('bmad-orch');
+  });
+
+  it('extracts name from HTTPS URL without .git suffix', () => {
+    expect(extractRepoName('https://github.com/user/bmad-orch')).toBe('bmad-orch');
+  });
+
+  it('extracts name from SSH URL with .git suffix', () => {
+    expect(extractRepoName('git@github.com:user/repo.git')).toBe('repo');
+  });
+
+  it('extracts name from SSH URL without .git suffix', () => {
+    expect(extractRepoName('git@github.com:user/repo')).toBe('repo');
+  });
+
+  it('handles trailing slashes in HTTPS URLs', () => {
+    expect(extractRepoName('https://github.com/user/bmad-orch/')).toBe('bmad-orch');
+  });
+
+  it('handles nested paths in HTTPS URLs', () => {
+    expect(extractRepoName('https://gitlab.com/org/sub/repo-name.git')).toBe('repo-name');
+  });
+
+  it('handles repos with dots in the name', () => {
+    expect(extractRepoName('https://github.com/user/my.repo.name.git')).toBe('my.repo.name');
+  });
+
+  it('handles repos with hyphens and underscores', () => {
+    expect(extractRepoName('https://github.com/user/my-repo_name.git')).toBe('my-repo_name');
+  });
+
+  it('extracts name from SSH URL with protocol', () => {
+    expect(extractRepoName('ssh://git@github.com/user/repo.git')).toBe('repo');
+  });
+
+  it('throws for empty URL', () => {
+    expect(() => extractRepoName('')).toThrow('Cannot extract repository name');
+  });
+
+  it('throws for URL that resolves to empty name', () => {
+    expect(() => extractRepoName('https://github.com/.git')).toThrow(
+      'Cannot extract repository name'
+    );
+  });
+});
+
+// ─── createInstance tests ───────────────────────────────────────────────────
+
+let tempDir: string;
+
+beforeEach(async () => {
+  tempDir = join(
+    tmpdir(),
+    `agent-env-test-create-${Date.now()}-${Math.random().toString(36).slice(2)}`
+  );
+  await mkdir(tempDir, { recursive: true });
+});
+
+afterEach(async () => {
+  await rm(tempDir, { recursive: true, force: true });
+});
+
+const gitCloneSuccess: ExecuteResult = { ok: true, stdout: '', stderr: '', exitCode: 0 };
+const gitCloneFailure: ExecuteResult = {
+  ok: false,
+  stdout: '',
+  stderr: 'fatal: repository not found',
+  exitCode: 128,
+};
+
+/** Create a mock container lifecycle */
+function createMockContainer(overrides: Partial<ContainerLifecycle> = {}): ContainerLifecycle {
+  return {
+    isDockerAvailable: vi.fn().mockResolvedValue(true),
+    containerStatus: vi
+      .fn()
+      .mockResolvedValue({ ok: true, status: 'running', containerId: 'abc', error: null }),
+    devcontainerUp: vi
+      .fn()
+      .mockResolvedValue({
+        ok: true,
+        status: 'running',
+        containerId: 'container-123',
+        error: null,
+      }),
+    ...overrides,
+  };
+}
+
+/**
+ * Create a mock stat function that:
+ * - Returns real stat for the baseline config path (so copyBaselineConfig can verify it exists)
+ * - Returns custom behavior for devcontainer detection in workspace paths
+ */
+function createDevcontainerStatMock(hasExistingDevcontainer: boolean) {
+  const baselinePath = getBaselineConfigPath();
+  return vi.fn().mockImplementation(async (path: string) => {
+    // Allow baseline config path to use real stat
+    if (path.startsWith(baselinePath) || path === baselinePath) {
+      return stat(path);
+    }
+    // For workspace paths (.devcontainer checks)
+    if (hasExistingDevcontainer) {
+      return { isDirectory: () => true, isFile: () => false };
+    }
+    throw Object.assign(new Error('ENOENT'), { code: 'ENOENT' });
+  });
+}
+
+/**
+ * Create test deps with a mock executor that simulates git clone
+ * by creating the target directory on success.
+ */
+function createTestDeps(
+  cloneResult: ExecuteResult,
+  containerOverrides: Partial<ContainerLifecycle> = {},
+  hasExistingDevcontainer = false
+): CreateInstanceDeps {
+  const executor = vi
+    .fn()
+    .mockImplementation(async (command: string, args: string[] = []): Promise<ExecuteResult> => {
+      if (command === 'git' && args[0] === 'clone') {
+        if (cloneResult.ok) {
+          // Simulate successful clone by creating target directory
+          const targetDir = args[2];
+          if (targetDir) {
+            await mkdir(targetDir, { recursive: true });
+          }
+        }
+        return cloneResult;
+      }
+      return { ok: false, stdout: '', stderr: `command not found: ${command}`, exitCode: 127 };
+    });
+
+  // Mock readFile to return a valid devcontainer.json for patchContainerName
+  const devcontainerReadFile = vi.fn().mockResolvedValue('{}') as unknown as typeof readFile;
+  const devcontainerWriteFile = vi.fn().mockResolvedValue(undefined) as unknown as typeof writeFile;
+
+  return {
+    executor,
+    container: createMockContainer(containerOverrides),
+    workspaceFsDeps: {
+      mkdir,
+      readdir: vi.fn() as unknown as typeof import('node:fs/promises').readdir,
+      stat,
+      homedir: () => tempDir,
+    },
+    stateFsDeps: { readFile, writeFile, rename, mkdir },
+    devcontainerFsDeps: {
+      cp: vi.fn().mockResolvedValue(undefined),
+      mkdir,
+      readFile: devcontainerReadFile,
+      stat: createDevcontainerStatMock(hasExistingDevcontainer),
+      writeFile: devcontainerWriteFile,
+    },
+    rm,
+  };
+}
+
+describe('createInstance', () => {
+  it('creates instance successfully with HTTPS URL', async () => {
+    const deps = createTestDeps(gitCloneSuccess);
+
+    const result = await createInstance('auth', 'https://github.com/user/bmad-orch.git', deps);
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) throw new Error('Expected success');
+
+    expect(result.workspacePath).not.toBeNull();
+    expect(result.workspacePath.name).toBe('bmad-orch-auth');
+    expect(result.containerName).toBe('ae-bmad-orch-auth');
+  });
+
+  it('creates instance successfully with SSH URL', async () => {
+    const deps = createTestDeps(gitCloneSuccess);
+
+    const result = await createInstance('feature', 'git@github.com:user/repo.git', deps);
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) throw new Error('Expected success');
+
+    expect(result.workspacePath.name).toBe('repo-feature');
+    expect(result.containerName).toBe('ae-repo-feature');
+  });
+
+  it('calls git clone with correct arguments and timeout', async () => {
+    const deps = createTestDeps(gitCloneSuccess);
+
+    await createInstance('auth', 'https://github.com/user/bmad-orch.git', deps);
+
+    expect(deps.executor).toHaveBeenCalledWith(
+      'git',
+      expect.arrayContaining(['clone', 'https://github.com/user/bmad-orch.git']),
+      expect.objectContaining({ timeout: 120_000 })
+    );
+  });
+
+  it('calls devcontainerUp after successful clone', async () => {
+    const deps = createTestDeps(gitCloneSuccess);
+
+    await createInstance('auth', 'https://github.com/user/bmad-orch.git', deps);
+
+    expect(deps.container.devcontainerUp).toHaveBeenCalledWith(
+      expect.stringContaining('bmad-orch-auth'),
+      'ae-bmad-orch-auth'
+    );
+  });
+
+  it('writes state.json after successful create', async () => {
+    const deps = createTestDeps(gitCloneSuccess);
+
+    const result = await createInstance('auth', 'https://github.com/user/bmad-orch.git', deps);
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) throw new Error('Expected success');
+
+    const stateContent = await readFile(result.workspacePath.stateFile, 'utf-8');
+    const state = JSON.parse(stateContent);
+    expect(state.name).toBe('bmad-orch-auth');
+    expect(state.repo).toBe('https://github.com/user/bmad-orch.git');
+    expect(state.containerName).toBe('ae-bmad-orch-auth');
+    expect(state.createdAt).toBeDefined();
+  });
+
+  it('returns INSTANCE_EXISTS when workspace already exists', async () => {
+    const deps = createTestDeps(gitCloneSuccess);
+
+    // First create succeeds
+    await createInstance('auth', 'https://github.com/user/bmad-orch.git', deps);
+
+    // Second create should fail with INSTANCE_EXISTS
+    const result = await createInstance('auth', 'https://github.com/user/bmad-orch.git', deps);
+
+    expect(result.ok).toBe(false);
+    if (result.ok) throw new Error('Expected failure');
+
+    expect(result.error).not.toBeNull();
+    expect(result.error.code).toBe('INSTANCE_EXISTS');
+    expect(result.error.message).toContain("Instance 'auth' already exists");
+  });
+
+  it('returns GIT_ERROR when clone fails', async () => {
+    const deps = createTestDeps(gitCloneFailure);
+
+    const result = await createInstance('auth', 'https://github.com/user/nonexistent.git', deps);
+
+    expect(result.ok).toBe(false);
+    if (result.ok) throw new Error('Expected failure');
+
+    expect(result.error.code).toBe('GIT_ERROR');
+    expect(result.error.message).toContain('repository not found');
+  });
+
+  it('cleans up workspace on git clone failure', async () => {
+    const deps = createTestDeps(gitCloneFailure);
+
+    await createInstance('auth', 'https://github.com/user/nonexistent.git', deps);
+
+    // Workspace should not exist after rollback
+    const wsDir = join(tempDir, AGENT_ENV_DIR, WORKSPACES_DIR, 'nonexistent-auth');
+    let exists = false;
+    try {
+      await stat(wsDir);
+      exists = true;
+    } catch {
+      exists = false;
+    }
+    expect(exists).toBe(false);
+  });
+
+  it('returns CONTAINER_ERROR when devcontainerUp fails', async () => {
+    const deps = createTestDeps(gitCloneSuccess, {
+      devcontainerUp: vi.fn().mockResolvedValue({
+        ok: false,
+        status: 'not-found',
+        containerId: null,
+        error: { code: 'CONTAINER_ERROR', message: 'Build failed' },
+      }),
+    });
+
+    const result = await createInstance('auth', 'https://github.com/user/bmad-orch.git', deps);
+
+    expect(result.ok).toBe(false);
+    if (result.ok) throw new Error('Expected failure');
+    expect(result.error.code).toBe('CONTAINER_ERROR');
+  });
+
+  it('cleans up workspace on container startup failure', async () => {
+    const deps = createTestDeps(gitCloneSuccess, {
+      devcontainerUp: vi.fn().mockResolvedValue({
+        ok: false,
+        status: 'not-found',
+        containerId: null,
+        error: { code: 'CONTAINER_ERROR', message: 'Build failed' },
+      }),
+    });
+
+    await createInstance('auth', 'https://github.com/user/bmad-orch.git', deps);
+
+    // Workspace should be cleaned up
+    const wsDir = join(tempDir, AGENT_ENV_DIR, WORKSPACES_DIR, 'bmad-orch-auth');
+    let exists = false;
+    try {
+      await stat(wsDir);
+      exists = true;
+    } catch {
+      exists = false;
+    }
+    expect(exists).toBe(false);
+  });
+
+  it('returns GIT_ERROR for invalid URL', async () => {
+    const deps = createTestDeps(gitCloneSuccess);
+
+    const result = await createInstance('auth', '', deps);
+
+    expect(result.ok).toBe(false);
+    if (result.ok) throw new Error('Expected failure');
+
+    expect(result.error.code).toBe('GIT_ERROR');
+    expect(result.error.message).toContain('Invalid repository URL');
+  });
+
+  it('copies baseline config when no devcontainer exists in cloned repo', async () => {
+    const deps = createTestDeps(gitCloneSuccess, {}, false);
+
+    await createInstance('auth', 'https://github.com/user/bmad-orch.git', deps);
+
+    expect(deps.devcontainerFsDeps.cp).toHaveBeenCalled();
+  });
+
+  it('skips baseline config copy and name patch when devcontainer already exists', async () => {
+    const deps = createTestDeps(gitCloneSuccess, {}, true);
+
+    await createInstance('auth', 'https://github.com/user/bmad-orch.git', deps);
+
+    // Should not copy or patch since .devcontainer already exists
+    expect(deps.devcontainerFsDeps.cp).not.toHaveBeenCalled();
+    expect(deps.devcontainerFsDeps.readFile).not.toHaveBeenCalled();
+    expect(deps.devcontainerFsDeps.writeFile).not.toHaveBeenCalled();
+  });
+
+  it('patches devcontainer.json with container name runArgs', async () => {
+    const deps = createTestDeps(gitCloneSuccess);
+
+    await createInstance('auth', 'https://github.com/user/bmad-orch.git', deps);
+
+    // Should have read the devcontainer.json
+    expect(deps.devcontainerFsDeps.readFile).toHaveBeenCalledWith(
+      expect.stringContaining('.devcontainer/devcontainer.json'),
+      'utf-8'
+    );
+
+    // Should have written back with --name runArg
+    expect(deps.devcontainerFsDeps.writeFile).toHaveBeenCalledWith(
+      expect.stringContaining('.devcontainer/devcontainer.json'),
+      expect.stringContaining('"--name=ae-bmad-orch-auth"')
+    );
+  });
+});
+
+// ─── resolveRepoUrl tests ───────────────────────────────────────────────────
+
+describe('resolveRepoUrl', () => {
+  it('returns the URL as-is when not "."', async () => {
+    const executor = vi.fn();
+    const result = await resolveRepoUrl('https://github.com/user/repo.git', executor);
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) throw new Error('Expected success');
+    expect(result.url).toBe('https://github.com/user/repo.git');
+    expect(executor).not.toHaveBeenCalled();
+  });
+
+  it('resolves "." to the git remote origin URL', async () => {
+    const executor = vi.fn().mockResolvedValue({
+      ok: true,
+      stdout: 'https://github.com/user/my-repo.git\n',
+      stderr: '',
+      exitCode: 0,
+    } satisfies ExecuteResult);
+
+    const result = await resolveRepoUrl('.', executor);
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) throw new Error('Expected success');
+    expect(result.url).toBe('https://github.com/user/my-repo.git');
+    expect(executor).toHaveBeenCalledWith('git', ['remote', 'get-url', 'origin']);
+  });
+
+  it('resolves "." with SSH remote URL', async () => {
+    const executor = vi.fn().mockResolvedValue({
+      ok: true,
+      stdout: 'git@github.com:user/my-repo.git\n',
+      stderr: '',
+      exitCode: 0,
+    } satisfies ExecuteResult);
+
+    const result = await resolveRepoUrl('.', executor);
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) throw new Error('Expected success');
+    expect(result.url).toBe('git@github.com:user/my-repo.git');
+  });
+
+  it('returns GIT_ERROR when no git remote found', async () => {
+    const executor = vi.fn().mockResolvedValue({
+      ok: false,
+      stdout: '',
+      stderr: 'fatal: not a git repository',
+      exitCode: 128,
+    } satisfies ExecuteResult);
+
+    const result = await resolveRepoUrl('.', executor);
+
+    expect(result.ok).toBe(false);
+    if (result.ok) throw new Error('Expected failure');
+    expect(result.error.code).toBe('GIT_ERROR');
+    expect(result.error.message).toContain('No git remote found');
+  });
+
+  it('returns GIT_ERROR when remote URL is empty', async () => {
+    const executor = vi.fn().mockResolvedValue({
+      ok: true,
+      stdout: '  \n',
+      stderr: '',
+      exitCode: 0,
+    } satisfies ExecuteResult);
+
+    const result = await resolveRepoUrl('.', executor);
+
+    expect(result.ok).toBe(false);
+    if (result.ok) throw new Error('Expected failure');
+    expect(result.error.code).toBe('GIT_ERROR');
+    expect(result.error.message).toContain('No git remote found');
+  });
+});
+
+// ─── attachToInstance tests ─────────────────────────────────────────────────
+
+describe('attachToInstance', () => {
+  it('calls docker exec with correct container name and tmux command', async () => {
+    const executor = vi.fn().mockResolvedValue({
+      ok: true,
+      stdout: '',
+      stderr: '',
+      exitCode: 0,
+    } satisfies ExecuteResult);
+
+    const result = await attachToInstance('ae-bmad-orch-auth', executor);
+
+    expect(result.ok).toBe(true);
+    expect(executor).toHaveBeenCalledWith(
+      'docker',
+      [
+        'exec',
+        '-it',
+        'ae-bmad-orch-auth',
+        'bash',
+        '-c',
+        'tmux attach-session -t main 2>/dev/null || tmux new-session -s main',
+      ],
+      { stdio: 'inherit' }
+    );
+  });
+
+  it('returns CONTAINER_ERROR when docker exec fails', async () => {
+    const executor = vi.fn().mockResolvedValue({
+      ok: false,
+      stdout: '',
+      stderr: 'Error: No such container',
+      exitCode: 1,
+    } satisfies ExecuteResult);
+
+    const result = await attachToInstance('ae-nonexistent', executor);
+
+    expect(result.ok).toBe(false);
+    if (result.ok) throw new Error('Expected failure');
+    expect(result.error.code).toBe('CONTAINER_ERROR');
+    expect(result.error.message).toContain('ae-nonexistent');
+    expect(result.error.suggestion).toContain('Ensure the container is running');
+  });
+
+  it('returns tmux-specific error when tmux is not found', async () => {
+    const executor = vi.fn().mockResolvedValue({
+      ok: false,
+      stdout: '',
+      stderr: 'bash: tmux: command not found',
+      exitCode: 127,
+    } satisfies ExecuteResult);
+
+    const result = await attachToInstance('ae-bmad-orch-auth', executor);
+
+    expect(result.ok).toBe(false);
+    if (result.ok) throw new Error('Expected failure');
+    expect(result.error.code).toBe('CONTAINER_ERROR');
+    expect(result.error.message).toContain('tmux is not available');
+    expect(result.error.suggestion).toContain('tmux is installed');
+  });
+});

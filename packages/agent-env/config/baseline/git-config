@@ -1,0 +1,11 @@
+# agent-env git configuration defaults
+# Included via git config include.path in post-create.sh
+
+[gpg]
+	format = ssh
+
+[commit]
+	gpgsign = true
+
+[tag]
+	gpgsign = true

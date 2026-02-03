@@ -53,17 +53,38 @@ describe('agent-env CLI', () => {
     });
   });
 
-  describe('placeholder commands', () => {
-    it('create shows not implemented message', async () => {
+  describe('create command', () => {
+    it('create without --repo shows missing option error', async () => {
       const result = await runCli(['create', 'test-instance']);
       const stderrStripped = stripAnsiCodes(result.stderr);
 
-      expect(result.exitCode).toBe(1); // Expect a non-zero exit code for errors
-      expect(stderrStripped).toMatch(
-        /❌ \[NotImplemented\] Create command not yet implemented for instance: test-instance\./
-      );
+      expect(result.exitCode).toBe(1);
+      expect(stderrStripped).toMatch(/❌ \[MISSING_OPTION\] The --repo flag is required\./);
     });
 
+    it('create --help shows --repo and --attach options', async () => {
+      const result = await runCli(['create', '--help']);
+
+      expect(result.exitCode).toBe(0);
+      expect(result.stdout).toContain('--repo');
+      expect(result.stdout).toContain('--attach');
+    });
+
+    it('create with --repo . resolves current directory git remote', async () => {
+      // This test runs in the actual repo, so --repo . will resolve to
+      // the real origin URL. It will then fail at clone (already exists),
+      // but the key is it gets past MISSING_OPTION and attempts resolution.
+      const result = await runCli(['create', 'test-instance', '--repo', '.']);
+      const output = stripAnsiCodes(result.stdout + result.stderr);
+
+      // Should NOT show MISSING_OPTION error
+      expect(output).not.toContain('MISSING_OPTION');
+      // Should show "Creating instance" (meaning URL was resolved)
+      expect(output).toContain('Creating instance');
+    });
+  });
+
+  describe('placeholder commands', () => {
     it('list shows not implemented message', async () => {
       const result = await runCli(['list']);
       const stderrStripped = stripAnsiCodes(result.stderr);

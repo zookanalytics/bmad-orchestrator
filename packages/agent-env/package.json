@@ -19,7 +19,8 @@
   },
   "files": [
     "dist",
-    "bin"
+    "bin",
+    "config"
   ],
   "scripts": {
     "dev": "tsx src/cli.ts",
@@ -41,7 +42,7 @@
     "timeago.js": "^4.0.2"
   },
   "devDependencies": {
-    "@types/node": "^25.0.8",
+    "@types/node": "^20.14.10",
     "@types/react": "^19.2.8",
     "ink-testing-library": "^4.0.0",
     "tsx": "^4.21.0"

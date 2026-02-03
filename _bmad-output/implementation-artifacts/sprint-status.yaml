@@ -107,12 +107,12 @@ development_status:
   env-epic-1-retrospective: done
 
   # ─── agent-env Epic 2: Instance Creation & Baseline Environment ───
-  env-epic-2: backlog
-  env-2-1-implement-workspace-management: backlog
-  env-2-2-create-baseline-devcontainer-configuration: backlog
-  env-2-3-implement-container-lifecycle: backlog
-  env-2-4-implement-create-command-basic: backlog
-  env-2-5-implement-create-command-variants: backlog
+  env-epic-2: in-progress
+  env-2-1-implement-workspace-management: done
+  env-2-2-create-baseline-devcontainer-configuration: done
+  env-2-3-implement-container-lifecycle: done
+  env-2-4-implement-create-command-basic: done
+  env-2-5-implement-create-command-variants: done
   env-epic-2-retrospective: optional
 
   # ─── agent-env Epic 3: Instance Discovery & Git State ───
@@ -172,3 +172,17 @@ cross_dependencies:
 # - Both components can be developed in parallel with mocking at boundaries
 # - env-epic-1 restructures repo into monorepo without breaking orchestrator
 # - Update cross_dependencies as new blockers are discovered
+
+# ══════════════════════════════════════════════════════════════════════════════
+# FUTURE WORK / BACKLOG IDEAS
+# ══════════════════════════════════════════════════════════════════════════════
+# Items discovered during implementation that don't fit current epics.
+# Evaluate during sprint planning or when creating new epics.
+#
+# [env] Generic devcontainer.json customization system
+#   Context: env-epic-2 added patchContainerName() as a targeted read-modify-write
+#   to inject runArgs --name into devcontainer.json per instance. As more per-instance
+#   customizations arise (mounts, env vars, labels, features), a structured patching
+#   or templating system would replace ad-hoc JSON manipulation. Could be a story in
+#   a future epic or folded into env-epic-2 retro follow-up.
+#   Scope: story or small epic depending on how many customizations emerge.
