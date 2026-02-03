@@ -107,13 +107,13 @@ development_status:
   env-epic-1-retrospective: done
 
   # ─── agent-env Epic 2: Instance Creation & Baseline Environment ───
-  env-epic-2: in-progress
+  env-epic-2: done
   env-2-1-implement-workspace-management: done
   env-2-2-create-baseline-devcontainer-configuration: done
   env-2-3-implement-container-lifecycle: done
   env-2-4-implement-create-command-basic: done
   env-2-5-implement-create-command-variants: done
-  env-epic-2-retrospective: optional
+  env-epic-2-retrospective: done
 
   # ─── agent-env Epic 3: Instance Discovery & Git State ───
   env-epic-3: backlog
