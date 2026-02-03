@@ -70,6 +70,42 @@ export type ContainerError = {
 /** Result from a container lifecycle operation */
 export type ContainerResult = ContainerSuccess | ContainerError;
 
+// ─── Git State Types ────────────────────────────────────────────────────────
+
+/** Comprehensive git state for a workspace */
+export interface GitState {
+  /** Working tree has staged changes (git add'd but not committed) */
+  hasStaged: boolean;
+  /** Working tree has unstaged modifications */
+  hasUnstaged: boolean;
+  /** Working tree has untracked files */
+  hasUntracked: boolean;
+  /** Number of stash entries */
+  stashCount: number;
+  /** Branch names with unpushed commits (ahead of upstream) */
+  unpushedBranches: string[];
+  /** Branch names that have never been pushed to any remote */
+  neverPushedBranches: string[];
+  /** HEAD is detached (not on any branch) */
+  isDetachedHead: boolean;
+  /** Repository is completely clean: no local changes and all branches pushed */
+  isClean: boolean;
+}
+
+export type GitStateSuccess = {
+  ok: true;
+  state: GitState;
+};
+
+export type GitStateError = {
+  ok: false;
+  state: null;
+  error: { code: string; message: string };
+};
+
+/** Result from git state detection */
+export type GitStateResult = GitStateSuccess | GitStateError;
+
 // ─── Fallback ────────────────────────────────────────────────────────────────
 
 /** Fallback state returned when state.json is missing or corrupted */
