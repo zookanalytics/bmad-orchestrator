@@ -716,6 +716,9 @@ So that I can show users exactly what's at risk before destructive operations.
 - Comprehensive test matrix with fixtures for all edge cases
 - CRITICAL: Test must include multi-branch scenario (unpushed on non-current branch)
 
+**Dev Notes:**
+- **Reliability over completeness:** Every implemented detection function must reliably catch its target state. Missing a check is acceptable; a broken check that silently passes is not. Avoid over-engineering detection logic — if a verification block adds latency or fragility without proportional safety value, omit it. This principle was established in the Epic env-2 retrospective after over-engineered checks caused test failures (e.g., 45-line name verification block removed from Story 2.3).
+
 ---
 
 #### Story 3.2: Implement list command (basic)

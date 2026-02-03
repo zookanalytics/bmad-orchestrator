@@ -1,0 +1,29 @@
+source: _bmad-output/implementation-artifacts/epic-env-2-retro-2026-02-03.md
+generated: 2026-02-03
+
+items:
+  - id: 1
+    action_item: 1
+    workflow: human
+    status: done
+    summary: |
+      Continue code review as the primary safety net for story verification.
+      Every story must receive at least one code review before merge. This is
+      a standing team agreement carried forward from env-1 and env-2 epics,
+      where code review caught 100% of HIGH-severity issues including false
+      completion claims (3/5 stories in env-2). No separate verification
+      tooling — review is the right-sized mechanism for this project's scale.
+
+  - id: 2
+    action_item: 2
+    workflow: bmad:bmm:workflows:quick-dev
+    status: done
+    summary: |
+      Embed the "reliability over completeness" principle in Epic env-3
+      Story 3.1 (git state detection) dev notes. This principle states that
+      every implemented safety check must reliably catch its target state —
+      missing a check is acceptable, but a broken or silent-failure check is
+      not. This was a key insight from env-2 where over-engineering caused
+      test failures (e.g., 45-line name verification block in Story 2.3).
+      Owner: SM (Bob). Success criteria: principle explicitly stated in
+      Story 3.1 dev notes section.

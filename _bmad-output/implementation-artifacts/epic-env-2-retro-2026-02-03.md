@@ -152,10 +152,10 @@ All LOW severity. Address opportunistically when working in affected areas.
 
 ### Process Improvements
 
-| # | Action | Owner | Success Criteria |
-|---|--------|-------|------------------|
-| 1 | Continue code review as primary safety net | All reviewers | Every story gets at least 1 review before merge |
-| 2 | Embed "reliability over completeness" principle in env-3 Story 3.1 dev notes | SM (Bob) | Principle explicitly stated in story dev notes |
+| # | Action | Owner | Success Criteria | Status |
+|---|--------|-------|------------------|--------|
+| 1 | Continue code review as primary safety net | All reviewers | Every story gets at least 1 review before merge | DONE |
+| 2 | Embed "reliability over completeness" principle in env-3 Story 3.1 dev notes | SM (Bob) | Principle explicitly stated in story dev notes | DONE |
 
 ### Team Agreements
 
