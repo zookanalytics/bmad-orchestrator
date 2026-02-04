@@ -122,6 +122,18 @@ describe('agent-env CLI', () => {
     });
   });
 
+  describe('purpose command', () => {
+    it('purpose shows instance not found when instance does not exist', async () => {
+      const result = await runCli(['purpose', 'test-instance']);
+      const stderrStripped = stripAnsiCodes(result.stderr);
+
+      expect(result.exitCode).toBe(1);
+      expect(stderrStripped).toMatch(
+        /❌ \[WORKSPACE_NOT_FOUND\] Instance 'test-instance' not found/
+      );
+    });
+  });
+
   describe('placeholder commands', () => {
     it('remove shows not implemented message', async () => {
       const result = await runCli(['remove', 'test-instance']);
@@ -130,16 +142,6 @@ describe('agent-env CLI', () => {
       expect(result.exitCode).toBe(1);
       expect(stderrStripped).toMatch(
         /❌ \[NotImplemented\] Remove command not yet implemented for instance: test-instance\./
-      );
-    });
-
-    it('purpose shows not implemented message', async () => {
-      const result = await runCli(['purpose', 'test-instance']);
-      const stderrStripped = stripAnsiCodes(result.stderr);
-
-      expect(result.exitCode).toBe(1);
-      expect(stderrStripped).toMatch(
-        /❌ \[NotImplemented\] Purpose command not yet implemented for instance: test-instance\./
       );
     });
   });
