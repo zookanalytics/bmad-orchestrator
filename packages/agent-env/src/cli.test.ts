@@ -110,17 +110,19 @@ describe('agent-env CLI', () => {
     });
   });
 
-  describe('placeholder commands', () => {
-    it('attach shows not implemented message', async () => {
+  describe('attach command', () => {
+    it('attach shows instance not found when instance does not exist', async () => {
       const result = await runCli(['attach', 'test-instance']);
       const stderrStripped = stripAnsiCodes(result.stderr);
 
       expect(result.exitCode).toBe(1);
       expect(stderrStripped).toMatch(
-        /❌ \[NotImplemented\] Attach command not yet implemented for instance: test-instance\./
+        /❌ \[WORKSPACE_NOT_FOUND\] Instance 'test-instance' not found/
       );
     });
+  });
 
+  describe('placeholder commands', () => {
     it('remove shows not implemented message', async () => {
       const result = await runCli(['remove', 'test-instance']);
       const stderrStripped = stripAnsiCodes(result.stderr);

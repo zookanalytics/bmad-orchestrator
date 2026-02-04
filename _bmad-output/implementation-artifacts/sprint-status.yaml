@@ -124,8 +124,8 @@ development_status:
   env-epic-3-retrospective: done
 
   # ─── agent-env Epic 4: Instance Access & Management ───
-  env-epic-4: backlog
-  env-4-1-implement-attach-command: backlog
+  env-epic-4: in-progress
+  env-4-1-implement-attach-command: done
   env-4-2-implement-purpose-command: backlog
   env-4-3-implement-interactive-menu: backlog
   env-4-4-add-shell-completion: backlog

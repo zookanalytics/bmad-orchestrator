@@ -1,19 +1,21 @@
 import { formatError, createError } from '@zookanalytics/shared';
 import { Command } from 'commander';
 
+import { attachInstance, createAttachDefaultDeps } from '../lib/attach-instance.js';
+
 export const attachCommand = new Command('attach')
   .description("Attach to an instance's tmux session")
   .argument('<name>', 'Instance name to attach to')
-  .action((name: string) => {
-    // Placeholder - actual implementation in Epic 4
-    console.error(
-      formatError(
-        createError(
-          'NotImplemented',
-          `Attach command not yet implemented for instance: ${name}.`,
-          'Actual implementation will be in Epic 4. For now, this is a placeholder.'
-        )
-      )
-    );
-    process.exit(1);
+  .action(async (name: string) => {
+    const deps = createAttachDefaultDeps();
+
+    const result = await attachInstance(name, deps, () => {
+      console.log('Starting container...');
+    });
+
+    if (!result.ok) {
+      const { code, message, suggestion } = result.error;
+      console.error(formatError(createError(code, message, suggestion)));
+      process.exit(1);
+    }
   });
