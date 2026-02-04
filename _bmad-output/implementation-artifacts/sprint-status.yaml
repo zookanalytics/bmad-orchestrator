@@ -116,12 +116,12 @@ development_status:
   env-epic-2-retrospective: done
 
   # ─── agent-env Epic 3: Instance Discovery & Git State ───
-  env-epic-3: backlog
-  env-3-1-implement-git-state-detection: backlog
-  env-3-2-implement-list-command-basic: backlog
-  env-3-3-add-git-state-indicators-to-list: backlog
-  env-3-4-implement-json-output: backlog
-  env-epic-3-retrospective: optional
+  env-epic-3: done
+  env-3-1-implement-git-state-detection: done
+  env-3-2-implement-list-command-basic: done
+  env-3-3-add-git-state-indicators-to-list: done
+  env-3-4-implement-json-output: done
+  env-epic-3-retrospective: done
 
   # ─── agent-env Epic 4: Instance Access & Management ───
   env-epic-4: backlog

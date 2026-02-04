@@ -1,0 +1,23 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`StatusIndicator > clean state (AC: #1) > shows ✓ for clean git state 1`] = `"✓"`;
+
+exports[`StatusIndicator > combined indicators (AC: #5) > shows both ● and ↑ for uncommitted AND unpushed 1`] = `"● ↑"`;
+
+exports[`StatusIndicator > combined indicators (AC: #5) > shows ●, ↑, and ⚠ when all states apply 1`] = `"● ↑ ⚠ 1"`;
+
+exports[`StatusIndicator > never-pushed branches (AC: #4) > shows ⚠ with branch count for never-pushed branches 1`] = `"⚠ 2"`;
+
+exports[`StatusIndicator > never-pushed branches (AC: #4) > shows ⚠ with count 1 for single never-pushed branch 1`] = `"⚠ 1"`;
+
+exports[`StatusIndicator > unavailable state > shows ? when gitState has error 1`] = `"?"`;
+
+exports[`StatusIndicator > unavailable state > shows ? when gitState is null 1`] = `"?"`;
+
+exports[`StatusIndicator > uncommitted changes (AC: #2) > shows ● for staged changes 1`] = `"●"`;
+
+exports[`StatusIndicator > uncommitted changes (AC: #2) > shows ● for unstaged changes 1`] = `"●"`;
+
+exports[`StatusIndicator > uncommitted changes (AC: #2) > shows ● for untracked files 1`] = `"●"`;
+
+exports[`StatusIndicator > unpushed commits (AC: #3) > shows ↑ for unpushed branches 1`] = `"↑"`;

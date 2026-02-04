@@ -1,0 +1,37 @@
+source: _bmad-output/implementation-artifacts/epic-env-3-retro-2026-02-04.md
+generated: 2026-02-04
+
+items:
+  - id: 1
+    action_item: 1
+    workflow: bmad:bmm:workflows:quick-dev
+    status: pending
+    summary: |
+      Add Ink interactive pattern cross-references to the orchestrator package
+      to ensure UI consistency across the monorepo. After Story env-4.3
+      (interactive menu) is completed, two touchpoints must be added:
+      (1) A dev note in the orchestrator epics file
+      (_bmad-output/planning-artifacts/orchestrator/epics.md) under Epic 3
+      Story 3.2 (DevPodPane component) referencing the Ink patterns established
+      in agent-env's interactive menu for consistency.
+      (2) A cross-dependency note in sprint-status.yaml under the
+      cross_dependencies section noting that orch-epic-3 should align with
+      agent-env interactive patterns from env-4.3.
+      Owner: SM (Bob). Deadline: After Story env-4.3 merges.
+      Success criteria: Both touchpoints added — epics file dev note and
+      cross-dependency note in sprint-status.yaml.
+
+  - id: 2
+    action_item: 2
+    workflow: human
+    status: pending
+    summary: |
+      Document the recurring false completion claims pattern as a known issue
+      for potential future improvement. Across epics env-2 and env-3, the dev
+      agent has consistently reported inflated test counts or pre-populated
+      review notes in 2-3 out of 4-5 stories per epic. Code review catches
+      100% of these issues, so it is not blocking, but would benefit from
+      improvement if BMAD tooling evolves to support better dev agent
+      self-verification. This is an opportunistic item — no deadline, no
+      concrete deliverable. Node (Project Lead) owns the decision on if/when
+      to invest in addressing this pattern.
