@@ -9,14 +9,14 @@ import { Box, Text } from 'ink';
 import React from 'react';
 import { format as timeago } from 'timeago.js';
 
-import type { InstanceInfo, InstanceDisplayStatus } from '../lib/list-instances.js';
+import type { Instance, InstanceDisplayStatus } from '../lib/list-instances.js';
 
-import { formatGitIndicators } from './StatusIndicator.js';
+import { formatGitIndicators, type Indicator } from './StatusIndicator.js';
 
 // ─── Props ──────────────────────────────────────────────────────────────────
 
 export interface InstanceListProps {
-  instances: InstanceInfo[];
+  instances: Instance[];
   dockerAvailable: boolean;
 }
 
@@ -116,7 +116,7 @@ export function InstanceList({
             {pad(statusLabel(instance.status, dockerAvailable), statusWidth)}
           </Text>
           <Box width={gitWidth}>
-            {instance.indicators.map((ind, idx) => (
+            {instance.indicators.map((ind: Indicator, idx: number) => (
               <Text key={idx} color={ind.color}>
                 {idx > 0 ? ' ' : ''}
                 {ind.symbol}

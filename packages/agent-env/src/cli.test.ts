@@ -45,7 +45,8 @@ describe('agent-env CLI', () => {
   });
 
   describe('no arguments', () => {
-    it('shows help output', async () => {
+    it('shows help output in non-TTY mode (piped)', async () => {
+      // When stdin is not a TTY (e.g., piped/scripted via execa), falls back to help
       const result = await runCli([]);
 
       expect(result.exitCode).toBe(0);

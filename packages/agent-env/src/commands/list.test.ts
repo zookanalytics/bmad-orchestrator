@@ -2,7 +2,7 @@ import type { JsonOutput } from '@zookanalytics/shared';
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
-import type { InstanceInfo, ListError, ListSuccess } from '../lib/list-instances.js';
+import type { Instance, ListError, ListSuccess } from '../lib/list-instances.js';
 import type { GitStateResult } from '../lib/types.js';
 
 // ─── Module mocks ────────────────────────────────────────────────────────────
@@ -59,7 +59,7 @@ function makeDirtyGitState(): GitStateResult {
   };
 }
 
-function makeInstance(overrides: Partial<InstanceInfo> = {}): InstanceInfo {
+function makeInstance(overrides: Partial<Instance> = {}): Instance {
   return {
     name: 'test-instance',
     status: 'running',
@@ -70,7 +70,7 @@ function makeInstance(overrides: Partial<InstanceInfo> = {}): InstanceInfo {
   };
 }
 
-function makeSuccessResult(instances: InstanceInfo[] = []): ListSuccess {
+function makeSuccessResult(instances: Instance[] = []): ListSuccess {
   return {
     ok: true,
     instances,
@@ -108,10 +108,10 @@ describe('list command --json', () => {
   });
 
   /** Parse the JSON string that was passed to console.log */
-  function getCapturedJson(): JsonOutput<InstanceInfo[]> {
+  function getCapturedJson(): JsonOutput<Instance[]> {
     expect(consoleLogSpy).toHaveBeenCalledTimes(1);
     const jsonStr = consoleLogSpy.mock.calls[0][0] as string;
-    return JSON.parse(jsonStr) as JsonOutput<InstanceInfo[]>;
+    return JSON.parse(jsonStr) as JsonOutput<Instance[]>;
   }
 
   describe('success output (AC: #1)', () => {

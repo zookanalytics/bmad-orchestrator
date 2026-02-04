@@ -23,7 +23,7 @@ import { getWorkspacePathByName, scanWorkspaces } from './workspace.js';
 export type InstanceDisplayStatus = ContainerStatus | 'orphaned' | 'unknown';
 
 /** A single instance's data for display */
-export interface InstanceInfo {
+export interface Instance {
   /** Workspace name (e.g., "bmad-orch-auth") */
   name: string;
   /** Display status: running, stopped, orphaned, unknown, not-found */
@@ -39,7 +39,7 @@ export interface InstanceInfo {
 /** Successful result from listing instances */
 export type ListSuccess = {
   ok: true;
-  instances: InstanceInfo[];
+  instances: Instance[];
   dockerAvailable: boolean;
 };
 
@@ -91,7 +91,7 @@ export async function listInstances(deps?: Partial<ListInstancesDeps>): Promise<
     const dockerAvailable = await container.isDockerAvailable();
 
     // Step 3: For each workspace, read state, check container status, and detect git state in parallel
-    const instancePromises = workspaceNames.map(async (wsName): Promise<InstanceInfo> => {
+    const instancePromises = workspaceNames.map(async (wsName): Promise<Instance> => {
       const wsPath: WorkspacePath = getWorkspacePathByName(wsName, wsFsDeps);
       const state: InstanceState = await readState(wsPath, stateFsDeps);
 

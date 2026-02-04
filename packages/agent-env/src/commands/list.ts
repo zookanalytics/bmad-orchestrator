@@ -5,7 +5,7 @@ import { Command } from 'commander';
 import { render } from 'ink';
 import React from 'react';
 
-import type { InstanceInfo } from '../lib/list-instances.js';
+import type { Instance } from '../lib/list-instances.js';
 
 import { InstanceList } from '../components/InstanceList.js';
 import { listInstances } from '../lib/list-instances.js';
@@ -38,7 +38,7 @@ export const listCommand = new Command('list')
     }
 
     if (options.json) {
-      const output: JsonOutput<InstanceInfo[]> = {
+      const output: JsonOutput<Instance[]> = {
         ok: true,
         data: result.instances.map((i) => ({
           name: i.name,

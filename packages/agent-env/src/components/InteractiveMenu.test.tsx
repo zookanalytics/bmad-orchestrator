@@ -1,0 +1,185 @@
+import { render } from 'ink-testing-library';
+import React from 'react';
+import { describe, it, expect, vi } from 'vitest';
+
+import type { Instance } from '../lib/list-instances.js';
+import type { GitState, GitStateResult } from '../lib/types.js';
+
+import { InteractiveMenu, buildOptionLabel } from './InteractiveMenu.js';
+
+// ─── Helpers ────────────────────────────────────────────────────────────────
+
+function cleanGitState(): GitState {
+  return {
+    hasStaged: false,
+    hasUnstaged: false,
+    hasUntracked: false,
+    stashCount: 0,
+    unpushedBranches: [],
+    neverPushedBranches: [],
+    isDetachedHead: false,
+    isClean: true,
+  };
+}
+
+function makeCleanGitState(): GitStateResult {
+  return { ok: true, state: cleanGitState() };
+}
+
+function makeInstance(overrides: Partial<Instance> = {}): Instance {
+  return {
+    name: 'test-instance',
+    status: 'running',
+    lastAttached: '2026-02-03T10:00:00.000Z',
+    purpose: null,
+    gitState: makeCleanGitState(),
+    ...overrides,
+  };
+}
+
+// ─── Tests ──────────────────────────────────────────────────────────────────
+
+describe('InteractiveMenu', () => {
+  describe('empty state (AC: #6)', () => {
+    it('shows create suggestion when no instances exist', () => {
+      const onSelect = vi.fn();
+      const { lastFrame } = render(
+        <InteractiveMenu instances={[]} onSelect={onSelect} terminalWidth={80} />
+      );
+      const output = lastFrame() ?? '';
+      expect(output).toContain('No instances found');
+      expect(output).toContain('agent-env create');
+    });
+  });
+
+  describe('rendering with instances (AC: #1, #4)', () => {
+    it('renders select header and instance options', () => {
+      const instances = [
+        makeInstance({ name: 'alpha', status: 'running', purpose: 'Auth service' }),
+        makeInstance({ name: 'beta', status: 'stopped', purpose: 'Database work' }),
+      ];
+      const onSelect = vi.fn();
+      const { lastFrame } = render(
+        <InteractiveMenu instances={instances} onSelect={onSelect} terminalWidth={100} />
+      );
+      const output = lastFrame() ?? '';
+      expect(output).toContain('Select an instance to attach');
+      expect(output).toContain('alpha');
+      expect(output).toContain('beta');
+    });
+
+    it('shows git state indicators in labels', () => {
+      const instances = [
+        makeInstance({ name: 'clean-ws', gitState: makeCleanGitState() }),
+        makeInstance({
+          name: 'dirty-ws',
+          gitState: {
+            ok: true,
+            state: { ...cleanGitState(), hasUnstaged: true, isClean: false },
+          },
+        }),
+      ];
+      const onSelect = vi.fn();
+      const { lastFrame } = render(
+        <InteractiveMenu instances={instances} onSelect={onSelect} terminalWidth={100} />
+      );
+      const output = lastFrame() ?? '';
+      // Clean state shows ✓
+      expect(output).toContain('✓');
+      // Dirty state shows ●
+      expect(output).toContain('●');
+    });
+  });
+
+  describe('user interaction (AC: #3)', () => {
+    it('calls onSelect with the selected instance name when user presses Enter', async () => {
+      const instances = [
+        makeInstance({ name: 'alpha', status: 'running' }),
+        makeInstance({ name: 'beta', status: 'stopped' }),
+      ];
+      const onSelect = vi.fn();
+      const { stdin, lastFrame } = render(
+        <InteractiveMenu instances={instances} onSelect={onSelect} terminalWidth={80} />
+      );
+
+      // Verify initial render
+      const output = lastFrame() ?? '';
+      expect(output).toContain('alpha');
+      expect(output).toContain('beta');
+
+      // Simulate pressing down arrow to select 'beta', then Enter
+      stdin.write('\x1B[B'); // Down arrow key
+      stdin.write('\r'); // Enter key
+
+      // Wait for Ink to process the input
+      await new Promise((resolve) => setTimeout(resolve, 50));
+
+      expect(onSelect).toHaveBeenCalledTimes(1);
+      expect(onSelect).toHaveBeenCalledWith('beta');
+    });
+  });
+});
+
+describe('buildOptionLabel', () => {
+  it('includes name, status symbol, and git indicator', () => {
+    const instance = makeInstance({ name: 'my-ws', status: 'running' });
+    const label = buildOptionLabel(instance, 100);
+    expect(label).toContain('my-ws');
+    expect(label).toContain('▶'); // running symbol
+    expect(label).toContain('✓'); // clean git
+  });
+
+  it('includes purpose when space available', () => {
+    const instance = makeInstance({ name: 'ws', status: 'running', purpose: 'OAuth work' });
+    const label = buildOptionLabel(instance, 100);
+    expect(label).toContain('OAuth work');
+  });
+
+  it('truncates long purpose with ellipsis (AC: #5)', () => {
+    const longPurpose = 'This is a very long purpose string that exceeds available space';
+    const instance = makeInstance({
+      name: 'my-workspace-name',
+      status: 'running',
+      purpose: longPurpose,
+    });
+    // With a narrow width, purpose should be truncated
+    const label = buildOptionLabel(instance, 50);
+    expect(label).toContain('...');
+    expect(label.length).toBeLessThanOrEqual(50);
+  });
+
+  it('omits purpose when terminal too narrow', () => {
+    const instance = makeInstance({
+      name: 'my-workspace-name',
+      status: 'running',
+      purpose: 'test',
+    });
+    // Very narrow — no room for purpose
+    const label = buildOptionLabel(instance, 30);
+    expect(label).not.toContain('test');
+  });
+
+  it('shows stopped symbol for stopped instance', () => {
+    const instance = makeInstance({ name: 'ws', status: 'stopped' });
+    const label = buildOptionLabel(instance, 80);
+    expect(label).toContain('■'); // stopped symbol
+  });
+
+  it('shows orphaned symbol for orphaned instance', () => {
+    const instance = makeInstance({ name: 'ws', status: 'orphaned' });
+    const label = buildOptionLabel(instance, 80);
+    expect(label).toContain('✗'); // orphaned symbol
+  });
+
+  it('shows unpushed indicator for unpushed branches', () => {
+    const instance = makeInstance({
+      name: 'ws',
+      gitState: {
+        ok: true,
+        state: { ...cleanGitState(), unpushedBranches: ['main'], isClean: false },
+      },
+    });
+    const label = buildOptionLabel(instance, 80);
+    expect(label).toContain('↑');
+  });
+});

@@ -2,7 +2,7 @@ import { render } from 'ink-testing-library';
 import React from 'react';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
-import type { InstanceInfo } from '../lib/list-instances.js';
+import type { Instance } from '../lib/list-instances.js';
 import type { GitState, GitStateResult } from '../lib/types.js';
 
 import { InstanceList } from './InstanceList.js';
@@ -26,7 +26,7 @@ function makeCleanGitState(): GitStateResult {
   return { ok: true, state: cleanGitState() };
 }
 
-function makeInstance(overrides: Partial<InstanceInfo> = {}): InstanceInfo {
+function makeInstance(overrides: Partial<Instance> = {}): Instance {
   return {
     name: 'test-instance',
     status: 'running',
@@ -135,7 +135,7 @@ describe('InstanceList', () => {
 
   describe('git state indicators', () => {
     it('renders all git state indicators correctly (AC: #1-5)', () => {
-      const instances: InstanceInfo[] = [
+      const instances: Instance[] = [
         makeInstance({ name: 'clean', gitState: makeCleanGitState() }),
         makeInstance({
           name: 'uncommitted',
