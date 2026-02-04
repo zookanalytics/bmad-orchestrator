@@ -2,7 +2,7 @@
 
 exports[`InstanceList > Docker unavailable (AC: #5) > renders unknown status and warning when Docker is unavailable 1`] = `
 "NAME   STATUS                        GIT  LAST ATTACHED  PURPOSE
-my-ws  unknown (Docker unavailable)  ?    in 3 hours     Auth work
+my-ws  unknown (Docker unavailable)  ?    1 hour ago     Auth work
 
 ⚠ Docker is not available. Container status cannot be determined."
 `;
@@ -14,12 +14,12 @@ Create one with: agent-env create <name> --repo <url>"
 
 exports[`InstanceList > git state indicators > renders all git state indicators correctly (AC: #1-5) 1`] = `
 "NAME          STATUS   GIT  LAST ATTACHED  PURPOSE
-clean         running  ✓    in 3 hours     -
-uncommitted   running  ●    in 3 hours     -
-unpushed      running  ↑    in 3 hours     -
-never-pushed  running  ⚠ 2  in 3 hours     -
-combined      running  ● ↑  in 3 hours     -
-unavailable   running  ?    in 3 hours     -"
+clean         running  ✓    1 hour ago     -
+uncommitted   running  ●    1 hour ago     -
+unpushed      running  ↑    1 hour ago     -
+never-pushed  running  ⚠ 2  1 hour ago     -
+combined      running  ● ↑  1 hour ago     -
+unavailable   running  ?    1 hour ago     -"
 `;
 
 exports[`InstanceList > last attached formatting (AC: #6) > renders relative time and dash for null 1`] = `
@@ -30,21 +30,21 @@ none    running  ✓    -              -"
 
 exports[`InstanceList > purpose column > renders purpose and truncates long text 1`] = `
 "NAME  STATUS   GIT  LAST ATTACHED  PURPOSE
-p1    running  ✓    in 3 hours     OAuth
-p2    running  ✓    in 3 hours     -
-p3    running  ✓    in 3 hours     This is a very long purpose..."
+p1    running  ✓    1 hour ago     OAuth
+p2    running  ✓    1 hour ago     -
+p3    running  ✓    1 hour ago     This is a very long purpose..."
 `;
 
 exports[`InstanceList > status rendering > renders correct colors for all statuses (AC: #2, #3, #4) 1`] = `
 "NAME    STATUS    GIT  LAST ATTACHED  PURPOSE
-run     running   ✓    in 3 hours     -
-stop    stopped   ✓    in 3 hours     -
-orphan  orphaned  ✓    in 3 hours     -"
+run     running   ✓    1 hour ago     -
+stop    stopped   ✓    1 hour ago     -
+orphan  orphaned  ✓    1 hour ago     -"
 `;
 
 exports[`InstanceList > table rendering (AC: #1) > renders header row and data for multiple instances 1`] = `
 "NAME   STATUS    GIT  LAST ATTACHED  PURPOSE
-alpha  running   ✓    in 3 hours     Auth service
-beta   stopped   ✓    in 3 hours     Database
+alpha  running   ✓    1 hour ago     Auth service
+beta   stopped   ✓    1 hour ago     Database
 gamma  orphaned  ✓    -              -"
 `;

@@ -174,7 +174,7 @@ describe('list command --json', () => {
       expect(instance).toHaveProperty('lastAttached', '2026-02-03T10:00:00.000Z');
       expect(instance).toHaveProperty('purpose', 'Feature development');
       expect(instance).toHaveProperty('gitState');
-      expect(instance.gitState).toBeDefined();
+      expect(instance?.gitState).toBeDefined();
     });
 
     it('preserves null values for optional fields', async () => {
@@ -228,7 +228,7 @@ describe('list command --json', () => {
       const output = getCapturedJson();
       const firstItem = output.data?.[0];
       expect(firstItem).toBeDefined();
-      const keys = Object.keys(firstItem as Record<string, unknown>);
+      const keys = Object.keys(firstItem as unknown as Record<string, unknown>);
 
       expect(keys).toEqual(
         expect.arrayContaining(['name', 'status', 'lastAttached', 'purpose', 'gitState'])

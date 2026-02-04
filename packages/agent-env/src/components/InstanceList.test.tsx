@@ -1,6 +1,6 @@
 import { render } from 'ink-testing-library';
 import React from 'react';
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
 import type { InstanceInfo } from '../lib/list-instances.js';
 import type { GitState, GitStateResult } from '../lib/types.js';
@@ -39,7 +39,20 @@ function makeInstance(overrides: Partial<InstanceInfo> = {}): InstanceInfo {
 
 // ─── Tests ──────────────────────────────────────────────────────────────────
 
+// Pin time so timeago.js produces deterministic output across all snapshot tests.
+// The hardcoded lastAttached is '2026-02-03T10:00:00.000Z', so we freeze time
+// 1 hour after that to get stable "1 hour ago" in snapshots.
+const FROZEN_TIME = new Date('2026-02-03T11:00:00.000Z');
+
 describe('InstanceList', () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+    vi.setSystemTime(FROZEN_TIME);
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
   describe('empty state', () => {
     it('shows helpful message when no instances exist', () => {
       const { lastFrame } = render(<InstanceList instances={[]} dockerAvailable={true} />);
