@@ -32,6 +32,7 @@ describe('agent-env CLI', () => {
       expect(result.stdout).toContain('attach');
       expect(result.stdout).toContain('remove');
       expect(result.stdout).toContain('purpose');
+      expect(result.stdout).toContain('completion');
     });
   });
 
@@ -132,6 +133,32 @@ describe('agent-env CLI', () => {
       expect(stderrStripped).toMatch(
         /❌ \[WORKSPACE_NOT_FOUND\] Instance 'test-instance' not found/
       );
+    });
+  });
+
+  describe('completion command', () => {
+    it('completion bash outputs bash completion script', async () => {
+      const result = await runCli(['completion', 'bash']);
+
+      expect(result.exitCode).toBe(0);
+      expect(result.stdout).toContain('#!/usr/bin/env bash');
+      expect(result.stdout).toContain('complete -F _agent_env_completions agent-env');
+    });
+
+    it('completion zsh outputs zsh completion script', async () => {
+      const result = await runCli(['completion', 'zsh']);
+
+      expect(result.exitCode).toBe(0);
+      expect(result.stdout).toContain('#compdef agent-env');
+      expect(result.stdout).toContain('_agent_env');
+    });
+
+    it('completion --help shows installation instructions', async () => {
+      const result = await runCli(['completion', '--help']);
+
+      expect(result.exitCode).toBe(0);
+      expect(result.stdout).toContain('eval "$(agent-env completion bash)"');
+      expect(result.stdout).toContain('eval "$(agent-env completion zsh)"');
     });
   });
 
