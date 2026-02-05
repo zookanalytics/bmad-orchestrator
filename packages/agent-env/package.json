@@ -6,8 +6,6 @@
   "bin": {
     "agent-env": "./bin/agent-env.js"
   },
-  "main": "dist/cli.js",
-  "types": "dist/cli.d.ts",
   "exports": {
     ".": {
       "types": "./dist/cli.d.ts",
@@ -20,11 +18,13 @@
   "files": [
     "dist",
     "bin",
-    "config"
+    "config",
+    "README.md",
+    "LICENSE"
   ],
   "scripts": {
     "dev": "tsx src/cli.ts",
-    "build": "tsc",
+    "build": "tsup",
     "test": "vitest",
     "test:run": "vitest run",
     "test:coverage": "vitest run --coverage",
@@ -33,7 +33,6 @@
     "check": "pnpm type-check && pnpm lint && pnpm test:run"
   },
   "dependencies": {
-    "@zookanalytics/shared": "workspace:*",
     "@inkjs/ui": "^2.0.0",
     "commander": "^14.0.2",
     "execa": "^9.6.1",
@@ -44,7 +43,9 @@
   "devDependencies": {
     "@types/node": "^20.14.10",
     "@types/react": "^19.2.8",
+    "@zookanalytics/shared": "workspace:*",
     "ink-testing-library": "^4.0.0",
+    "tsup": "^8.5.1",
     "tsx": "^4.21.0"
   }
 }

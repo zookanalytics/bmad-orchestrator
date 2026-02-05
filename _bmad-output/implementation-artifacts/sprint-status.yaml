@@ -147,8 +147,8 @@ development_status:
 # Pilot package: agent-env
 
   # ─── Release Epic 1: Verified Artifact Pipeline & Configuration ───
-  rel-epic-1: backlog
-  rel-1-1-configure-agent-env-for-npm-publication: backlog
+  rel-epic-1: in-progress
+  rel-1-1-configure-agent-env-for-npm-publication: done
   rel-1-2-perform-manual-dry-run-verification: backlog
   rel-1-3-implement-agent-env-artifact-packing-in-ci: backlog
   rel-1-4-create-clean-room-integration-test-harness: backlog
