@@ -79,3 +79,62 @@ jobs:
             packages/*/coverage/
             coverage/
           retention-days: 7
+
+  # Clean-room integration test: validates the packaged CLI works for end-users
+  # without implicit dependencies on the build environment. NO checkout step
+  # ensures we only test what's in the tarball artifact.
+  integration-test:
+    runs-on: ubuntu-latest
+    needs: check
+
+    steps:
+      # Download the tarball artifact from the check job.
+      # This is the ONLY input to this job - no source code access.
+      - name: Download agent-env tarball
+        uses: actions/download-artifact@v4
+        with:
+          name: agent-env-tarball
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      # Install the tarball globally to simulate end-user installation.
+      # The glob pattern matches the versioned tarball name.
+      - name: Install agent-env from tarball
+        run: |
+          TARBALL_NAME=$(find . -name "zookanalytics-agent-env-*.tgz" -print -quit)
+          if [ -z "$TARBALL_NAME" ]; then
+            echo "Error: agent-env tarball not found."
+            exit 1
+          fi
+          npm install -g "$TARBALL_NAME"
+
+      # Verify version output matches expected format.
+      # This validates the CLI is executable and bin entry is correct.
+      - name: Verify agent-env --version
+        run: |
+          VERSION=$(agent-env --version)
+          echo "Version output: $VERSION"
+          # Verify version matches semver pattern
+          if ! echo "$VERSION" | grep -E '^[0-9]+\.[0-9]+\.[0-9]+'; then
+            echo "::error::Version output does not match expected format"
+            exit 1
+          fi
+
+      # Verify help command works (validates commander setup).
+      - name: Verify agent-env --help
+        run: agent-env --help
+
+      # Verify list --json returns valid JSON structure.
+      # Note: In CI without OrbStack, this returns an error but must still be valid JSON.
+      - name: Verify agent-env list --json
+        run: |
+          OUTPUT=$(agent-env list --json 2>&1 || true)
+          echo "JSON output: $OUTPUT"
+          # Validate JSON structure using jq
+          echo "$OUTPUT" | jq -e '.ok != null' || {
+            echo "::error::JSON output missing 'ok' field"
+            exit 1
+          }
