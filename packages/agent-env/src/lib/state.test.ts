@@ -6,7 +6,7 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import type { StateFsDeps } from './state.js';
 import type { InstanceState, WorkspacePath } from './types.js';
 
-import { createInitialState, readState, writeStateAtomic } from './state.js';
+import { createInitialState, ensureGitExclude, readState, writeStateAtomic } from './state.js';
 import { AGENT_ENV_DIR, STATE_FILE, createFallbackState } from './types.js';
 
 // ─── Test helpers ────────────────────────────────────────────────────────────
@@ -333,5 +333,80 @@ describe('createFallbackState', () => {
     expect(fallback.lastAttached).toBe('unknown');
     expect(fallback.purpose).toBeNull();
     expect(fallback.containerName).toBe('ae-test-workspace');
+  });
+});
+
+// ─── ensureGitExclude tests ──────────────────────────────────────────────────
+
+describe('ensureGitExclude', () => {
+  it('adds .agent-env/ to .git/info/exclude when not present', async () => {
+    // Create a mock git repo structure
+    const gitInfoDir = join(tempDir, '.git', 'info');
+    await mkdir(gitInfoDir, { recursive: true });
+    const excludePath = join(gitInfoDir, 'exclude');
+    await writeFile(excludePath, '# existing excludes\n*.log\n');
+
+    await ensureGitExclude(tempDir);
+
+    const content = await readFile(excludePath, 'utf-8');
+    expect(content).toContain('.agent-env/');
+  });
+
+  it('does not duplicate if .agent-env/ already present', async () => {
+    const gitInfoDir = join(tempDir, '.git', 'info');
+    await mkdir(gitInfoDir, { recursive: true });
+    const excludePath = join(gitInfoDir, 'exclude');
+    await writeFile(excludePath, '# excludes\n.agent-env/\n');
+
+    await ensureGitExclude(tempDir);
+
+    const content = await readFile(excludePath, 'utf-8');
+    // Count occurrences - should be exactly 1
+    const matches = content.match(/\.agent-env\//g);
+    expect(matches).toHaveLength(1);
+  });
+
+  it('handles file without trailing newline', async () => {
+    const gitInfoDir = join(tempDir, '.git', 'info');
+    await mkdir(gitInfoDir, { recursive: true });
+    const excludePath = join(gitInfoDir, 'exclude');
+    await writeFile(excludePath, '# no trailing newline'); // No newline at end
+
+    await ensureGitExclude(tempDir);
+
+    const content = await readFile(excludePath, 'utf-8');
+    // Should have newline before .agent-env/
+    expect(content).toBe('# no trailing newline\n.agent-env/\n');
+  });
+
+  it('silently skips if .git/info/exclude does not exist', async () => {
+    // tempDir has no .git directory
+    await expect(ensureGitExclude(tempDir)).resolves.not.toThrow();
+  });
+
+  it('re-throws non-ENOENT errors', async () => {
+    const mockError = new Error('Permission denied') as NodeJS.ErrnoException;
+    mockError.code = 'EACCES';
+    const mockDeps = {
+      readFile: vi.fn().mockRejectedValue(mockError),
+      appendFile: vi.fn(),
+    };
+
+    await expect(ensureGitExclude(tempDir, mockDeps)).rejects.toThrow('Permission denied');
+  });
+
+  it('uses injected deps', async () => {
+    const mockReadFile = vi.fn().mockResolvedValue('# existing\n');
+    const mockAppendFile = vi.fn().mockResolvedValue(undefined);
+    const deps = { readFile: mockReadFile, appendFile: mockAppendFile };
+
+    await ensureGitExclude('/test/workspace', deps);
+
+    expect(mockReadFile).toHaveBeenCalledWith('/test/workspace/.git/info/exclude', 'utf-8');
+    expect(mockAppendFile).toHaveBeenCalledWith(
+      '/test/workspace/.git/info/exclude',
+      '.agent-env/\n',
+      'utf-8'
+    );
   });
 });

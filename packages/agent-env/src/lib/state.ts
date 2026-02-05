@@ -6,12 +6,12 @@
  * - Graceful fallback for missing/corrupted files
  */
 
-import { mkdir, readFile, rename, writeFile } from 'node:fs/promises';
+import { appendFile, mkdir, readFile, rename, writeFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 
 import type { InstanceState, WorkspacePath } from './types.js';
 
-import { CONTAINER_PREFIX, STATE_FILE_TMP, createFallbackState } from './types.js';
+import { AGENT_ENV_DIR, CONTAINER_PREFIX, STATE_FILE_TMP, createFallbackState } from './types.js';
 
 // ─── Types for dependency injection ──────────────────────────────────────────
 
@@ -20,9 +20,10 @@ export interface StateFsDeps {
   writeFile: typeof writeFile;
   rename: typeof rename;
   mkdir: typeof mkdir;
+  appendFile: typeof appendFile;
 }
 
-const defaultStateFsDeps: StateFsDeps = { readFile, writeFile, rename, mkdir };
+const defaultStateFsDeps: StateFsDeps = { readFile, writeFile, rename, mkdir, appendFile };
 
 // ─── State operations ────────────────────────────────────────────────────────
 
@@ -125,4 +126,55 @@ function isValidState(value: unknown): value is InstanceState {
     (obj.purpose === null || typeof obj.purpose === 'string') &&
     typeof obj.containerName === 'string'
   );
+}
+
+// ─── Git Exclude ─────────────────────────────────────────────────────────────
+
+/** Pattern to add to .git/info/exclude */
+const GIT_EXCLUDE_PATTERN = `${AGENT_ENV_DIR}/`;
+
+/**
+ * Ensure .agent-env/ is in .git/info/exclude so state files don't show as untracked.
+ *
+ * This uses the local git exclude mechanism rather than .gitignore, so:
+ * - The exclusion is local to each clone (not committed to repo)
+ * - Cloned repos won't show .agent-env/state.json as dirty
+ *
+ * Idempotent: does nothing if the pattern is already present.
+ *
+ * Note: Uses read-then-append which has a theoretical race condition if called
+ * concurrently. In practice this is fine because: (1) createInstance is called
+ * once per workspace, and (2) duplicate entries in git exclude are harmless.
+ *
+ * Silently skips if .git/info/exclude doesn't exist (e.g., not a git repo,
+ * shallow clone, or worktree). This is intentional best-effort behavior.
+ *
+ * @param workspaceRoot - Root directory of the workspace (contains .git)
+ * @param deps - Injectable dependencies for testing
+ */
+export async function ensureGitExclude(
+  workspaceRoot: string,
+  deps: Pick<StateFsDeps, 'readFile' | 'appendFile'> = defaultStateFsDeps
+): Promise<void> {
+  const excludePath = join(workspaceRoot, '.git', 'info', 'exclude');
+
+  try {
+    const content = await deps.readFile(excludePath, 'utf-8');
+
+    // Check if pattern already exists (exact line match)
+    const lines = content.split('\n');
+    if (lines.some((line) => line.trim() === GIT_EXCLUDE_PATTERN)) {
+      return; // Already excluded
+    }
+
+    // Append pattern with newline prefix if file doesn't end with newline
+    const prefix = content.endsWith('\n') ? '' : '\n';
+    await deps.appendFile(excludePath, `${prefix}${GIT_EXCLUDE_PATTERN}\n`, 'utf-8');
+  } catch (err) {
+    // If .git/info/exclude doesn't exist, this isn't a git repo - silently skip
+    if ((err as NodeJS.ErrnoException).code === 'ENOENT') {
+      return;
+    }
+    throw err;
+  }
 }

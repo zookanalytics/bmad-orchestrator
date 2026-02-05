@@ -1,6 +1,6 @@
 import type { ExecuteResult } from '@zookanalytics/shared';
 
-import { mkdir, readFile, rename, rm, stat, writeFile } from 'node:fs/promises';
+import { appendFile, mkdir, readFile, rename, rm, stat, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
@@ -167,7 +167,7 @@ function createTestDeps(
       stat,
       homedir: () => tempDir,
     },
-    stateFsDeps: { readFile, writeFile, rename, mkdir },
+    stateFsDeps: { readFile, writeFile, rename, mkdir, appendFile },
     devcontainerFsDeps: {
       cp: vi.fn().mockResolvedValue(undefined),
       mkdir,
@@ -450,6 +450,36 @@ describe('createInstance', () => {
     const stateContent = await readFile(result.workspacePath.stateFile, 'utf-8');
     const state = JSON.parse(stateContent);
     expect(state.containerName).toBe('custom-container-name');
+  });
+
+  it('adds .agent-env/ to .git/info/exclude after writing state', async () => {
+    // Override the default executor to also create .git/info/exclude (simulating real git clone)
+    const deps = createTestDeps(gitCloneSuccess);
+    const originalExecutor = deps.executor;
+    deps.executor = vi
+      .fn()
+      .mockImplementation(async (command: string, args: string[] = []): Promise<ExecuteResult> => {
+        const result = await originalExecutor(command, args);
+        if (command === 'git' && args[0] === 'clone' && result.ok) {
+          const targetDir = args[2];
+          if (targetDir) {
+            const gitInfoDir = join(targetDir, '.git', 'info');
+            await mkdir(gitInfoDir, { recursive: true });
+            await writeFile(join(gitInfoDir, 'exclude'), '# git exclude\n');
+          }
+        }
+        return result;
+      });
+
+    const result = await createInstance('auth', 'https://github.com/user/bmad-orch.git', deps);
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) throw new Error('Expected success');
+
+    // Verify .git/info/exclude contains .agent-env/
+    const excludePath = join(result.workspacePath.root, '.git', 'info', 'exclude');
+    const content = await readFile(excludePath, 'utf-8');
+    expect(content).toContain('.agent-env/');
   });
 });
 

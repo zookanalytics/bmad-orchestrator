@@ -8,7 +8,17 @@
 import type { ExecuteResult } from '@zookanalytics/shared';
 
 import { createExecutor } from '@zookanalytics/shared';
-import { cp, mkdir, readdir, readFile, rename, rm, stat, writeFile } from 'node:fs/promises';
+import {
+  appendFile,
+  cp,
+  mkdir,
+  readdir,
+  readFile,
+  rename,
+  rm,
+  stat,
+  writeFile,
+} from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { dirname } from 'node:path';
 
@@ -20,7 +30,7 @@ import type { FsDeps } from './workspace.js';
 
 import { createContainerLifecycle } from './container.js';
 import { copyBaselineConfig, hasDevcontainerConfig, patchContainerName } from './devcontainer.js';
-import { createInitialState, writeStateAtomic } from './state.js';
+import { createInitialState, ensureGitExclude, writeStateAtomic } from './state.js';
 import { deriveContainerName, getWorkspacePath, workspaceExists } from './workspace.js';
 
 // ─── Constants ───────────────────────────────────────────────────────────────
@@ -205,7 +215,7 @@ export function createDefaultDeps(): CreateInstanceDeps {
     executor,
     container: createContainerLifecycle(executor),
     workspaceFsDeps: { mkdir, readdir, stat, homedir },
-    stateFsDeps: { readFile, writeFile, rename, mkdir },
+    stateFsDeps: { readFile, writeFile, rename, mkdir, appendFile },
     devcontainerFsDeps: { cp, mkdir, readFile, stat, writeFile },
     rm,
   };
@@ -356,6 +366,9 @@ export async function createInstance(
   // Step 7: Write initial state
   const state = createInitialState(wsPath.name, repoUrl, actualContainerName);
   await writeStateAtomic(wsPath, state, deps.stateFsDeps);
+
+  // Step 8: Ensure .agent-env/ is in .git/info/exclude so state files don't show as untracked
+  await ensureGitExclude(wsPath.root, deps.stateFsDeps);
 
   return {
     ok: true,
