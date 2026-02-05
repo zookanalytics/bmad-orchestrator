@@ -40,7 +40,6 @@ jobs:
           path: ${{ env.STORE_PATH }}
           key: ${{ runner.os }}-pnpm-store-${{ hashFiles('**/pnpm-lock.yaml') }}
           restore-keys: |
-            ${{ runner.os }}-pnpm-store-${{ hashFiles('pnpm-lock.yaml') }}-
             ${{ runner.os }}-pnpm-store-
 
       - name: Install dependencies
@@ -57,6 +56,19 @@ jobs:
 
       - name: Run all tests with coverage
         run: pnpm -r test:coverage
+
+      # Pack agent-env tarball for integration testing (Story 1.4).
+      # @zookanalytics/shared is bundled into dist via tsup noExternal config.
+      - name: Pack agent-env tarball
+        run: pnpm pack
+        working-directory: packages/agent-env
+
+      - name: Upload agent-env tarball
+        uses: actions/upload-artifact@v4
+        with:
+          name: agent-env-tarball
+          path: packages/agent-env/*.tgz
+          retention-days: 7
 
       - name: Upload coverage reports
         uses: actions/upload-artifact@v4
