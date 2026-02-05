@@ -9,10 +9,18 @@ validationFindings:
   - severity: critical
     summary: 'shared runtime dependency blocks npm publish — agent-env depends on private @zookanalytics/shared'
     resolution: 'Option A selected (2026-02-05): Bundle with tsup'
+    status: 'resolved in rel-1-1'
   - severity: moderate
     summary: 'files field missing README.md and LICENSE per Story 1.1 ACs'
+    status: 'resolved in rel-1-1'
   - severity: low
     summary: 'bin wrapper pattern is correct but architecture description was imprecise'
+    status: 'resolved in rel-1-1'
+postImplementationValidation:
+  - epic: 'rel-1'
+    date: '2026-02-05'
+    result: 'CONFORMANT'
+    notes: 'All 4 stories implemented per architecture. tsup bundling, clean-room integration test, artifact pipeline all match documented decisions. Minor deviation: jq used for JSON validation instead of node -e (acceptable - jq pre-installed on GHA runners).'
 inputDocuments:
   - '_bmad-output/planning-artifacts/release-infrastructure/product-brief.md'
   - '_bmad-output/planning-artifacts/release-infrastructure/prd.md'
