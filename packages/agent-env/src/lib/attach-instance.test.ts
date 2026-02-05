@@ -1,6 +1,15 @@
 import type { ExecuteResult } from '@zookanalytics/shared';
 
-import { mkdir, readdir, readFile, rename, rm, stat, writeFile } from 'node:fs/promises';
+import {
+  appendFile,
+  mkdir,
+  readdir,
+  readFile,
+  rename,
+  rm,
+  stat,
+  writeFile,
+} from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
@@ -88,7 +97,7 @@ function createTestDeps(overrides: Partial<AttachInstanceDeps> = {}): AttachInst
       stat,
       homedir: () => tempDir,
     },
-    stateFsDeps: { readFile, writeFile, rename, mkdir },
+    stateFsDeps: { readFile, writeFile, rename, mkdir, appendFile },
     ...overrides,
   };
 }

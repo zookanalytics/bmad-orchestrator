@@ -1,4 +1,13 @@
-import { mkdir, readdir, readFile, rename, rm, stat, writeFile } from 'node:fs/promises';
+import {
+  appendFile,
+  mkdir,
+  readdir,
+  readFile,
+  rename,
+  rm,
+  stat,
+  writeFile,
+} from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
@@ -58,7 +67,7 @@ function createTestDeps(): PurposeInstanceDeps {
       stat,
       homedir: () => tempDir,
     },
-    stateFsDeps: { readFile, writeFile, rename, mkdir },
+    stateFsDeps: { readFile, writeFile, rename, mkdir, appendFile },
   };
 }
 

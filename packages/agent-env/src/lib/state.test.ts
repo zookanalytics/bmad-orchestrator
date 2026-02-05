@@ -1,4 +1,4 @@
-import { mkdir, readFile, rename, rm, stat, writeFile } from 'node:fs/promises';
+import { appendFile, mkdir, readFile, rename, rm, stat, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
@@ -182,6 +182,7 @@ describe('writeStateAtomic', () => {
     const mockDeps: StateFsDeps = {
       readFile,
       mkdir,
+      appendFile,
       writeFile: async (path, content, _encoding) => {
         writeFileCalls.push(String(path));
         await writeFile(path as string, content as string, 'utf-8');
@@ -267,6 +268,7 @@ describe('writeStateAtomic', () => {
     const mockDeps: StateFsDeps = {
       readFile,
       mkdir,
+      appendFile,
       writeFile, // Use real writeFile
       rename: vi.fn().mockRejectedValue(error),
     };

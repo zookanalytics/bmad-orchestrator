@@ -5,7 +5,7 @@
  * Uses dependency injection for all I/O operations to enable testing.
  */
 
-import { mkdir, readdir, readFile, rename, stat, writeFile } from 'node:fs/promises';
+import { appendFile, mkdir, readdir, readFile, rename, stat, writeFile } from 'node:fs/promises';
 import { homedir } from 'node:os';
 
 import type { StateFsDeps } from './state.js';
@@ -39,7 +39,7 @@ export interface PurposeInstanceDeps {
 export function createPurposeDefaultDeps(): PurposeInstanceDeps {
   return {
     workspaceFsDeps: { mkdir, readdir, stat, homedir },
-    stateFsDeps: { readFile, writeFile, rename, mkdir },
+    stateFsDeps: { readFile, writeFile, rename, mkdir, appendFile },
   };
 }
 

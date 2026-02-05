@@ -8,7 +8,7 @@
 import type { ExecuteResult } from '@zookanalytics/shared';
 
 import { createExecutor } from '@zookanalytics/shared';
-import { mkdir, readdir, readFile, rename, stat, writeFile } from 'node:fs/promises';
+import { appendFile, mkdir, readdir, readFile, rename, stat, writeFile } from 'node:fs/promises';
 import { homedir } from 'node:os';
 
 import type { ContainerLifecycle } from './container.js';
@@ -51,7 +51,7 @@ export function createAttachDefaultDeps(): AttachInstanceDeps {
     executor,
     container: createContainerLifecycle(executor),
     workspaceFsDeps: { mkdir, readdir, stat, homedir },
-    stateFsDeps: { readFile, writeFile, rename, mkdir },
+    stateFsDeps: { readFile, writeFile, rename, mkdir, appendFile },
   };
 }
 

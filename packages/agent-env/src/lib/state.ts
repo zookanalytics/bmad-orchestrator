@@ -15,6 +15,15 @@ import { AGENT_ENV_DIR, CONTAINER_PREFIX, STATE_FILE_TMP, createFallbackState } 
 
 // ─── Types for dependency injection ──────────────────────────────────────────
 
+/**
+ * Filesystem dependencies for state operations.
+ *
+ * - readFile: Read state.json content
+ * - writeFile: Write to temp file during atomic writes
+ * - rename: Atomic rename from temp to final file
+ * - mkdir: Create .agent-env directory if missing
+ * - appendFile: Append to .git/info/exclude (ensureGitExclude)
+ */
 export interface StateFsDeps {
   readFile: typeof readFile;
   writeFile: typeof writeFile;
