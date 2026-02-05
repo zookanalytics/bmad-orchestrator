@@ -4,6 +4,15 @@ workflowType: 'architecture'
 lastStep: 8
 status: 'complete'
 completedAt: '2026-02-02'
+lastValidated: '2026-02-05'
+validationFindings:
+  - severity: critical
+    summary: 'shared runtime dependency blocks npm publish — agent-env depends on private @zookanalytics/shared'
+    resolution: 'Option A selected (2026-02-05): Bundle with tsup'
+  - severity: moderate
+    summary: 'files field missing README.md and LICENSE per Story 1.1 ACs'
+  - severity: low
+    summary: 'bin wrapper pattern is correct but architecture description was imprecise'
 inputDocuments:
   - '_bmad-output/planning-artifacts/release-infrastructure/product-brief.md'
   - '_bmad-output/planning-artifacts/release-infrastructure/prd.md'
@@ -93,7 +102,7 @@ Architecturally, most FRs map to configuration (changesets config, package.json 
 ### Cross-Cutting Concerns
 
 1. **Changesets justified for edge case handling.** Specifically: workspace protocol rewriting (`workspace:*` → real versions) and multi-package publish ordering. If it were a single package with no workspace dependencies, a shell script would suffice. Changesets is chosen for what it solves, not because "monorepos use changesets."
-2. **Workspace protocol rewriting verification.** Changesets rewrites `workspace:*` to real version numbers during publish. The integration test must inspect the tarball's `package.json` to verify no `workspace:` protocol references remain.
+2. **Workspace protocol rewriting verification.** Changesets rewrites `workspace:*` to real version numbers during publish. The integration test must inspect the tarball's `package.json` to verify no `workspace:` protocol references remain. **⚠️ DRIFT NOTE (2026-02-04):** This rewriting alone is insufficient — `agent-env` depends on `@zookanalytics/shared` which is private and won't exist on npm. The dependency must be bundled or inlined before publishing is possible. See Codebase Validation section.
 3. **Per-package build variation.** agent-env needs TypeScript build; future data packages (keystone-workflows) need no build. Publish workflow must support both without redesign.
 4. **Partial failure recovery.** Version bump committed but npm publish fails. Workflow must detect this state and recover on re-run (FR10-12).
 5. **Integration test isolation is the critical design decision.** Fresh GitHub Actions job with no `actions/checkout`. Build job uploads tarball as artifact. Integration test job downloads only the tarball into an empty runner workspace. No checkout, no `node_modules`, no `pnpm-lock.yaml`. The only thing on disk is the `.tgz` file. This is the cleanest isolation achievable in GitHub Actions without Docker.
@@ -182,7 +191,7 @@ The publish pipeline's reliability depends on two GitHub repository settings tha
 | 1 | Publish workflow pattern | "Version Packages" PR | Natural batching, visibility, protects main from partial-state corruption during mid-workflow failures |
 | 2 | Integration test location | New job in existing `ci.yml` | Simpler, always runs, no path filter gaps |
 | 3 | Integration test MVP assertions | 4 assertions: install, --version, --help, list --json | Catches "published but broken" without over-engineering |
-| 4 | Package.json publish fields | No changes needed — agent-env already configured | bin, files, exports, type all correct |
+| 4 | Package.json publish fields | Changes needed — see Codebase Validation section | bin wrapper pattern correct; files field and shared dependency require resolution |
 | 5 | Workflow permissions | contents:write, pull-requests:write, id-token:write | Minimal explicit permissions, future-proofs provenance |
 | 6 | Workflow concurrency | Queue, never cancel in-progress | Prevents half-published state on rapid merges |
 | 7 | Changesets linked/fixed groups | None for MVP | Only one publishable package; revisit when second publishes |
@@ -388,7 +397,7 @@ bmad-orchestrator/                          # Existing repo root
 │       └── token-health.yml                # NEW — weekly npm whoami check
 ├── packages/
 │   ├── agent-env/
-│   │   └── package.json                    # VERIFIED — already publish-ready (no changes)
+│   │   └── package.json                    # NEEDS CHANGES — shared dependency + files field (see Drift Analysis)
 │   └── shared/
 │       └── package.json                    # VERIFIED — "private": true (no changes)
 ├── package.json                            # VERIFIED — workspace root, private (no changes)
@@ -519,6 +528,73 @@ jobs:
 **Configuration boundary:** `.changeset/config.json` controls versioning behavior. Per-package `package.json` controls what gets published. `publish.yml` orchestrates the flow. Changes to any one shouldn't require changes to the others (loose coupling).
 
 **Secret boundary:** `NPM_TOKEN` is only referenced in `publish.yml` and `token-health.yml`. CI doesn't need it. Integration test doesn't need it (tests against packed tarball, not npm registry).
+
+## Codebase Validation — Architecture Drift Analysis (2026-02-04)
+
+Validated architecture assumptions against the actual codebase before Epic rel-1 implementation. Three areas of drift identified, one critical.
+
+### CRITICAL: `@zookanalytics/shared` Runtime Dependency
+
+**Architecture assumption:** Decision #4 stated "No changes needed — agent-env already configured."
+
+**Reality:** `agent-env` declares `@zookanalytics/shared` as a runtime `dependency` with `workspace:*` protocol in `packages/agent-env/package.json`. The `shared` package is `"private": true` and will never be published to npm.
+
+**Impact:** When changesets rewrites `workspace:*` to a real version during publish, the published `agent-env` tarball will list `@zookanalytics/shared@0.1.0` as a dependency. Since `shared` doesn't exist on npm, `npm install -g @zookanalytics/agent-env` will fail with an unresolvable dependency error. **This is a publishing blocker.**
+
+**Usage scope:** `agent-env` imports runtime values from `shared` in 12 source files (not just types). Imports include `createExecutor`, `formatError`, `createError`, `JsonOutput`, and `ExecuteResult`. The TypeScript build uses plain `tsc` (no bundler), so compiled output retains `import ... from '@zookanalytics/shared'` statements.
+
+**Resolution options (must be decided before Story 1.1):**
+
+| Option | Mechanism | Trade-offs |
+|--------|-----------|------------|
+| **A. Bundle with a build tool** | Replace `tsc` with `tsup`, `esbuild`, or `rollup` for agent-env. Bundle `shared` into the dist output. Remove `shared` from runtime dependencies. | Eliminates the problem cleanly. Adds a build tool dependency. Changes the build pipeline. |
+| **B. Inline shared utilities** | Copy the ~4 functions from shared into agent-env's source tree. Remove the workspace dependency entirely. | Simplest. Creates code duplication. Acceptable if shared stays small. |
+| **C. Publish shared as public** | Remove `"private": true` from shared, add publish config, include in changesets. | Maintains current architecture. But shared was explicitly designed as internal — publishing it exposes internal APIs to consumers. |
+
+**Decision (2026-02-05): Option A — Bundle with tsup**
+
+After analysis, `shared` is small (102 lines, 4 runtime functions) but `orchestrator` also depends on it, making Option B (inline) require duplicate work. Option C (publish shared) exposes internal APIs unnecessarily. Option A is selected.
+
+**Implementation approach:**
+- Add `tsup` as devDependency to agent-env (tsup is built on esbuild, designed for TypeScript CLI bundling, handles ESM natively)
+- Create `tsup.config.ts`: entry `src/cli.ts`, format `esm`, target `node20`, bundle only `@zookanalytics/shared` via `noExternal`, keep all other deps external
+- Change build script from `tsc` to `tsup`
+- Move `@zookanalytics/shared` from `dependencies` to `devDependencies` (bundled at build time, consumers never need it)
+- `bin/agent-env.js` wrapper unchanged — it imports `../dist/cli.js` which tsup produces
+- `orchestrator` unchanged — not being published yet, continues using shared via workspace protocol
+
+**Verification criteria:**
+- `dist/cli.js` contains no imports from `@zookanalytics/shared`
+- `npm pack` tarball has no `@zookanalytics/shared` in dependencies
+- CLI runs from packed tarball in clean environment
+- All tests, type-check, and lint pass
+
+### MODERATE: `files` Field Incomplete
+
+**Architecture assumption:** Decision #4 stated all publish fields are correct.
+
+**Reality:** `packages/agent-env/package.json` has `"files": ["dist", "bin", "config"]`. Story 1.1 acceptance criteria require `README.md` and `LICENSE` in the files array. Neither a package-specific `README.md` nor `LICENSE` exists in `packages/agent-env/` — only a root-level `LICENSE` exists.
+
+**Resolution:** Add `README.md` and `LICENSE` to the `files` array and create these files in `packages/agent-env/` (or copy/symlink from root). Minor — straightforward to address in Story 1.1.
+
+### LOW: Bin Entry Pattern Clarification
+
+**Architecture assumption:** Architecture states "bin entries point to built output, not TypeScript source" (FR23).
+
+**Reality:** The bin entry `./bin/agent-env.js` is a thin ESM wrapper containing `#!/usr/bin/env node` and `import '../dist/cli.js'`. This is a correct pattern — the wrapper has a shebang (required for CLI execution) and delegates to the built output. The architecture's FR23 assertion holds, but the mechanism is a wrapper pattern rather than pointing directly into `dist/`.
+
+**Resolution:** No code change needed. Documenting for clarity: the `bin/` directory is a legitimate pattern that separates the shebang entry point from the TypeScript build output. The `files` array correctly includes both `bin` and `dist`.
+
+### Confirmed Assumptions (No Drift)
+
+- `packages/shared/package.json` is correctly marked `"private": true` ✅
+- `pnpm-workspace.yaml` configured with `packages: ['packages/*']` ✅
+- `.github/workflows/ci.yml` has the expected single `check` job structure ✅
+- No `.changeset/` directory exists (not yet initialized) ✅
+- No `publish.yml` or `token-health.yml` exist (not yet created) ✅
+- Root `package.json` is `"private": true` with husky + lint-staged (no commitlint) ✅
+- No README.md exists at root (to be created with badges in Story 3.3) ✅
+- `agent-env` uses `"type": "module"` with ESM exports ✅
 
 ## Architecture Validation Results
 

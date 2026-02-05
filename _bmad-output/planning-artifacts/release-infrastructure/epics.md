@@ -3,8 +3,10 @@ stepsCompleted: [1, 2, 3, 4]
 inputDocuments:
   - _bmad-output/planning-artifacts/release-infrastructure/prd.md
   - _bmad-output/planning-artifacts/release-infrastructure/architecture.md
-lastEdited: '2026-02-04'
+lastEdited: '2026-02-05'
 editHistory:
+  - date: '2026-02-05'
+    changes: 'Story 1.1: Added explicit ACs for tsup bundling of @zookanalytics/shared per Architecture drift analysis decision (Option A)'
   - date: '2026-02-04'
     changes: 'Added missing ACs per implementation-readiness-report-2026-02-03: MI-1 (Story 2.2 private package exclusion in changesets config), MI-2 (Story 3.1 concurrency + permissions), MI-3 (Story 3.1 idempotent re-run verification for FR10-12)'
   - date: '2026-02-04'
@@ -140,8 +142,17 @@ So that it includes all necessary files and excludes internal or private package
 **Then** they must point to the built `dist/` directory and include the CLI entry point
 **And** the `files` array must include `README.md` and `LICENSE`
 **And** the `packages/shared/package.json` must be marked `"private": true`
-**And** `agent-env` dependencies must NOT include private workspace packages (like `shared`) unless they are bundled into the distribution
+**And** `agent-env` dependencies must NOT include private workspace packages (like `shared`) in runtime dependencies
 **And** `pnpm changeset status` (if initialized) must not report any configuration drift
+
+**Given** the `@zookanalytics/shared` workspace dependency used by agent-env
+**When** I configure the build tooling
+**Then** `tsup` must be added as a devDependency to agent-env
+**And** a `tsup.config.ts` must be created with `noExternal: ['@zookanalytics/shared']` to bundle shared into dist
+**And** the build script must be changed from `tsc` to `tsup`
+**And** `@zookanalytics/shared` must be moved from `dependencies` to `devDependencies`
+**And** the built `dist/cli.js` must contain no imports from `@zookanalytics/shared`
+**And** all existing tests, type-check, and lint must pass after the change
 
 ### Story 1.2: Perform Manual Dry-Run Verification
 
