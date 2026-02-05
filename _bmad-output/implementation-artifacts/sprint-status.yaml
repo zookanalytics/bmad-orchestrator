@@ -124,12 +124,12 @@ development_status:
   env-epic-3-retrospective: done
 
   # ─── agent-env Epic 4: Instance Access & Management ───
-  env-epic-4: in-progress
+  env-epic-4: done
   env-4-1-implement-attach-command: done
   env-4-2-implement-purpose-command: done
   env-4-3-implement-interactive-menu: done
   env-4-4-add-shell-completion: done
-  env-epic-4-retrospective: optional
+  env-epic-4-retrospective: done
 
   # ─── agent-env Epic 5: Safe Instance Removal & Data Protection ───
   env-epic-5: backlog
