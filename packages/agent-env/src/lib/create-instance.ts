@@ -337,14 +337,30 @@ export async function createInstance(
     };
   }
 
+  // Step 6b: Discover actual container name
+  // The repo's devcontainer.json may have its own --name in runArgs, so the actual
+  // container name may differ from our derived ae-* name. Query Docker to find out.
+  let actualContainerName = containerName;
+  if (containerResult.containerId) {
+    const discovered = await deps.container.getContainerNameById(containerResult.containerId);
+    if (discovered) {
+      actualContainerName = discovered;
+    }
+  } else {
+    // Container started but no containerId returned - unusual state, log for debugging
+    console.warn(
+      `Warning: devcontainer started successfully but no containerId returned. Using derived name '${containerName}'.`
+    );
+  }
+
   // Step 7: Write initial state
-  const state = createInitialState(wsPath.name, repoUrl, containerName);
+  const state = createInitialState(wsPath.name, repoUrl, actualContainerName);
   await writeStateAtomic(wsPath, state, deps.stateFsDeps);
 
   return {
     ok: true,
     workspacePath: wsPath,
-    containerName,
+    containerName: actualContainerName,
   };
 }
 

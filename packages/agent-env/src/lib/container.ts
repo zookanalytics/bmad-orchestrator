@@ -34,6 +34,7 @@ type Execute = (
 export interface ContainerLifecycle {
   isDockerAvailable(): Promise<boolean>;
   containerStatus(containerName: string): Promise<ContainerResult>;
+  getContainerNameById(containerId: string): Promise<string | null>;
   devcontainerUp(workspacePath: string, containerName: string): Promise<ContainerResult>;
 }
 
@@ -129,6 +130,30 @@ export function createContainerLifecycle(executor: Execute = createExecutor()): 
   }
 
   /**
+   * Get the container name from a container ID.
+   *
+   * Used to discover the actual container name after devcontainer up,
+   * which may differ from the expected ae-* name if the repo has a
+   * custom --name in its devcontainer.json runArgs.
+   *
+   * @param containerId - Docker container ID (full or short)
+   * @returns Container name without leading slash, or null if not found
+   */
+  async function getContainerNameById(containerId: string): Promise<string | null> {
+    const result = await executor('docker', ['inspect', containerId, '--format', '{{.Name}}'], {
+      timeout: DOCKER_INSPECT_TIMEOUT,
+    });
+
+    if (!result.ok) {
+      return null;
+    }
+
+    // Docker returns "/name", strip the leading slash
+    const name = result.stdout.trim().replace(/^\//, '');
+    return name || null;
+  }
+
+  /**
    * Start a devcontainer from a workspace folder.
    *
    * Checks Docker availability first, then runs `devcontainer up`
@@ -219,6 +244,7 @@ export function createContainerLifecycle(executor: Execute = createExecutor()): 
   return {
     isDockerAvailable,
     containerStatus,
+    getContainerNameById,
     devcontainerUp,
   };
 }

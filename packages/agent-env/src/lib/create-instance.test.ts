@@ -98,14 +98,13 @@ function createMockContainer(overrides: Partial<ContainerLifecycle> = {}): Conta
     containerStatus: vi
       .fn()
       .mockResolvedValue({ ok: true, status: 'running', containerId: 'abc', error: null }),
-    devcontainerUp: vi
-      .fn()
-      .mockResolvedValue({
-        ok: true,
-        status: 'running',
-        containerId: 'container-123',
-        error: null,
-      }),
+    getContainerNameById: vi.fn().mockResolvedValue(null), // Default: no name discovery
+    devcontainerUp: vi.fn().mockResolvedValue({
+      ok: true,
+      status: 'running',
+      containerId: 'container-123',
+      error: null,
+    }),
     ...overrides,
   };
 }
@@ -379,6 +378,78 @@ describe('createInstance', () => {
       expect.stringContaining('.devcontainer/devcontainer.json'),
       expect.stringContaining('"--name=ae-bmad-orch-auth"')
     );
+  });
+
+  it('discovers actual container name from Docker when repo has custom --name', async () => {
+    const containerOverrides = {
+      devcontainerUp: vi.fn().mockResolvedValue({
+        ok: true,
+        status: 'running',
+        containerId: 'container-abc123',
+        error: null,
+      }),
+      // Simulate repo's devcontainer.json having --name=agenttools-*
+      getContainerNameById: vi.fn().mockResolvedValue('agenttools-bmad-orch'),
+    };
+
+    // Use existing devcontainer (so we don't patch it)
+    const deps = createTestDeps(gitCloneSuccess, containerOverrides, true);
+
+    const result = await createInstance('auth', 'https://github.com/user/bmad-orch.git', deps);
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) throw new Error('Expected success');
+    // The returned containerName should be the discovered one, not the derived ae-* one
+    expect(result.containerName).toBe('agenttools-bmad-orch');
+    // Should have called getContainerNameById with the containerId
+    expect(deps.container.getContainerNameById).toHaveBeenCalledWith('container-abc123');
+  });
+
+  it('falls back to derived container name when discovery returns null', async () => {
+    const containerOverrides = {
+      devcontainerUp: vi.fn().mockResolvedValue({
+        ok: true,
+        status: 'running',
+        containerId: 'container-abc123',
+        error: null,
+      }),
+      // Discovery fails or returns null
+      getContainerNameById: vi.fn().mockResolvedValue(null),
+    };
+
+    const deps = createTestDeps(gitCloneSuccess, containerOverrides);
+
+    const result = await createInstance('auth', 'https://github.com/user/bmad-orch.git', deps);
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) throw new Error('Expected success');
+    // Falls back to derived name
+    expect(result.containerName).toBe('ae-bmad-orch-auth');
+  });
+
+  it('writes discovered container name to state.json', async () => {
+    const containerOverrides = {
+      devcontainerUp: vi.fn().mockResolvedValue({
+        ok: true,
+        status: 'running',
+        containerId: 'container-abc123',
+        error: null,
+      }),
+      getContainerNameById: vi.fn().mockResolvedValue('custom-container-name'),
+    };
+
+    // Use existing devcontainer (so we don't patch it)
+    const deps = createTestDeps(gitCloneSuccess, containerOverrides, true);
+
+    const result = await createInstance('auth', 'https://github.com/user/bmad-orch.git', deps);
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) throw new Error('Expected success');
+
+    // Verify state.json contains the discovered name, not the derived one
+    const stateContent = await readFile(result.workspacePath.stateFile, 'utf-8');
+    const state = JSON.parse(stateContent);
+    expect(state.containerName).toBe('custom-container-name');
   });
 });
 

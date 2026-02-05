@@ -203,6 +203,119 @@ describe('containerStatus', () => {
   });
 });
 
+// ─── getContainerNameById ─────────────────────────────────────────────────────
+
+describe('getContainerNameById', () => {
+  it('returns container name without leading slash', async () => {
+    const executor = mockExecutor({
+      'docker inspect': {
+        ok: true,
+        stdout: '/my-container-name\n',
+        stderr: '',
+        exitCode: 0,
+      },
+    });
+    const lifecycle = createContainerLifecycle(executor);
+
+    const name = await lifecycle.getContainerNameById('abc123');
+    expect(name).toBe('my-container-name');
+  });
+
+  it('returns null when container not found', async () => {
+    const executor = mockExecutor({
+      'docker inspect': {
+        ok: false,
+        stdout: '',
+        stderr: 'Error: No such container: abc123',
+        exitCode: 1,
+      },
+    });
+    const lifecycle = createContainerLifecycle(executor);
+
+    const name = await lifecycle.getContainerNameById('abc123');
+    expect(name).toBeNull();
+  });
+
+  it('returns null when docker unavailable', async () => {
+    const executor = mockExecutor({
+      'docker inspect': {
+        ok: false,
+        stdout: '',
+        stderr: 'Cannot connect to the Docker daemon',
+        exitCode: 1,
+      },
+    });
+    const lifecycle = createContainerLifecycle(executor);
+
+    const name = await lifecycle.getContainerNameById('abc123');
+    expect(name).toBeNull();
+  });
+
+  it('handles custom container names from repo devcontainer.json', async () => {
+    const executor = mockExecutor({
+      'docker inspect': {
+        ok: true,
+        stdout: '/agenttools-bmad-orch\n',
+        stderr: '',
+        exitCode: 0,
+      },
+    });
+    const lifecycle = createContainerLifecycle(executor);
+
+    const name = await lifecycle.getContainerNameById('container-id-123');
+    expect(name).toBe('agenttools-bmad-orch');
+  });
+
+  it('calls docker inspect with --format flag', async () => {
+    const executor = mockExecutor({
+      'docker inspect': {
+        ok: true,
+        stdout: '/test-name\n',
+        stderr: '',
+        exitCode: 0,
+      },
+    });
+    const lifecycle = createContainerLifecycle(executor);
+
+    await lifecycle.getContainerNameById('my-container-id');
+    expect(executor).toHaveBeenCalledWith(
+      'docker',
+      ['inspect', 'my-container-id', '--format', '{{.Name}}'],
+      expect.objectContaining({ timeout: DOCKER_INSPECT_TIMEOUT })
+    );
+  });
+
+  it('returns null for empty output', async () => {
+    const executor = mockExecutor({
+      'docker inspect': {
+        ok: true,
+        stdout: '',
+        stderr: '',
+        exitCode: 0,
+      },
+    });
+    const lifecycle = createContainerLifecycle(executor);
+
+    const name = await lifecycle.getContainerNameById('abc123');
+    expect(name).toBeNull();
+  });
+
+  it('returns null for whitespace-only output', async () => {
+    const executor = mockExecutor({
+      'docker inspect': {
+        ok: true,
+        stdout: '  \n  \t  ',
+        stderr: '',
+        exitCode: 0,
+      },
+    });
+    const lifecycle = createContainerLifecycle(executor);
+
+    const name = await lifecycle.getContainerNameById('abc123');
+    expect(name).toBeNull();
+  });
+});
+
 // ─── devcontainerUp ──────────────────────────────────────────────────────────
 
 describe('devcontainerUp', () => {

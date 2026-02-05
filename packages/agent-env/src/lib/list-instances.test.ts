@@ -73,6 +73,7 @@ function mockContainer(overrides: Partial<ContainerLifecycle> = {}): ContainerLi
       status: 'running',
       containerId: 'abc123',
     }),
+    getContainerNameById: vi.fn().mockResolvedValue(null),
     devcontainerUp: vi.fn().mockResolvedValue({
       ok: true,
       status: 'running',
