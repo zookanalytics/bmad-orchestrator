@@ -152,7 +152,7 @@ development_status:
   rel-1-2-perform-manual-dry-run-verification: done
   rel-1-3-implement-agent-env-artifact-packing-in-ci: done
   rel-1-4-create-clean-room-integration-test-harness: done
-  rel-epic-1-retrospective: optional
+  rel-epic-1-retrospective: done
 
   # ─── Release Epic 2: Automated Versioning & Release Staging ───
   rel-epic-2: backlog

@@ -4,7 +4,11 @@ workflowType: 'architecture'
 lastStep: 8
 status: 'complete'
 completedAt: '2026-02-02'
-lastValidated: '2026-02-05'
+lastValidated: '2026-02-06'
+lastUpdated: '2026-02-06'
+updateHistory:
+  - date: '2026-02-06'
+    change: 'Replaced NPM_TOKEN approach with Trusted Publishing (OIDC) per Epic rel-1 retrospective decision'
 validationFindings:
   - severity: critical
     summary: 'shared runtime dependency blocks npm publish — agent-env depends on private @zookanalytics/shared'
@@ -49,7 +53,7 @@ _This document builds collaboratively through step-by-step discovery. Sections a
 - **Quality Validation (FR16-20):** Pack tarball → clean install → run CLI. MVP: basic functionality. Build-up: tarball file assertions, no-rebuild validation
 - **Package Configuration (FR21-24):** Per-package opt-in, private exclusion, bin/files field validation
 - **Visibility & Recovery (FR25-28):** Status badge, failure notifications, npm deprecate as rollback, inline recovery docs
-- **Auth & Security (FR29-30):** Granular NPM_TOKEN, explicit workflow permissions
+- **Auth & Security (FR29-30):** Trusted Publishing (OIDC), explicit workflow permissions
 - **Conditional/Hardening (FR31-34):** Scope validation, changeset bot, config drift detection, token health monitoring
 
 Architecturally, most FRs map to configuration (changesets config, package.json fields, workflow YAML) rather than application code. The integration test gate (FR16-20) is the primary area requiring actual scripting.
@@ -93,7 +97,7 @@ Architecturally, most FRs map to configuration (changesets config, package.json 
 
 | Artifact | Owner | Our Dependency |
 |----------|-------|---------------|
-| `NPM_TOKEN` (GitHub secret) | npm registry / GitHub settings | All publishes fail if invalid |
+| npm Trusted Publishing config | npm registry settings | Package must be linked to repo; OIDC must be enabled |
 | `.github/workflows/ci.yml` | Existing CI | Integration test job lives here (or depends on it) |
 | `.husky/pre-commit` | Existing dev workflow | Runs `lint-staged` only — no conflict with CI |
 | `pnpm-workspace.yaml` | Monorepo config | Changesets reads this to discover packages |
@@ -117,7 +121,7 @@ Architecturally, most FRs map to configuration (changesets config, package.json 
 6. **Husky/lint-staged — verified non-issue.** No commitlint, no commit-msg hook. Only `lint-staged` on pre-commit, which doesn't run in CI.
 7. **Conventional-commit plugin ordering.** Manual `pnpm changeset` is the true MVP mechanism. The conventional-commit plugin is an optimization to add after proving the pipeline works without it. This reduces moving parts during initial setup and isolates debugging (pipeline problem vs plugin problem).
 8. **Complexity budget — FR31-33 deferred.** Scope validation (FR31), changeset bot (FR32), and config drift detection (FR33) are deferred. At solo-maintainer scale with 2-3 packages, the feedback loops are short enough that these solve problems that barely exist. Architecture explicitly recommends deferral.
-9. **Token health monitoring — FR34 kept as cheap scheduled check.** Weekly scheduled GitHub Actions workflow running `npm whoami --registry https://registry.npmjs.org`. If it fails, GitHub sends a notification. Catches the "expired token + no publishable merges = silent failure" scenario identified in failure mode analysis.
+9. **Token health monitoring — FR34 simplified with Trusted Publishing.** With OIDC-based authentication, there is no stored token to expire. The "expired token + no publishable merges = silent failure" scenario is eliminated. The `token-health.yml` workflow is no longer needed. If OIDC configuration drifts (package unlinked from repo), the publish workflow itself will fail visibly.
 
 ### Failure Mode Landscape
 
@@ -125,9 +129,9 @@ Analysis of component failure modes reveals three risk tiers:
 
 | Tier | Category | Examples | Mitigation Strategy |
 |------|----------|----------|-------------------|
-| **Silent failures** | Most dangerous — pipeline appears healthy but isn't working | Token expired with no publishable merges; plugin silently ignores commit; integration test runs in wrong environment | Proactive health checks (FR34 scheduled `npm whoami`), test isolation verification, badge tracks *last publish* not *last run* |
-| **Stuck state failures** | Version bumped but not published — requires intervention | npm publish fails mid-workflow; push permission missing | Idempotent re-run design (FR10-12), documented recovery procedures (FR28) |
-| **Loud failures** | Pipeline fails visibly — easiest to handle | YAML syntax error; token 403; build failure | Status badge (FR25), GitHub Actions notifications (FR26) |
+| **Silent failures** | Most dangerous — pipeline appears healthy but isn't working | Plugin silently ignores commit; integration test runs in wrong environment; OIDC config drifts unnoticed | Test isolation verification, badge tracks *last publish* not *last run*. Note: Trusted Publishing eliminates token expiry silent failure. |
+| **Stuck state failures** | Version bumped but not published — requires intervention | npm publish fails mid-workflow; push permission missing; OIDC handshake fails | Idempotent re-run design (FR10-12), documented recovery procedures (FR28) |
+| **Loud failures** | Pipeline fails visibly — easiest to handle | YAML syntax error; OIDC 403; build failure | Status badge (FR25), GitHub Actions notifications (FR26) |
 
 **Architectural implication:** The architecture should prioritize eliminating silent failures over handling loud ones. Loud failures are self-correcting. Silent failures compound.
 
@@ -188,9 +192,10 @@ The publish pipeline's reliability depends on two GitHub repository settings tha
 - Changesets + changesets/action@v1 as core tooling
 - Manual `pnpm changeset` for MVP (conventional-commit plugin deferred)
 - FR31-33 deferred (scope validation, changeset bot, config drift)
-- FR34 kept as weekly `npm whoami` scheduled workflow
+- FR34 simplified: Trusted Publishing eliminates token expiry concern; no scheduled health check needed
 - Integration test isolation: fresh GHA job, no checkout, artifact-only
 - @changesets/changelog-github for release notes
+- **Trusted Publishing (OIDC)** for npm authentication (decided 2026-02-06, replaces NPM_TOKEN approach)
 
 **Critical Decisions (Made This Step):**
 
@@ -261,13 +266,32 @@ The publish pipeline's reliability depends on two GitHub repository settings tha
 6. Tarball package.json has no `workspace:` references
 7. bin entry points to existing file with shebang
 
-### Token & Monitoring Architecture
+### Authentication & Monitoring Architecture
 
-**NPM_TOKEN:** Granular (fine-grained), scoped to `@zookanalytics/*`, automation permissions, 1-year expiry. Stored as GitHub Actions secret. Document token type, scope, and expiry date for rotation.
+**npm Trusted Publishing (OIDC):** Instead of storing a long-lived NPM_TOKEN secret, we use npm's Trusted Publishing feature. This uses OpenID Connect (OIDC) to authenticate GitHub Actions workflows to npm without any stored secrets.
 
-**Token health check:** Weekly scheduled workflow running `npm whoami --registry https://registry.npmjs.org`. Failure → GitHub notification. Catches silent token expiry between publishes.
+**How it works:**
+1. The npm package is linked to the GitHub repository in npm's package settings
+2. The publish workflow is configured with `id-token: write` permission
+3. When the workflow runs, GitHub provides an OIDC token proving the workflow's identity
+4. npm verifies the token and allows the publish if it matches the configured repository/workflow
+
+**Configuration (completed 2026-02-06):**
+- Package: `@zookanalytics/agent-env`
+- Repository: `ZookAnalytics/bmad-orchestrator`
+- Workflow: `publish.yml`
+
+**Advantages over NPM_TOKEN:**
+- No secret to leak, rotate, or expire
+- No GitHub secret to manage
+- More secure: authentication is tied to the specific repo and workflow
+- npm's recommended approach for CI/CD
+
+**Token health check:** Not required with Trusted Publishing. OIDC tokens are generated per-workflow-run and cannot expire between runs. The silent failure mode (expired token + no publishable merges) is eliminated.
 
 **Status badge:** Publish workflow badge on README. Reflects last publish outcome.
+
+> **Decision Record (2026-02-06):** During Epic rel-1 retrospective, npm recommended Trusted Publishing over granular tokens. Decision made to adopt OIDC approach. NPM_TOKEN references throughout this document are superseded by Trusted Publishing.
 
 ## Implementation Patterns & Consistency Rules
 
@@ -289,13 +313,13 @@ The publish pipeline's reliability depends on two GitHub repository settings tha
 
 **Example:**
 ```yaml
-# Recovery: if this fails, the NPM_TOKEN may be expired.
-# Rotate at https://www.npmjs.com/settings/tokens and update
-# the GitHub secret. Then re-run this workflow.
+# Recovery: if this fails, check that Trusted Publishing is configured:
+# 1. Verify package is linked to repo at npmjs.com/package/@zookanalytics/agent-env/access
+# 2. Confirm workflow name matches: publish.yml
+# 3. Re-run this workflow after fixing configuration.
 - name: Publish packages to npm
   run: pnpm changeset publish
-  env:
-    NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+  # No NPM_TOKEN needed — uses OIDC via id-token: write permission
 ```
 
 ### Shell Script Patterns (in Workflow Steps)
@@ -352,7 +376,7 @@ fi
 **Where documentation lives:**
 - Recovery procedures: YAML comments directly above the relevant workflow step
 - Configuration rationale: JSON comments not supported in `.changeset/config.json` — use a `# Configuration notes` section at the top of `publish.yml` instead
-- Token management: document token type, scope, and expiry date as a YAML comment in `publish.yml` near the `NPM_TOKEN` reference
+- Trusted Publishing: document OIDC configuration (linked repo, workflow name) as a YAML comment in `publish.yml`
 - Changeset usage: comment in `.changeset/config.json` README (auto-generated by `changeset init`) — extend it with project-specific notes
 
 **What NOT to document separately:**
@@ -399,13 +423,13 @@ bmad-orchestrator/                          # Existing repo root
 │                                           #        extended with project-specific notes
 ├── .github/
 │   └── workflows/
-│       ├── ci.yml                          # MODIFIED — add integration-test job,
-│       │                                   #            add pack-tarball step to check job
-│       ├── publish.yml                     # NEW — changesets publish workflow
-│       └── token-health.yml                # NEW — weekly npm whoami check
+│       ├── ci.yml                          # DONE (Epic rel-1) — integration-test job,
+│       │                                   #                     pack-tarball step added
+│       └── publish.yml                     # NEW — changesets publish workflow with OIDC
+│       # token-health.yml                  # NOT NEEDED — Trusted Publishing eliminates token expiry
 ├── packages/
 │   ├── agent-env/
-│   │   └── package.json                    # NEEDS CHANGES — shared dependency + files field (see Drift Analysis)
+│   │   └── package.json                    # DONE (Epic rel-1) — tsup bundling, files field updated
 │   └── shared/
 │       └── package.json                    # VERIFIED — "private": true (no changes)
 ├── package.json                            # VERIFIED — workspace root, private (no changes)
@@ -483,7 +507,11 @@ jobs:
 
 ### Files Created: token-health.yml
 
-```yaml
+**STATUS: NOT NEEDED with Trusted Publishing**
+
+With OIDC-based authentication, there is no stored token to expire. The `token-health.yml` workflow originally planned for FR34 is no longer required. If Trusted Publishing configuration drifts (package unlinked from repo), the publish workflow itself will fail visibly — no proactive health check needed.
+
+~~```yaml
 # Structure (not implementation):
 name: Token Health Check
 on:
@@ -495,7 +523,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - Verify npm token is valid (npm whoami)
-```
+```~~
 
 ### Files Created: .changeset/config.json
 
@@ -524,8 +552,8 @@ jobs:
 | FR16-20: Quality Validation | `ci.yml` integration-test job |
 | FR21-24: Package Configuration | `packages/agent-env/package.json` (already done), `packages/shared/package.json` (already done) |
 | FR25-28: Visibility & Recovery | `README.md` badge, YAML comments in `publish.yml` |
-| FR29-30: Auth & Security | `publish.yml` permissions block, `NPM_TOKEN` secret |
-| FR34: Token Health | `token-health.yml` |
+| FR29-30: Auth & Security | `publish.yml` permissions block (`id-token: write`), npm Trusted Publishing config |
+| FR34: Token Health | Not needed — Trusted Publishing eliminates token expiry concern |
 
 ### Architectural Boundaries
 
@@ -535,7 +563,7 @@ jobs:
 
 **Configuration boundary:** `.changeset/config.json` controls versioning behavior. Per-package `package.json` controls what gets published. `publish.yml` orchestrates the flow. Changes to any one shouldn't require changes to the others (loose coupling).
 
-**Secret boundary:** `NPM_TOKEN` is only referenced in `publish.yml` and `token-health.yml`. CI doesn't need it. Integration test doesn't need it (tests against packed tarball, not npm registry).
+**Secret boundary:** With Trusted Publishing, there is no `NPM_TOKEN` secret. Authentication happens via OIDC (`id-token: write` permission in `publish.yml`). CI doesn't need npm auth. Integration test doesn't need it (tests against packed tarball, not npm registry).
 
 ## Codebase Validation — Architecture Drift Analysis (2026-02-04)
 
@@ -632,9 +660,9 @@ No circular dependencies or contradictions found.
 | FR18, FR20 | Quality Validation (Build-up) | 2 | ⏳ | Deferred — tarball file assertions, no-rebuild validation |
 | FR21-24 | Package Configuration | 4 | ✅ | package.json fields verified, no changes needed |
 | FR25-28 | Visibility & Recovery | 4 | ✅ | README badge, inline YAML docs, npm deprecate documented |
-| FR29-30 | Auth & Security | 2 | ✅ | Explicit permissions, granular NPM_TOKEN |
+| FR29-30 | Auth & Security | 2 | ✅ | Explicit permissions, Trusted Publishing (OIDC) |
 | FR31-33 | Conditional (Deferred) | 3 | ⏳ | Scope validation, changeset bot, config drift — deferred by design |
-| FR34 | Token Health | 1 | ✅ | token-health.yml weekly scheduled check |
+| FR34 | Token Health | 1 | ✅ | Not needed — Trusted Publishing eliminates token expiry concern |
 
 **5 FRs explicitly deferred:** FR18 (tarball file assertions), FR20 (no-rebuild validation), FR31 (scope validation), FR32 (changeset bot), FR33 (config drift detection). All are build-up or conditional per PRD — none are MVP-blocking.
 
@@ -642,7 +670,7 @@ No circular dependencies or contradictions found.
 
 | NFR Range | Category | Coverage Mechanism |
 |-----------|----------|-------------------|
-| NFR1-5 | Security | Explicit permissions block, granular token, `"private": true` enforcement, no custom log steps that could leak |
+| NFR1-5 | Security | Explicit permissions block, Trusted Publishing (no stored secrets), `"private": true` enforcement, no custom log steps that could leak |
 | NFR6 | Registry tolerance | Re-run is the recovery strategy (changesets idempotency) |
 | NFR7 | pnpm compatibility | Changesets has first-class pnpm support |
 | NFR8 | Husky coexistence | Verified — no commitlint, no conflict |
@@ -682,13 +710,13 @@ The architecture is ready for epic/story creation and implementation. All MVP de
 
 Recommended implementation order based on dependency analysis:
 
-1. **npm org setup** — Create `@zookanalytics` org, generate granular token, add as GitHub secret. Everything else depends on this.
-2. **Manual dry-run publish** — `npm pack` + inspect tarball + `pnpm publish --dry-run` from local. De-risks auth, org, and package config before any CI automation.
+1. ~~**npm org setup** — Create `@zookanalytics` org, generate granular token, add as GitHub secret.~~ **COMPLETED (Epic rel-1):** Org exists, Trusted Publishing configured, package linked to repo.
+2. ~~**Manual dry-run publish** — `npm pack` + inspect tarball + `pnpm publish --dry-run` from local.~~ **COMPLETED (Epic rel-1):** De-risked auth, org, and package config.
 3. **Install changesets** — `pnpm add -Dw @changesets/cli @changesets/changelog-github && pnpm changeset init`. Configure `.changeset/config.json`.
-4. **First real publish** — Manual `pnpm changeset` → `pnpm changeset version` → `pnpm changeset publish` from local. Proves the full changesets flow works.
-5. **ci.yml: pack tarball step** — Add `npm pack` + artifact upload to existing `check` job.
-6. **ci.yml: integration-test job** — New job with 4 MVP assertions. Validate on a PR before merging.
-7. **publish.yml** — Create the workflow with changesets/action@v1. First automated publish.
-8. **token-health.yml** — Weekly `npm whoami` scheduled check.
+4. **First real publish via changesets** — Manual `pnpm changeset` → `pnpm changeset version` → `pnpm changeset publish` from local. Proves the full changesets flow works with Trusted Publishing.
+5. ~~**ci.yml: pack tarball step** — Add `npm pack` + artifact upload to existing `check` job.~~ **COMPLETED (Epic rel-1).**
+6. ~~**ci.yml: integration-test job** — New job with 4 MVP assertions.~~ **COMPLETED (Epic rel-1).**
+7. **publish.yml** — Create the workflow with changesets/action@v1. Uses `id-token: write` for Trusted Publishing. First automated publish.
+8. ~~**token-health.yml** — Weekly `npm whoami` scheduled check.~~ **NOT NEEDED:** Trusted Publishing eliminates token expiry concern.
 9. **README badge** — `[![Publish](https://github.com/ZookAnalytics/bmad-orchestrator/actions/workflows/publish.yml/badge.svg)](https://github.com/ZookAnalytics/bmad-orchestrator/actions/workflows/publish.yml)`
 10. **Branch protection** — Enable required CI checks and block force pushes on main.
