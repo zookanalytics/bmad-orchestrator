@@ -2,7 +2,7 @@
 stepsCompleted: [1, 2, 3, 4, 5, 6, 7, 8]
 workflowComplete: true
 completedAt: '2026-01-27'
-lastUpdated: '2026-01-27'
+lastUpdated: '2026-02-06'
 inputDocuments:
   - '_bmad-output/planning-artifacts/agent-env/prd.md'
   - '_bmad-output/planning-artifacts/agent-env/product-brief.md'
@@ -651,6 +651,9 @@ packages/
 │   │   │   ├── attach-instance.ts   # Attach orchestration
 │   │   │   ├── list-instances.ts    # List orchestration
 │   │   │   ├── purpose-instance.ts  # Purpose orchestration
+│   │   │   ├── remove-instance.ts   # Remove orchestration with safety checks
+│   │   │   ├── safety-report.ts     # Safety check formatting with severity tags
+│   │   │   ├── audit-log.ts         # Force-remove audit logging (JSON Lines)
 │   │   │   └── *.test.ts        # Co-located tests
 │   │   ├── components/          # Ink React components
 │   │   │   ├── InstanceList.tsx
@@ -660,7 +663,7 @@ packages/
 │   │       ├── create.ts
 │   │       ├── list.ts
 │   │       ├── attach.ts
-│   │       ├── remove.ts        # Placeholder - Epic 5
+│   │       ├── remove.ts        # Remove with --force/--yes flags
 │   │       ├── purpose.ts
 │   │       └── completion.ts
 │   └── config/
@@ -1207,10 +1210,10 @@ export { createExecutor } from './subprocess.js';
 ### Project Success Factors
 
 **Clear Decision Framework**
-Every technology choice was made collaboratively with clear rationale. Single package `@zookanalytics/agent-tools` unifies both CLIs for easy adoption.
+Every technology choice was made collaboratively with clear rationale. Monorepo with `@zookanalytics/agent-env`, `@zookanalytics/bmad-orchestrator`, and `@zookanalytics/shared` provides clean separation with shared foundations.
 
 **Consistency Guarantee**
-Implementation patterns align 100% with BMAD Orchestrator. Multiple AI agents will produce compatible, consistent code.
+Implementation patterns align 100% with BMAD Orchestrator. Multiple AI agents produced compatible, consistent code across all 5 epics.
 
 **Complete Coverage**
 All project requirements are architecturally supported, with clear mapping from FRs to specific files.
@@ -1220,15 +1223,15 @@ Workspace-as-atomic-unit model provides clean separation of durable state (works
 
 ---
 
-**Architecture Status:** ✅ READY FOR IMPLEMENTATION
+**Architecture Status:** ✅ IMPLEMENTATION COMPLETE (All 5 Epics)
 
-**Next Phase:** Create epics and stories, then begin implementation using the architectural decisions documented herein.
+**Completed:** 2026-02-06. All epics (1-5) delivered. See Implementation Status section for drift log and known limitations.
 
-**Document Maintenance:** Update this architecture when major technical decisions are made during implementation.
+**Document Maintenance:** Update this architecture when post-MVP enhancements or new epics introduce architectural changes.
 
 ---
 
-## Implementation Status (Updated 2026-02-05)
+## Implementation Status (Updated 2026-02-06)
 
 This section tracks actual implementation against the architecture to identify drift and maintain alignment.
 
@@ -1240,7 +1243,7 @@ This section tracks actual implementation against the architecture to identify d
 | Epic 2: Instance Creation | ✅ Complete | create command, baseline devcontainer, container lifecycle |
 | Epic 3: Instance Discovery & Git State | ✅ Complete | list command, git state detection, JSON output |
 | Epic 4: Instance Access & Management | ✅ Complete | attach, purpose, interactive menu, shell completion |
-| Epic 5: Safe Instance Removal | 🔴 Not Started | remove command is placeholder only |
+| Epic 5: Safe Instance Removal | ✅ Complete | remove command with safety checks, force-remove, audit log |
 
 ### Architecture Drift Log
 
@@ -1262,30 +1265,43 @@ This section tracks actual implementation against the architecture to identify d
 - Rationale: Shell scripts needed for proper container initialization
 - Impact: Positive - better container setup
 
-**Drift #4: SafetyPrompt Component** (Epic 5)
-- Original: components/SafetyPrompt.tsx specified
-- Actual: Not yet implemented
-- Status: Pending Epic 5 implementation
+**Drift #4: SafetyPrompt Component → safety-report Module** (Epic 5)
+- Original: `components/SafetyPrompt.tsx` React component specified
+- Actual: Implemented as `lib/safety-report.ts` text-based module with `formatSafetyReport()` and `getSuggestions()`
+- Rationale: Consistent with Drift #1 — orchestration logic lives in `lib/` modules, not React components. Safety output is formatted terminal text, not interactive UI
+- Impact: Positive — follows established lib-first pattern, better testability
 
-### Epic 5 Pre-Implementation Checklist
+**Drift #5: New Modules for Epic 5** (Epic 5)
+- Original: Only `remove-instance.ts` and `SafetyPrompt.tsx` specified
+- Actual: Added `lib/audit-log.ts` (force-remove audit logging) and `lib/safety-report.ts` (severity-tagged safety formatting with suggestions)
+- Rationale: Clean separation of concerns — audit logging and safety formatting are distinct responsibilities
+- Impact: Positive — follows DI pattern with `AuditLogDeps` and co-located tests
 
-Before implementing Epic 5 (Safe Instance Removal), verify:
+**Drift #6: GitState Type Limitations** (Epic 5)
+- Original: Story 5.2 ACs expected file counts per type (staged/unstaged/untracked), unpushed commit counts per branch, and first stash message
+- Actual: `GitState` from Epic 3 only provides booleans (`hasStaged`, `hasUnstaged`, `hasUntracked`) and arrays of branch names without counts
+- Rationale: GitState was designed for Epic 3's list display (indicators only). Enriching it for detailed safety reports would require upstream changes to `git.ts`
+- Impact: Minor — safety report shows presence/absence rather than counts. Functionally sufficient for safety blocking decisions. Enhancement candidate for post-MVP
+- Status: Documented as known limitation in Story 5.2
 
-**Existing Modules Ready:**
+### Epic 5 Implementation Checklist (Completed 2026-02-06)
+
+**Existing Modules Used:**
 - [x] `lib/git.ts` - Full git state detection (staged, unstaged, untracked, stashed, unpushed, never-pushed, detached HEAD)
-- [x] `lib/workspace.ts` - Workspace path resolution and scanning
+- [x] `lib/workspace.ts` - Workspace path resolution, scanning, and deletion (`deleteWorkspace()`)
 - [x] `lib/state.ts` - State file reading
-- [x] `lib/container.ts` - Container status checking (needs stop functionality)
+- [x] `lib/container.ts` - Container status, stop (`containerStop()`), and remove (`containerRemove()`)
 
-**New Modules Needed:**
-- [ ] `lib/remove-instance.ts` - Remove orchestration with safety checks
-- [ ] `components/SafetyPrompt.tsx` - Display safety check results
-- [ ] Update `commands/remove.ts` - Replace placeholder with actual implementation
+**New Modules Delivered:**
+- [x] `lib/remove-instance.ts` - Remove orchestration with safety checks and force mode
+- [x] `lib/safety-report.ts` - Severity-tagged safety report formatting with actionable suggestions (replaces planned `SafetyPrompt.tsx`)
+- [x] `lib/audit-log.ts` - Force-remove audit logging to `~/.agent-env/audit.log` (JSON Lines)
+- [x] `commands/remove.ts` - Full CLI command with `--force` and `--yes` flags, interactive confirmation
 
-**Missing Container Functionality:**
-- [ ] `containerStop(containerName)` - Stop container gracefully (not yet in container.ts)
-- [ ] `containerRemove(containerName)` - Remove stopped container
+**Container Functionality Added:**
+- [x] `containerStop(containerName)` - `docker stop` with 30s timeout, idempotent
+- [x] `containerRemove(containerName)` - `docker rm` with 10s timeout, idempotent
 
 **Audit Log:**
-- [ ] `~/.agent-env/audit.log` - JSON lines format for force-remove tracking
+- [x] `~/.agent-env/audit.log` - JSON Lines format tracking: timestamp, action, instanceName, gitState, confirmationMethod
 
