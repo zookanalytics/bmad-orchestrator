@@ -6,6 +6,8 @@ inputDocuments:
 lastEdited: '2026-02-06'
 editHistory:
   - date: '2026-02-06'
+    changes: 'Implementation readiness fixes: FR Coverage Map corrected (FR10/11/12/15 → Story 3.1, FR26 implicit, FR27/28 → Story 3.4). FR30 text fixed (added pull-requests: write). Story 2.4 prerequisite note added. Epic 4 dissolved — Story 4.2 merged into Epic 3 as Story 3.4.'
+  - date: '2026-02-06'
     changes: 'Updated NPM_TOKEN references to Trusted Publishing (OIDC) per Epic rel-1 retrospective. Superseded Story 4.1 (token health monitoring). Updated FR34, NFR1, NFR4, Stories 1.2/3.1/4.2 ACs.'
   - date: '2026-02-05'
     changes: 'Story 1.1: Added explicit ACs for tsup bundling of @zookanalytics/shared per Architecture drift analysis decision (Option A)'
@@ -55,7 +57,7 @@ FR26: The system can notify the maintainer of publish failures via GitHub Action
 FR27: The maintainer can deprecate a published package version as a rollback mechanism
 FR28: The maintainer can follow inline documentation in workflow files for recovery procedures
 FR29: The system can authenticate to npm using a granular token scoped to @zookanalytics/*
-FR30: The publish workflow can operate with explicit, minimal permissions (contents: write, id-token: write)
+FR30: The publish workflow can operate with explicit, minimal permissions (contents: write, pull-requests: write, id-token: write)
 FR31: The system can validate conventional commit scopes against the set of known package names and reject unrecognized scopes
 FR32: The system can comment on PRs with a summary of pending version changes (changeset bot)
 FR33: The system can detect when a non-private package is missing from the changesets configuration
@@ -101,12 +103,12 @@ NFR15: The status badge must accurately reflect publish health — a green badge
 - **FR7**: Epic 3 - Skip publish when no bumps
 - **FR8**: Epic 3 - GitHub releases with changelogs
 - **FR9**: Epic 3 - @zookanalytics org publishing
-- **FR10**: Epic 4 - Idempotent re-run support
-- **FR11**: Epic 2 - Pre-bump detection
-- **FR12**: Epic 4 - Pre-publish detection
+- **FR10**: Epic 3 (Story 3.1) - Idempotent re-run support
+- **FR11**: Epic 3 (Story 3.1) - Pre-bump detection
+- **FR12**: Epic 3 (Story 3.1) - Pre-publish detection
 - **FR13**: Epic 1 - TypeScript build before publish
-- **FR14**: Epic 1 - Data-only package publishing
-- **FR15**: Epic 4 - Queue concurrency
+- **FR14**: *Deferred to Phase 2* - Data-only package publishing (no data-only publishable packages exist in pilot; applies when onboarding non-CLI packages)
+- **FR15**: Epic 3 (Story 3.1) - Queue concurrency
 - **FR16**: Epic 1 - Clean install validation (pack/install)
 - **FR17**: Epic 1 - Executable CLI verification
 - **FR18**: Epic 1 - Tarball file list verification
@@ -117,9 +119,9 @@ NFR15: The status badge must accurately reflect publish health — a green badge
 - **FR23**: Epic 1 - Bin entry validation
 - **FR24**: Epic 1 - Files field validation
 - **FR25**: Epic 3 - Pipeline health visibility (badge)
-- **FR26**: Epic 4 - Failure notifications
-- **FR27**: Epic 4 - npm deprecate rollback
-- **FR28**: Epic 4 - Inline recovery docs
+- **FR26**: *Implicit* - Failure notifications (GitHub Actions default email notifications; no dedicated story needed)
+- **FR27**: Epic 3 (Story 3.4) - npm deprecate rollback
+- **FR28**: Epic 3 (Story 3.4) - Inline recovery docs
 - **FR29**: Epic 3 - Granular token authentication
 - **FR30**: Epic 3 - Explicit workflow permissions
 - **FR31**: Deferred - Scope validation (per Architecture cross-cutting #8)
@@ -252,9 +254,11 @@ As a maintainer,
 I want to perform a full local changeset → version → publish cycle for agent-env,
 So that I can prove the changesets flow works end-to-end before automating it in CI.
 
+**Prerequisites:** Epic 1 must be complete — package configuration (Story 1.1), tsup build (Story 1.1), and manual dry-run verification (Story 1.2) are required before publishing can succeed.
+
 **Acceptance Criteria:**
 
-**Given** changesets is initialized and configured (Stories 2.1-2.2)
+**Given** changesets is initialized and configured (Stories 2.1-2.2) and Epic 1 is complete
 **When** I run `pnpm changeset` and select `agent-env` with a patch bump
 **Then** running `pnpm changeset version` must bump the version in `packages/agent-env/package.json` and generate a CHANGELOG entry
 **And** running `pnpm changeset publish` must successfully publish `@zookanalytics/agent-env` to the npm public registry
@@ -282,6 +286,7 @@ So that I can release new versions simply by merging PRs to main.
 **And** `publish.yml` must declare explicit permissions: `contents: write`, `pull-requests: write`, `id-token: write`
 **And** re-running the publish workflow after a version bump but failed publish must succeed (changesets detects unpublished version and publishes it)
 **And** re-running the publish workflow after a fully successful publish must produce no side effects (changesets detects already-published version and skips it)
+**And** when a push to `main` contains no changeset files, the workflow must exit cleanly without creating a Version Packages PR or publishing (FR7)
 
 ### Story 3.2: Configure GitHub Release Automation
 
@@ -310,19 +315,9 @@ So that I can verify both the process health and the deployment outcome at a gla
 **And** I must add an npm version badge for `@zookanalytics/agent-env`
 **And** both badges must be positioned prominently near the top of the README
 
-## Epic 4: Pipeline Resilience & Observability
+### Story 3.4: Document Recovery and Trusted Publishing Procedures
 
-Ensure the infrastructure is reliable, recoverable after failures, and monitored for long-term health. **Includes token rotation procedures.**
-
-### ~~Story 4.1: Implement Token Health Monitoring~~ *SUPERSEDED*
-
-> **Decision (2026-02-06):** Trusted Publishing (OIDC) eliminates stored tokens entirely. There is no NPM_TOKEN to expire or monitor. If OIDC configuration drifts (package unlinked from repo), the publish workflow itself will fail visibly. This story is no longer needed.
-
-~~As a maintainer,
-I want to be proactively notified if my npm authentication token expires or becomes invalid,
-So that I can fix it before it blocks a critical release.~~
-
-### Story 4.2: Document Recovery and Token Rotation Procedures
+*Moved from Epic 4 (formerly Story 4.2) — Epic 4 dissolved after Story 4.1 was superseded by Trusted Publishing.*
 
 As a maintainer,
 I want to have clear, inline instructions for handling failures and managing secrets,
@@ -335,3 +330,9 @@ So that I can recover the pipeline quickly without searching for external docume
 **Then** I must see descriptive comments explaining how to re-run a failed publish (idempotency)
 **And** I must see documentation of the Trusted Publishing (OIDC) configuration (linked repo, workflow name) and how to verify/fix it
 **And** I must see instructions for manually deprecating a package version via `npm deprecate` as a fallback rollback mechanism
+
+*Note: FR26 (failure notifications) is satisfied implicitly by GitHub Actions default email notifications on workflow failure. No additional implementation needed.*
+
+## ~~Epic 4: Pipeline Resilience & Observability~~ *DISSOLVED*
+
+> **Decision (2026-02-06):** After Story 4.1 was superseded by Trusted Publishing (OIDC), Epic 4 had only one active story (4.2 — recovery docs). That story has been merged into Epic 3 as Story 3.4. Epic 4 is dissolved.

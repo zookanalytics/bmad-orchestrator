@@ -8,6 +8,8 @@ lastValidated: '2026-02-06'
 lastUpdated: '2026-02-06'
 updateHistory:
   - date: '2026-02-06'
+    change: 'Pre-rel-2 validation: confirmed codebase conformant. Added local publishing auth note for Story 2.4. Marked ci.yml changes as DONE.'
+  - date: '2026-02-06'
     change: 'Replaced NPM_TOKEN approach with Trusted Publishing (OIDC) per Epic rel-1 retrospective decision'
 validationFindings:
   - severity: critical
@@ -25,6 +27,11 @@ postImplementationValidation:
     date: '2026-02-05'
     result: 'CONFORMANT'
     notes: 'All 4 stories implemented per architecture. tsup bundling, clean-room integration test, artifact pipeline all match documented decisions. Minor deviation: jq used for JSON validation instead of node -e (acceptable - jq pre-installed on GHA runners).'
+preImplementationValidation:
+  - epic: 'rel-2'
+    date: '2026-02-06'
+    result: 'READY'
+    notes: 'Codebase confirmed conformant with architecture. No drift found. One gap documented: local npm auth needed for Story 2.4 (Trusted Publishing only works in CI). Architecture updated with local auth guidance. Note: sprint-status.yaml is missing Story 2.4 entry.'
 inputDocuments:
   - '_bmad-output/planning-artifacts/release-infrastructure/product-brief.md'
   - '_bmad-output/planning-artifacts/release-infrastructure/prd.md'
@@ -289,6 +296,8 @@ The publish pipeline's reliability depends on two GitHub repository settings tha
 
 **Token health check:** Not required with Trusted Publishing. OIDC tokens are generated per-workflow-run and cannot expire between runs. The silent failure mode (expired token + no publishable merges) is eliminated.
 
+**Local publishing auth (Story 2.4):** Trusted Publishing (OIDC) only works in GitHub Actions. For the one-time local `pnpm changeset publish` in Story 2.4, the maintainer must authenticate to npm locally via `npm login` (web-based login to `@zookanalytics` org). This creates a local `.npmrc` auth token used only for the initial manual publish. After Story 2.4, all subsequent publishes go through the automated `publish.yml` workflow using OIDC — the local token is not needed again. No permanent `NPM_TOKEN` secret is stored in the repo.
+
 **Status badge:** Publish workflow badge on README. Reflects last publish outcome.
 
 > **Decision Record (2026-02-06):** During Epic rel-1 retrospective, npm recommended Trusted Publishing over granular tokens. Decision made to adopt OIDC approach. NPM_TOKEN references throughout this document are superseded by Trusted Publishing.
@@ -449,30 +458,29 @@ The existing `ci.yml` has a single `check` job. This project adds:
    - Downloads tarball artifact only (no checkout)
    - Runs 4 MVP assertions
 
-**Current ci.yml structure → Target structure:**
+**ci.yml structure (current — implemented in Epic rel-1):**
 
 ```
-Current:                          Target:
-jobs:                             jobs:
-  check:                            check:
-    - Checkout                        - Checkout
-    - Setup Node                      - Setup Node
-    - Setup pnpm                      - Setup pnpm
-    - Install                         - Install
-    - Build                           - Build
-    - Type check                      - Type check
-    - Lint                            - Lint
-    - Test                            - Test
-                                      - Pack agent-env tarball      ← NEW
-                                      - Upload tarball artifact     ← NEW
+jobs:
+  check:
+    - Checkout
+    - Setup Node
+    - Setup pnpm
+    - Install
+    - Build
+    - Type check
+    - Lint
+    - Test
+    - Pack agent-env tarball      ← DONE (rel-1-3)
+    - Upload tarball artifact     ← DONE (rel-1-3)
 
-                                    integration-test:               ← NEW JOB
-                                      needs: [check]
-                                      - Download tarball artifact
-                                      - Install tarball globally
-                                      - Assert --version works
-                                      - Assert --help works
-                                      - Assert list --json works
+  integration-test:               ← DONE (rel-1-4)
+    needs: [check]
+    - Download tarball artifact
+    - Install tarball globally
+    - Assert --version works
+    - Assert --help works
+    - Assert list --json works
 ```
 
 ### Files Created: publish.yml
@@ -632,6 +640,27 @@ After analysis, `shared` is small (102 lines, 4 runtime functions) but `orchestr
 - No README.md exists at root (to be created with badges in Story 3.3) ✅
 - `agent-env` uses `"type": "module"` with ESM exports ✅
 
+### Pre-Epic rel-2 Validation (2026-02-06)
+
+Validated architecture against actual codebase before Epic rel-2 implementation. All Epic rel-1 changes are confirmed conformant.
+
+**Confirmed Conformant:**
+- `@zookanalytics/shared` moved to devDependencies ✅ (tsup bundles it at build time)
+- `tsup.config.ts` with `noExternal: ['@zookanalytics/shared']` ✅
+- Build script uses `tsup` (not `tsc`) ✅
+- `bin` entry is `bin/agent-env.js` (no `./` prefix — fixed post-rel-1) ✅
+- `files` includes `dist`, `bin`, `config`, `README.md`, `LICENSE` ✅
+- `packages/agent-env/README.md` and `LICENSE` exist ✅
+- CI has pack-tarball step, upload artifact step, and integration-test job ✅
+- Integration test uses `jq` for JSON validation (acceptable deviation noted in rel-1 retro) ✅
+- No `@changesets/cli` installed — correct, this is Story 2.1 ✅
+- No `changeset` script in root `package.json` — correct, this is Story 2.1 ✅
+
+**New Finding — Local Publishing Auth:**
+Story 2.4 requires `pnpm changeset publish` from local. Trusted Publishing (OIDC) only works in GitHub Actions. Maintainer must `npm login` locally for this one-time operation. Architecture updated to document this (see Authentication & Monitoring Architecture section).
+
+**No architecture changes required for Epic rel-2.** All decisions and patterns documented in this architecture are ready for implementation.
+
 ## Architecture Validation Results
 
 ### Coherence Validation
@@ -713,7 +742,7 @@ Recommended implementation order based on dependency analysis:
 1. ~~**npm org setup** — Create `@zookanalytics` org, generate granular token, add as GitHub secret.~~ **COMPLETED (Epic rel-1):** Org exists, Trusted Publishing configured, package linked to repo.
 2. ~~**Manual dry-run publish** — `npm pack` + inspect tarball + `pnpm publish --dry-run` from local.~~ **COMPLETED (Epic rel-1):** De-risked auth, org, and package config.
 3. **Install changesets** — `pnpm add -Dw @changesets/cli @changesets/changelog-github && pnpm changeset init`. Configure `.changeset/config.json`.
-4. **First real publish via changesets** — Manual `pnpm changeset` → `pnpm changeset version` → `pnpm changeset publish` from local. Proves the full changesets flow works with Trusted Publishing.
+4. **First real publish via changesets** — Manual `pnpm changeset` → `pnpm changeset version` → `pnpm changeset publish` from local. Requires `npm login` for local auth (Trusted Publishing only works in CI). Proves the full changesets flow works.
 5. ~~**ci.yml: pack tarball step** — Add `npm pack` + artifact upload to existing `check` job.~~ **COMPLETED (Epic rel-1).**
 6. ~~**ci.yml: integration-test job** — New job with 4 MVP assertions.~~ **COMPLETED (Epic rel-1).**
 7. **publish.yml** — Create the workflow with changesets/action@v1. Uses `id-token: write` for Trusted Publishing. First automated publish.
