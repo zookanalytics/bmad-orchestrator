@@ -6,3 +6,40 @@ find the full documentation for it [in our repository](https://github.com/change
 
 We have a quick list of common questions to get you started engaging with this project in
 [our documentation](https://github.com/changesets/changesets/blob/main/docs/common-questions.md)
+
+## Project-Specific Configuration
+
+### Publishable Packages
+
+Only packages without `"private": true` in their `package.json` are managed by changesets.
+Currently publishable:
+
+- `@zookanalytics/agent-env` — CLI for creating isolated, AI-ready development environments
+- `@zookanalytics/bmad-orchestrator` — Unified command center for multi-DevPod development
+
+### Private Package Exclusion
+
+The `@zookanalytics/shared` package and the monorepo root are marked `"private": true` in
+their respective `package.json` files. Changesets natively respects this flag and excludes
+private packages from version bumps and publishing. No explicit `ignore` array entry is
+needed in `config.json`.
+
+### Config Rationale
+
+Since JSON does not support comments, configuration rationale is documented here:
+
+- **changelog**: Uses `@changesets/changelog-github` to generate PR-linked changelog entries
+- **commit**: `false` — the changesets/action GitHub Action handles commits in CI
+- **access**: `"public"` — packages are published to the public npm registry under `@zookanalytics`
+- **baseBranch**: `"main"` — version comparison and "Version Packages" PRs target main
+- **updateInternalDependencies**: `"patch"` — ensures `workspace:*` references are rewritten to real version numbers during publication
+- **ignore**: `[]` — empty because `"private": true` handles exclusion (see above)
+
+### Creating a Changeset
+
+```bash
+pnpm changeset
+```
+
+Use the interactive CLI to select affected packages and bump type (patch/minor/major).
+Write a user-facing summary as the changeset description — it becomes a changelog entry.

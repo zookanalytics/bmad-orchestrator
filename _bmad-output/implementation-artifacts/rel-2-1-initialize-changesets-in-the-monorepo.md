@@ -130,3 +130,4 @@ Files modified:
 | 2026-02-06 | Story created and implementation started | Dev Agent |
 | 2026-02-06 | Implementation completed, all ACs met, status changed to review | Dev Agent |
 | 2026-02-06 | Code review: 3 MEDIUM + 2 LOW findings. M1: File List missing sprint-status.yaml. M2: Sprint-status still has dissolved Epic 4. M3: Sprint-status missing Stories 2.4 and 3.4. L1: Cosmetic onlyBuiltDependencies reformat reverted. L2: Schema version 3.1.2 vs arch doc 3.1.1 (informational). All auto-fixed. | Code Review |
+| 2026-02-06 | Code review #2: 3 MEDIUM + 1 LOW findings. M1: Previous review corrupted Completion Notes with Story 2.2 config values (access/changelog). M2: Previous review added Story 2.2 files to Story 2.1 File List. M3: Previous review removed accurate Note about defaults. L1: Informational — second review on already-done story. Fix: Reverted story file to committed state (accurate defaults documented). | Code Review |

@@ -8,6 +8,8 @@ lastValidated: '2026-02-06'
 lastUpdated: '2026-02-06'
 updateHistory:
   - date: '2026-02-06'
+    change: 'Mid-rel-2 validation: schema version updated to 3.1.2, bmm-retrospective-module noted as non-private risk, orchestrator shared-dep forward note added'
+  - date: '2026-02-06'
     change: 'Pre-rel-2 validation: confirmed codebase conformant. Added local publishing auth note for Story 2.4. Marked ci.yml changes as DONE.'
   - date: '2026-02-06'
     change: 'Replaced NPM_TOKEN approach with Trusted Publishing (OIDC) per Epic rel-1 retrospective decision'
@@ -19,14 +21,25 @@ validationFindings:
   - severity: moderate
     summary: 'files field missing README.md and LICENSE per Story 1.1 ACs'
     status: 'resolved in rel-1-1'
+  - severity: moderate
+    summary: 'bmm-retrospective-module lacks "private": true — visible to changesets as publishable but has no build/publish config'
+    resolution: 'Must add "private": true or changesets ignore before Epic 3'
+    status: 'open'
   - severity: low
     summary: 'bin wrapper pattern is correct but architecture description was imprecise'
     status: 'resolved in rel-1-1'
+  - severity: low
+    summary: 'Schema version mismatch: architecture had 3.1.1, actual is 3.1.2'
+    status: 'resolved — architecture updated'
 postImplementationValidation:
   - epic: 'rel-1'
     date: '2026-02-05'
     result: 'CONFORMANT'
     notes: 'All 4 stories implemented per architecture. tsup bundling, clean-room integration test, artifact pipeline all match documented decisions. Minor deviation: jq used for JSON validation instead of node -e (acceptable - jq pre-installed on GHA runners).'
+  - epic: 'rel-2 (stories 2.1-2.2)'
+    date: '2026-02-06'
+    result: 'CONFORMANT with findings'
+    notes: 'Changesets installed and configured per architecture. Config matches spec. 3 findings: (1) LOW schema version 3.1.2 vs 3.1.1 — updated. (2) MODERATE bmm-retrospective-module not private — must resolve before Epic 3. (3) LOW orchestrator shared-dep forward note added.'
 preImplementationValidation:
   - epic: 'rel-2'
     date: '2026-02-06'
@@ -81,13 +94,14 @@ Architecturally, most FRs map to configuration (changesets config, package.json 
 
 | Constraint | Description |
 |------------|-------------|
-| Existing pnpm monorepo | `packages/*` workspace structure already established (orchestrator, agent-env, shared) |
+| Existing pnpm monorepo | `packages/*` workspace structure: orchestrator, agent-env, shared, bmm-retrospective-module |
 | Existing CI | `.github/workflows/ci.yml` — publish workflow must complement, not duplicate |
 | Existing husky/lint-staged | Pre-commit hook runs `lint-staged` only. No commitlint installed. No `commit-msg` hook. Won't interfere with CI bot commits. |
 | Changesets as version engine | Decided in brief/PRD — handles workspace protocol rewriting, publish ordering |
 | npm public registry | `@zookanalytics` org scope, public packages |
 | agent-env as pilot | Prove pipeline with one TypeScript CLI package before scaling |
 | `shared` stays private | `"private": true` — never published regardless of changesets config |
+| `bmm-retrospective-module` not publishable | No build script, no dist output, no publish config. Lacks `"private": true` — should be added or explicitly ignored in changesets config before Epic 3 |
 
 ### Configuration Surface
 
@@ -537,7 +551,7 @@ jobs:
 
 ```json
 {
-  "$schema": "https://unpkg.com/@changesets/config@3.1.1/schema.json",
+  "$schema": "https://unpkg.com/@changesets/config@3.1.2/schema.json",
   "changelog": ["@changesets/changelog-github", { "repo": "ZookAnalytics/bmad-orchestrator" }],
   "commit": false,
   "fixed": [],
@@ -605,7 +619,7 @@ After analysis, `shared` is small (102 lines, 4 runtime functions) but `orchestr
 - Change build script from `tsc` to `tsup`
 - Move `@zookanalytics/shared` from `dependencies` to `devDependencies` (bundled at build time, consumers never need it)
 - `bin/agent-env.js` wrapper unchanged — it imports `../dist/cli.js` which tsup produces
-- `orchestrator` unchanged — not being published yet, continues using shared via workspace protocol
+- `orchestrator` unchanged — not being published yet, continues using shared via workspace protocol. **⚠️ When orchestrator is published, it will need the same tsup bundling treatment** (shared in devDependencies, noExternal config).
 
 **Verification criteria:**
 - `dist/cli.js` contains no imports from `@zookanalytics/shared`
@@ -660,6 +674,24 @@ Validated architecture against actual codebase before Epic rel-2 implementation.
 Story 2.4 requires `pnpm changeset publish` from local. Trusted Publishing (OIDC) only works in GitHub Actions. Maintainer must `npm login` locally for this one-time operation. Architecture updated to document this (see Authentication & Monitoring Architecture section).
 
 **No architecture changes required for Epic rel-2.** All decisions and patterns documented in this architecture are ready for implementation.
+
+### Mid-Epic rel-2 Validation (2026-02-06)
+
+Validated architecture against actual codebase after Stories 2.1 and 2.2 completed.
+
+**Confirmed Conformant:**
+- `@changesets/cli@^2.29.8` and `@changesets/changelog-github@^0.5.2` installed as workspace-root devDependencies ✅
+- `"changeset": "changeset"` script added to root `package.json` ✅
+- `.changeset/config.json` matches architecture spec: `access: "public"`, `baseBranch: "main"`, `updateInternalDependencies: "patch"`, `changelog: @changesets/changelog-github`, `ignore: []` ✅
+- `.changeset/README.md` extended with project-specific config rationale and private package exclusion docs ✅
+- `pnpm changeset status` runs clean with no configuration drift ✅
+- `shared` is correctly excluded by changesets via `"private": true` (no explicit `ignore` needed) ✅
+- All 417 tests pass, zero regressions ✅
+
+**Drift Found:**
+1. **(LOW) Schema version**: Architecture doc had `@changesets/config@3.1.1`, actual is `@changesets/config@3.1.2` (installed version). Architecture updated to match.
+2. **(MODERATE) `bmm-retrospective-module` not private**: This 4th workspace package lacks `"private": true` and is visible to changesets as publishable. It has no build script, no dist output, and is not intended for npm publish. Should be marked `"private": true` or added to changesets `ignore` before Epic 3 automated publishing. Architecture constraints table updated.
+3. **(LOW) Orchestrator `shared` dependency**: `orchestrator` still has `@zookanalytics/shared` in runtime `dependencies` with `workspace:*`. Architecture correctly notes it's not being published yet, but a forward-looking note was added about needing tsup bundling when orchestrator publishes.
 
 ## Architecture Validation Results
 
