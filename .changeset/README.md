@@ -17,6 +17,8 @@ Currently publishable:
 - `@zookanalytics/agent-env` — CLI for creating isolated, AI-ready development environments
 - `@zookanalytics/bmad-orchestrator` — Unified command center for multi-DevPod development
 
+**Warning:** `bmm-retrospective-module` lacks `"private": true` and is visible to changesets as publishable, but has no build script or publish config. Add `"private": true` to its `package.json` or add it to the `ignore` array before Epic 3 automated publishing.
+
 ### Private Package Exclusion
 
 The `@zookanalytics/shared` package and the monorepo root are marked `"private": true` in

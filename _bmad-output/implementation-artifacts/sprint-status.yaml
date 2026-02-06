@@ -157,7 +157,7 @@ development_status:
   # ─── Release Epic 2: Automated Versioning & Release Staging ───
   rel-epic-2: in-progress
   rel-2-1-initialize-changesets-in-the-monorepo: done
-  rel-2-2-configure-changeset-scope-mapping: review
+  rel-2-2-configure-changeset-scope-mapping: done
   rel-2-3-create-manual-changeset-workflow: backlog
   rel-2-4-perform-first-manual-publish-via-changesets: backlog
   rel-epic-2-retrospective: optional
