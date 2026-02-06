@@ -4,7 +4,7 @@
   "description": "CLI for creating isolated, AI-ready development environments",
   "type": "module",
   "bin": {
-    "agent-env": "./bin/agent-env.js"
+    "agent-env": "bin/agent-env.js"
   },
   "exports": {
     ".": {
