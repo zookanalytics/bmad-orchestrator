@@ -47,7 +47,7 @@ items:
   - id: 5
     action_item: 5
     workflow: bash
-    status: pending
+    status: done
     summary: |
       Push current changes to remote to trigger the CI pipeline and verify
       the integration-test job runs successfully. The integration-test job
