@@ -3,8 +3,12 @@ stepsCompleted: [1, 2, 3, 4]
 inputDocuments:
   - _bmad-output/planning-artifacts/release-infrastructure/prd.md
   - _bmad-output/planning-artifacts/release-infrastructure/architecture.md
-lastEdited: '2026-02-04'
+lastEdited: '2026-02-06'
 editHistory:
+  - date: '2026-02-06'
+    changes: 'Updated NPM_TOKEN references to Trusted Publishing (OIDC) per Epic rel-1 retrospective. Superseded Story 4.1 (token health monitoring). Updated FR34, NFR1, NFR4, Stories 1.2/3.1/4.2 ACs.'
+  - date: '2026-02-05'
+    changes: 'Story 1.1: Added explicit ACs for tsup bundling of @zookanalytics/shared per Architecture drift analysis decision (Option A)'
   - date: '2026-02-04'
     changes: 'Added missing ACs per implementation-readiness-report-2026-02-03: MI-1 (Story 2.2 private package exclusion in changesets config), MI-2 (Story 3.1 concurrency + permissions), MI-3 (Story 3.1 idempotent re-run verification for FR10-12)'
   - date: '2026-02-04'
@@ -55,14 +59,14 @@ FR30: The publish workflow can operate with explicit, minimal permissions (conte
 FR31: The system can validate conventional commit scopes against the set of known package names and reject unrecognized scopes
 FR32: The system can comment on PRs with a summary of pending version changes (changeset bot)
 FR33: The system can detect when a non-private package is missing from the changesets configuration
-FR34: The system can monitor NPM_TOKEN health beyond the publish status badge
+FR34: ~~The system can monitor NPM_TOKEN health beyond the publish status badge~~ *Superseded by Trusted Publishing (OIDC) — no stored token to monitor*
 
 ### NonFunctional Requirements
 
-NFR1: NPM_TOKEN must be stored as a GitHub Actions secret, never exposed in logs or workflow outputs
+NFR1: npm authentication must use Trusted Publishing (OIDC) — no stored secrets; workflow logs must not leak sensitive information
 NFR2: Publish workflow permissions must be explicitly scoped (contents: write, pull-requests: write, id-token: write) — no default broad permissions
 NFR3: Packages marked "private": true must never be publishable, regardless of changesets configuration
-NFR4: NPM token must be granular (fine-grained), scoped to @zookanalytics/* packages only, with automation-level permissions
+NFR4: npm authentication must be scoped to the specific repository and workflow via Trusted Publishing (OIDC) configuration
 NFR5: Workflow logs must not leak sensitive information (tokens, internal paths, credentials)
 NFR6: The publish workflow must tolerate transient npm registry failures (retry logic or safe re-run)
 NFR7: The system must work with the existing pnpm monorepo structure without requiring migration to a different package manager
@@ -80,10 +84,10 @@ NFR15: The status badge must accurately reflect publish health — a green badge
 - **Starter Template**: No application template applies; the "starter" is the @changesets/cli and changesets/action@v1.
 - **Infrastructure**: Fresh GitHub Actions job for integration testing with no checkout (artifact-only) for clean isolation.
 - **Automation Pattern**: "Version Packages" PR pattern via changesets/action@v1 to protect main from partial-state corruption.
-- **Monitoring**: Weekly scheduled GitHub Actions workflow running `npm whoami` to monitor NPM_TOKEN health.
+- **Monitoring**: ~~Weekly NPM_TOKEN health check~~ *Not needed — Trusted Publishing (OIDC) has no stored token to expire.*
 - **Recovery**: Idempotent re-run design where `changeset publish` checks npm before publishing. Inline recovery docs in YAML comments.
 - **Pilot Package**: `agent-env` is the pilot package; `shared` remains private.
-- **Security**: Granular NPM_TOKEN scoped to @zookanalytics/* with automation permissions.
+- **Security**: Trusted Publishing (OIDC) — no stored secrets; authentication tied to specific repo and workflow.
 
 ### FR Coverage Map
 
@@ -121,7 +125,7 @@ NFR15: The status badge must accurately reflect publish health — a green badge
 - **FR31**: Deferred - Scope validation (per Architecture cross-cutting #8)
 - **FR32**: Deferred - Changeset bot comments (per Architecture cross-cutting #8; PRD elevated to core but no architectural design exists yet)
 - **FR33**: Deferred - Config drift detection (per Architecture cross-cutting #8)
-- **FR34**: Epic 4 - Token health monitoring
+- **FR34**: ~~Epic 4 - Token health monitoring~~ *Superseded — Trusted Publishing eliminates token expiry concern*
 
 ## Epic 1: Verified Artifact Pipeline & Configuration
 
@@ -140,8 +144,17 @@ So that it includes all necessary files and excludes internal or private package
 **Then** they must point to the built `dist/` directory and include the CLI entry point
 **And** the `files` array must include `README.md` and `LICENSE`
 **And** the `packages/shared/package.json` must be marked `"private": true`
-**And** `agent-env` dependencies must NOT include private workspace packages (like `shared`) unless they are bundled into the distribution
+**And** `agent-env` dependencies must NOT include private workspace packages (like `shared`) in runtime dependencies
 **And** `pnpm changeset status` (if initialized) must not report any configuration drift
+
+**Given** the `@zookanalytics/shared` workspace dependency used by agent-env
+**When** I configure the build tooling
+**Then** `tsup` must be added as a devDependency to agent-env
+**And** a `tsup.config.ts` must be created with `noExternal: ['@zookanalytics/shared']` to bundle shared into dist
+**And** the build script must be changed from `tsc` to `tsup`
+**And** `@zookanalytics/shared` must be moved from `dependencies` to `devDependencies`
+**And** the built `dist/cli.js` must contain no imports from `@zookanalytics/shared`
+**And** all existing tests, type-check, and lint must pass after the change
 
 ### Story 1.2: Perform Manual Dry-Run Verification
 
@@ -151,10 +164,10 @@ So that I can identify configuration issues before automating the publish proces
 
 **Acceptance Criteria:**
 
-**Given** a granular NPM_TOKEN with automation permissions for `@zookanalytics/*`
+**Given** Trusted Publishing (OIDC) is configured for `@zookanalytics/agent-env`
 **When** I run `pnpm build --filter @zookanalytics/agent-env` and `pnpm pack` in `packages/agent-env`
 **Then** I can inspect the resulting tarball to ensure it contains only expected files
-**And** `pnpm publish --dry-run` must succeed without authentication or scope errors
+**And** `pnpm publish --dry-run` must succeed without scope errors
 
 ### Story 1.3: Implement agent-env Artifact Packing in CI
 
@@ -264,7 +277,7 @@ So that I can release new versions simply by merging PRs to main.
 **When** a push to `main` contains a new changeset file
 **Then** the `changesets/action` must create or update a "Version Packages" PR
 **And** when the "Version Packages" PR is merged to `main`, the action must run `pnpm changeset publish`
-**And** it must use the `NPM_TOKEN` secret for authentication
+**And** it must authenticate via Trusted Publishing (OIDC) using the `id-token: write` permission — no stored NPM_TOKEN
 **And** `publish.yml` must include a `concurrency` group with `cancel-in-progress: false` to queue successive publishes without cancellation
 **And** `publish.yml` must declare explicit permissions: `contents: write`, `pull-requests: write`, `id-token: write`
 **And** re-running the publish workflow after a version bump but failed publish must succeed (changesets detects unpublished version and publishes it)
@@ -301,18 +314,13 @@ So that I can verify both the process health and the deployment outcome at a gla
 
 Ensure the infrastructure is reliable, recoverable after failures, and monitored for long-term health. **Includes token rotation procedures.**
 
-### Story 4.1: Implement Token Health Monitoring
+### ~~Story 4.1: Implement Token Health Monitoring~~ *SUPERSEDED*
 
-As a maintainer,
+> **Decision (2026-02-06):** Trusted Publishing (OIDC) eliminates stored tokens entirely. There is no NPM_TOKEN to expire or monitor. If OIDC configuration drifts (package unlinked from repo), the publish workflow itself will fail visibly. This story is no longer needed.
+
+~~As a maintainer,
 I want to be proactively notified if my npm authentication token expires or becomes invalid,
-So that I can fix it before it blocks a critical release.
-
-**Acceptance Criteria:**
-
-**Given** a new file `.github/workflows/token-health.yml`
-**When** the workflow runs on a weekly schedule (e.g., Monday 9am UTC)
-**Then** it must run `npm whoami --registry https://registry.npmjs.org` using the `NPM_TOKEN` secret
-**And** it must fail the job if the token is invalid, triggering a GitHub notification to the maintainer
+So that I can fix it before it blocks a critical release.~~
 
 ### Story 4.2: Document Recovery and Token Rotation Procedures
 
@@ -322,8 +330,8 @@ So that I can recover the pipeline quickly without searching for external docume
 
 **Acceptance Criteria:**
 
-**Given** the `.github/workflows/publish.yml` and `.github/workflows/token-health.yml` files
+**Given** the `.github/workflows/publish.yml` file
 **When** I examine the YAML content
 **Then** I must see descriptive comments explaining how to re-run a failed publish (idempotency)
-**And** I must see a documented procedure for rotating the `NPM_TOKEN` (including token type and scope)
+**And** I must see documentation of the Trusted Publishing (OIDC) configuration (linked repo, workflow name) and how to verify/fix it
 **And** I must see instructions for manually deprecating a package version via `npm deprecate` as a fallback rollback mechanism

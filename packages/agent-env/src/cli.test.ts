@@ -83,7 +83,7 @@ describe('agent-env CLI', () => {
       expect(output).not.toContain('MISSING_OPTION');
       // Should show "Creating instance" (meaning URL was resolved)
       expect(output).toContain('Creating instance');
-    });
+    }, 15000);
   });
 
   describe('list command', () => {

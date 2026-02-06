@@ -1,0 +1,54 @@
+source: _bmad-output/implementation-artifacts/epic-rel-1-retro-2026-02-06.md
+generated: 2026-02-06
+
+items:
+  - id: 1
+    action_item: 1
+    workflow: human
+    status: pending
+    summary: |
+      Add a "before/after" demonstration step to the epic completion workflow
+      in BMAD. For infrastructure epics: include commands to run, expected
+      output, and visual proof of changes. Scoped outside this repository —
+      requires action in the BMAD framework itself.
+
+  - id: 2
+    action_item: 2
+    workflow: "bmad:bmm:workflows:quick-dev"
+    status: done
+    summary: |
+      Update the release infrastructure architecture document to replace
+      NPM_TOKEN references with Trusted Publishing (OIDC) approach.
+      Discovered during Epic rel-1 that npm recommends OIDC over granular
+      tokens for CI/CD. More secure: no secret to leak or rotate. Impacts
+      Story 3-1 (Automated Publish Workflow) and may eliminate Story 4-1
+      (Token Health Monitoring).
+
+  - id: 3
+    action_item: 3
+    workflow: human
+    status: done
+    summary: |
+      Configure npm Trusted Publishing by linking @zookanalytics/agent-env
+      to the GitHub repository in npm settings. This is a manual step on the
+      npm website that enables OIDC-based publishing from GitHub Actions
+      without NPM_TOKEN.
+
+  - id: 4
+    action_item: 4
+    workflow: "bmad:bmm:workflows:quick-dev"
+    status: done
+    summary: |
+      Review all Epic 2 and Epic 3 story definitions for NPM_TOKEN
+      references and update them for Trusted Publishing (OIDC) approach.
+      Evaluate whether Story 4-1 (Token Health Monitoring) is still
+      necessary with OIDC — may need to be removed or replaced.
+
+  - id: 5
+    action_item: 5
+    workflow: bash
+    status: done
+    summary: |
+      Push current changes to remote to trigger the CI pipeline and verify
+      the integration-test job runs successfully. The integration-test job
+      was added in Epic rel-1 and needs validation on the remote CI.
