@@ -280,9 +280,9 @@ describe('agent-env CLI', () => {
       const stderrStripped = stripAnsiCodes(result.stderr);
 
       expect(result.exitCode).toBe(1);
-      expect(stderrStripped).toContain('❌ [SAFETY_CHECK_FAILED]');
+      expect(stderrStripped).toContain("Cannot remove 'dirty-instance'");
       expect(stderrStripped).toContain('unstaged changes detected');
-      expect(stderrStripped).toContain('use --force to bypass safety checks');
+      expect(stderrStripped).toContain('--force');
     });
 
     it('should allow removal with --force even if git state is dirty (unstaged changes)', async () => {
@@ -329,6 +329,101 @@ describe('agent-env CLI', () => {
       expect(result.exitCode).toBe(1);
       expect(stderrStripped).toContain('❌ [WORKSPACE_NOT_FOUND]');
       expect(stderrStripped).toContain("Instance 'nonexistent-force' not found");
+    });
+  });
+
+  describe('safety prompt UI output', () => {
+    it('shows severity indicators for staged changes (Warning)', async () => {
+      const instanceName = 'safety-staged';
+      await createMockWorkspace(instanceName);
+      const result = await runCli(['remove', instanceName], {
+        MOCK_GIT_STATE: JSON.stringify({ hasStaged: true }),
+        MOCK_DOCKER_AVAILABLE: 'true',
+      });
+      const stderrStripped = stripAnsiCodes(result.stderr);
+
+      expect(result.exitCode).toBe(1);
+      expect(stderrStripped).toContain('[Warning]');
+      expect(stderrStripped).toContain('staged changes detected');
+      expect(stderrStripped).toContain('Suggestions');
+      expect(stderrStripped).toContain('git commit');
+    });
+
+    it('shows danger severity for never-pushed branches', async () => {
+      const instanceName = 'safety-never-pushed';
+      await createMockWorkspace(instanceName);
+      const result = await runCli(['remove', instanceName], {
+        MOCK_GIT_STATE: JSON.stringify({ neverPushedBranches: ['new-feature'] }),
+        MOCK_DOCKER_AVAILABLE: 'true',
+      });
+      const stderrStripped = stripAnsiCodes(result.stderr);
+
+      expect(result.exitCode).toBe(1);
+      expect(stderrStripped).toContain('[Danger]');
+      expect(stderrStripped).toContain('new-feature');
+      expect(stderrStripped).toContain('git push');
+    });
+
+    it('shows multiple blockers with mixed severity', async () => {
+      const instanceName = 'safety-multi';
+      await createMockWorkspace(instanceName);
+      const result = await runCli(['remove', instanceName], {
+        MOCK_GIT_STATE: JSON.stringify({
+          hasUnstaged: true,
+          neverPushedBranches: ['feature-x'],
+        }),
+        MOCK_DOCKER_AVAILABLE: 'true',
+      });
+      const stderrStripped = stripAnsiCodes(result.stderr);
+
+      expect(result.exitCode).toBe(1);
+      expect(stderrStripped).toContain('[Warning]');
+      expect(stderrStripped).toContain('[Danger]');
+      expect(stderrStripped).toContain('unstaged changes detected');
+      expect(stderrStripped).toContain('feature-x');
+      expect(stderrStripped).toContain('Suggestions');
+    });
+
+    it('shows suggestions for unpushed commits', async () => {
+      const instanceName = 'safety-unpushed';
+      await createMockWorkspace(instanceName);
+      const result = await runCli(['remove', instanceName], {
+        MOCK_GIT_STATE: JSON.stringify({ unpushedBranches: ['main', 'develop'] }),
+        MOCK_DOCKER_AVAILABLE: 'true',
+      });
+      const stderrStripped = stripAnsiCodes(result.stderr);
+
+      expect(result.exitCode).toBe(1);
+      expect(stderrStripped).toContain('unpushed commits on branches: main, develop');
+      expect(stderrStripped).toContain('git push');
+    });
+
+    it('shows stash count in output', async () => {
+      const instanceName = 'safety-stash';
+      await createMockWorkspace(instanceName);
+      const result = await runCli(['remove', instanceName], {
+        MOCK_GIT_STATE: JSON.stringify({ stashCount: 3 }),
+        MOCK_DOCKER_AVAILABLE: 'true',
+      });
+      const stderrStripped = stripAnsiCodes(result.stderr);
+
+      expect(result.exitCode).toBe(1);
+      expect(stderrStripped).toContain('3 stashes');
+      expect(stderrStripped).toContain('git stash');
+    });
+
+    it('includes --force bypass hint', async () => {
+      const instanceName = 'safety-force-hint';
+      await createMockWorkspace(instanceName);
+      const result = await runCli(['remove', instanceName], {
+        MOCK_GIT_STATE: JSON.stringify({ hasUntracked: true }),
+        MOCK_DOCKER_AVAILABLE: 'true',
+      });
+      const stderrStripped = stripAnsiCodes(result.stderr);
+
+      expect(result.exitCode).toBe(1);
+      expect(stderrStripped).toContain('--force');
+      expect(stderrStripped).toContain('data loss is permanent');
     });
   });
 });

@@ -302,7 +302,7 @@ describe('removeInstance', () => {
     expect(result.ok).toBe(false);
     if (result.ok) throw new Error('Expected failure');
     expect(result.error.code).toBe('SAFETY_CHECK_FAILED');
-    expect(result.error.message).toContain('staged changes detected');
+    expect(result.error.message).toBe('Safety checks failed');
   });
 
   it('blocks removal when unstaged changes detected', async () => {
@@ -317,7 +317,8 @@ describe('removeInstance', () => {
     expect(result.ok).toBe(false);
     if (result.ok) throw new Error('Expected failure');
     expect(result.error.code).toBe('SAFETY_CHECK_FAILED');
-    expect(result.error.message).toContain('unstaged changes detected');
+    expect(result.error.message).toBe('Safety checks failed');
+    expect(result.blockers).toContain('unstaged changes detected');
   });
 
   it('blocks removal when untracked files detected', async () => {
@@ -332,7 +333,8 @@ describe('removeInstance', () => {
     expect(result.ok).toBe(false);
     if (result.ok) throw new Error('Expected failure');
     expect(result.error.code).toBe('SAFETY_CHECK_FAILED');
-    expect(result.error.message).toContain('untracked files detected');
+    expect(result.error.message).toBe('Safety checks failed');
+    expect(result.blockers).toContain('untracked files detected');
   });
 
   it('blocks removal when stashed changes detected', async () => {
@@ -347,7 +349,8 @@ describe('removeInstance', () => {
     expect(result.ok).toBe(false);
     if (result.ok) throw new Error('Expected failure');
     expect(result.error.code).toBe('SAFETY_CHECK_FAILED');
-    expect(result.error.message).toContain('stashed changes detected (2 stashes)');
+    expect(result.error.message).toBe('Safety checks failed');
+    expect(result.blockers).toContain('stashed changes detected (2 stashes)');
   });
 
   it('blocks removal when unpushed commits on any branch', async () => {
@@ -362,7 +365,8 @@ describe('removeInstance', () => {
     expect(result.ok).toBe(false);
     if (result.ok) throw new Error('Expected failure');
     expect(result.error.code).toBe('SAFETY_CHECK_FAILED');
-    expect(result.error.message).toContain('unpushed commits on branches: feature-x, bugfix-y');
+    expect(result.error.message).toBe('Safety checks failed');
+    expect(result.blockers).toContain('unpushed commits on branches: feature-x, bugfix-y');
   });
 
   it('blocks removal when never-pushed branches exist', async () => {
@@ -377,7 +381,8 @@ describe('removeInstance', () => {
     expect(result.ok).toBe(false);
     if (result.ok) throw new Error('Expected failure');
     expect(result.error.code).toBe('SAFETY_CHECK_FAILED');
-    expect(result.error.message).toContain('branches never pushed: new-feature');
+    expect(result.error.message).toBe('Safety checks failed');
+    expect(result.blockers).toContain('branches never pushed: new-feature');
   });
 
   it('blocks removal when detached HEAD detected', async () => {
@@ -392,7 +397,8 @@ describe('removeInstance', () => {
     expect(result.ok).toBe(false);
     if (result.ok) throw new Error('Expected failure');
     expect(result.error.code).toBe('SAFETY_CHECK_FAILED');
-    expect(result.error.message).toContain('detached HEAD state');
+    expect(result.error.message).toBe('Safety checks failed');
+    expect(result.blockers).toContain('detached HEAD state (investigate manually)');
   });
 
   it('includes suggestion to use --force when safety check fails', async () => {
@@ -407,6 +413,38 @@ describe('removeInstance', () => {
     expect(result.ok).toBe(false);
     if (result.ok) throw new Error('Expected failure');
     expect(result.error.suggestion).toContain('--force');
+  });
+
+  it('returns gitState and blockers on safety check failure', async () => {
+    const state = createTestState('repo-auth');
+    await createTestWorkspace('repo-auth', state);
+    const deps = createTestDeps({
+      gitDetector: createMockGitDetector({ hasStaged: true, unpushedBranches: ['feature-x'] }),
+    });
+
+    const result = await removeInstance('auth', deps);
+
+    expect(result.ok).toBe(false);
+    if (result.ok) throw new Error('Expected failure');
+    expect(result.error.code).toBe('SAFETY_CHECK_FAILED');
+    expect(result.gitState).toBeDefined();
+    expect(result.gitState?.hasStaged).toBe(true);
+    expect(result.gitState?.unpushedBranches).toEqual(['feature-x']);
+    expect(result.blockers).toBeDefined();
+    expect(result.blockers).toContain('staged changes detected');
+    expect(result.blockers).toContain('unpushed commits on branches: feature-x');
+  });
+
+  it('does not include gitState on non-safety errors', async () => {
+    const deps = createTestDeps();
+
+    const result = await removeInstance('nonexistent', deps);
+
+    expect(result.ok).toBe(false);
+    if (result.ok) throw new Error('Expected failure');
+    expect(result.error.code).toBe('WORKSPACE_NOT_FOUND');
+    expect(result.gitState).toBeUndefined();
+    expect(result.blockers).toBeUndefined();
   });
 
   it('does not stop or remove container when safety check fails', async () => {

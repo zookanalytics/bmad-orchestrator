@@ -33,7 +33,12 @@ type Execute = (
 
 export type RemoveResult =
   | { ok: true }
-  | { ok: false; error: { code: string; message: string; suggestion?: string } };
+  | {
+      ok: false;
+      error: { code: string; message: string; suggestion?: string };
+      gitState?: GitState;
+      blockers?: string[];
+    };
 
 export interface RemoveInstanceDeps {
   executor: Execute;
@@ -190,14 +195,15 @@ export async function removeInstance(
     const blockers = evaluateSafetyChecks(gitResult.state);
 
     if (blockers.length > 0) {
-      const blockerList = blockers.map((b) => `  - ${b}`).join('\n');
       return {
         ok: false,
         error: {
           code: 'SAFETY_CHECK_FAILED',
-          message: `Cannot remove '${instanceName}':\n${blockerList}`,
+          message: 'Safety checks failed',
           suggestion: 'Resolve the issues above, or use --force to bypass safety checks.',
         },
+        gitState: gitResult.state,
+        blockers,
       };
     }
   }
