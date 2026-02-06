@@ -5,7 +5,7 @@
  * stored at ~/.agent-env/workspaces/<repo>-<instance>/
  */
 
-import { mkdir, readdir, stat } from 'node:fs/promises';
+import { mkdir, readdir, rm, stat } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 
@@ -192,4 +192,29 @@ export async function scanWorkspaces(
     }
     throw err;
   }
+}
+
+// ─── Workspace deletion ──────────────────────────────────────────────────────
+
+export interface DeleteFsDeps {
+  rm: typeof rm;
+}
+
+const defaultDeleteFsDeps: DeleteFsDeps = { rm };
+
+/**
+ * Delete a workspace folder recursively.
+ *
+ * Removes the entire workspace directory at the given path.
+ * Uses force: true so non-existent paths are treated as success (idempotent).
+ *
+ * @param wsPath - Workspace path information
+ * @param deps - Injectable filesystem dependencies
+ * @throws If deletion fails (e.g., permission denied)
+ */
+export async function deleteWorkspace(
+  wsPath: WorkspacePath,
+  deps: DeleteFsDeps = defaultDeleteFsDeps
+): Promise<void> {
+  await deps.rm(wsPath.root, { recursive: true, force: true });
 }
