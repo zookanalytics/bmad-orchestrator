@@ -464,7 +464,7 @@ describe('removeInstance', () => {
 
   // ─── Force bypass tests ────────────────────────────────────────────────────
 
-  it('skips safety checks when force=true', async () => {
+  it('bypasses safety checks when force=true but still detects git state', async () => {
     const state = createTestState('repo-auth');
     await createTestWorkspace('repo-auth', state);
     const mockGitDetector = createMockGitDetector({ hasStaged: true, hasUnstaged: true });
@@ -473,7 +473,63 @@ describe('removeInstance', () => {
     const result = await removeInstance('auth', deps, true);
 
     expect(result.ok).toBe(true);
-    expect(mockGitDetector.getGitState).not.toHaveBeenCalled();
+    // Git state IS detected (for audit log and warning display) but doesn't block
+    expect(mockGitDetector.getGitState).toHaveBeenCalled();
+  });
+
+  it('returns forced=true, gitState, and blockers on successful force removal', async () => {
+    const state = createTestState('repo-auth');
+    await createTestWorkspace('repo-auth', state);
+    const deps = createTestDeps({
+      gitDetector: createMockGitDetector({ hasStaged: true, neverPushedBranches: ['feature'] }),
+    });
+
+    const result = await removeInstance('auth', deps, true);
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) throw new Error('Expected success');
+    expect(result.forced).toBe(true);
+    expect(result.gitState).toBeDefined();
+    expect(result.gitState?.hasStaged).toBe(true);
+    expect(result.gitState?.neverPushedBranches).toEqual(['feature']);
+    expect(result.blockers).toContain('staged changes detected');
+    expect(result.blockers).toContain('branches never pushed: feature');
+  });
+
+  it('returns forced=true with no blockers when force-removing clean instance', async () => {
+    const state = createTestState('repo-auth');
+    await createTestWorkspace('repo-auth', state);
+    const deps = createTestDeps({
+      gitDetector: createMockGitDetector(), // clean state
+    });
+
+    const result = await removeInstance('auth', deps, true);
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) throw new Error('Expected success');
+    expect(result.forced).toBe(true);
+    expect(result.gitState?.isClean).toBe(true);
+    expect(result.blockers).toBeUndefined();
+  });
+
+  it('proceeds with force removal even when git detection fails', async () => {
+    const state = createTestState('repo-auth');
+    await createTestWorkspace('repo-auth', state);
+    const mockGitDetector: GitStateDetector = {
+      getGitState: vi.fn().mockResolvedValue({
+        ok: false,
+        state: null,
+        error: { code: 'GIT_ERROR', message: 'not a git repository' },
+      }),
+    };
+    const deps = createTestDeps({ gitDetector: mockGitDetector });
+
+    const result = await removeInstance('auth', deps, true);
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) throw new Error('Expected success');
+    expect(result.forced).toBe(true);
+    expect(result.gitState).toBeUndefined();
   });
 
   it('still checks Docker availability when force=true', async () => {

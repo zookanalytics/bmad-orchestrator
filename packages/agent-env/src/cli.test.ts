@@ -285,10 +285,10 @@ describe('agent-env CLI', () => {
       expect(stderrStripped).toContain('--force');
     });
 
-    it('should allow removal with --force even if git state is dirty (unstaged changes)', async () => {
+    it('should allow removal with --force --yes even if git state is dirty (unstaged changes)', async () => {
       const instanceName = 'force-dirty-instance';
       await createMockWorkspace(instanceName);
-      const result = await runCli(['remove', instanceName, '--force'], {
+      const result = await runCli(['remove', instanceName, '--force', '--yes'], {
         MOCK_GIT_STATE: JSON.stringify({ hasUnstaged: true }),
         MOCK_DOCKER_AVAILABLE: 'true',
       });
@@ -296,7 +296,8 @@ describe('agent-env CLI', () => {
       const stderrStripped = stripAnsiCodes(result.stderr);
 
       expect(result.exitCode).toBe(0);
-      expect(stdoutStripped).toContain(`Instance 'force-dirty-instance' removed`);
+      expect(stdoutStripped).toContain(`Instance 'force-dirty-instance' force-removed`);
+      expect(stdoutStripped).toContain('Data permanently deleted');
       expect(stderrStripped).not.toContain('SAFETY_CHECK_FAILED');
 
       // Verify workspace is actually removed
@@ -424,6 +425,104 @@ describe('agent-env CLI', () => {
       expect(result.exitCode).toBe(1);
       expect(stderrStripped).toContain('--force');
       expect(stderrStripped).toContain('data loss is permanent');
+    });
+  });
+
+  describe('force-remove with --yes and audit log', () => {
+    it('force-removes dirty instance with --yes and writes audit log', async () => {
+      const instanceName = 'force-audit';
+      await createMockWorkspace(instanceName);
+      const result = await runCli(['remove', instanceName, '--force', '--yes'], {
+        MOCK_GIT_STATE: JSON.stringify({
+          hasStaged: true,
+          neverPushedBranches: ['feature-x'],
+        }),
+        MOCK_DOCKER_AVAILABLE: 'true',
+      });
+      const stdoutStripped = stripAnsiCodes(result.stdout);
+
+      expect(result.exitCode).toBe(0);
+      expect(stdoutStripped).toContain('force-removed');
+      expect(stdoutStripped).toContain('Data permanently deleted');
+
+      // Verify workspace is removed
+      const wsRoot = join(tempRoot, AGENT_ENV_DIR, WORKSPACES_DIR, `repo-${instanceName}`);
+      await expect(stat(wsRoot)).rejects.toThrow(/ENOENT/);
+
+      // Verify audit log was written
+      const auditLogPath = join(tempRoot, AGENT_ENV_DIR, 'audit.log');
+      const auditContent = await readFile(auditLogPath, 'utf-8');
+      const entry = JSON.parse(auditContent.trim());
+      expect(entry.action).toBe('force-remove');
+      expect(entry.instanceName).toBe(instanceName);
+      expect(entry.confirmationMethod).toBe('yes-flag');
+      expect(entry.gitState).toBeDefined();
+      expect(entry.gitState.hasStaged).toBe(true);
+    });
+
+    it('force-removes clean instance with --force (no confirmation needed)', async () => {
+      const instanceName = 'force-clean';
+      await createMockWorkspace(instanceName);
+      const result = await runCli(['remove', instanceName, '--force'], {
+        MOCK_GIT_STATE: JSON.stringify({}), // clean state
+        MOCK_DOCKER_AVAILABLE: 'true',
+      });
+      const stdoutStripped = stripAnsiCodes(result.stdout);
+
+      expect(result.exitCode).toBe(0);
+      expect(stdoutStripped).toContain('force-removed');
+
+      // Verify workspace is removed
+      const wsRoot = join(tempRoot, AGENT_ENV_DIR, WORKSPACES_DIR, `repo-${instanceName}`);
+      await expect(stat(wsRoot)).rejects.toThrow(/ENOENT/);
+
+      // Verify audit log was written with not-required confirmation
+      const auditLogPath = join(tempRoot, AGENT_ENV_DIR, 'audit.log');
+      const auditContent = await readFile(auditLogPath, 'utf-8');
+      const entry = JSON.parse(auditContent.trim());
+      expect(entry.action).toBe('force-remove');
+      expect(entry.confirmationMethod).toBe('not-required');
+    });
+
+    it('shows warning about data loss when force-removing dirty instance', async () => {
+      const instanceName = 'force-warn';
+      await createMockWorkspace(instanceName);
+      const result = await runCli(['remove', instanceName, '--force', '--yes'], {
+        MOCK_GIT_STATE: JSON.stringify({
+          hasUnstaged: true,
+          unpushedBranches: ['develop'],
+        }),
+        MOCK_DOCKER_AVAILABLE: 'true',
+      });
+      const stderrStripped = stripAnsiCodes(result.stderr);
+
+      expect(result.exitCode).toBe(0);
+      // Warning about unsaved work should be shown on stderr
+      expect(stderrStripped).toContain('WARNING');
+      expect(stderrStripped).toContain('unsaved work');
+      expect(stderrStripped).toContain('PERMANENTLY DELETED');
+    });
+
+    it('--force without --yes in non-TTY shows hint to use --yes', async () => {
+      const instanceName = 'force-no-tty';
+      await createMockWorkspace(instanceName);
+      const result = await runCli(['remove', instanceName, '--force'], {
+        MOCK_GIT_STATE: JSON.stringify({ hasStaged: true }),
+        MOCK_DOCKER_AVAILABLE: 'true',
+      });
+      const stderrStripped = stripAnsiCodes(result.stderr);
+
+      // In non-TTY (piped test), should fail with hint
+      expect(result.exitCode).toBe(1);
+      expect(stderrStripped).toContain('--yes');
+      expect(stderrStripped).toContain('non-interactive');
+    });
+
+    it('--yes flag is documented in --help', async () => {
+      const result = await runCli(['remove', '--help']);
+      expect(result.exitCode).toBe(0);
+      expect(result.stdout).toContain('--yes');
+      expect(result.stdout).toContain('--force');
     });
   });
 });

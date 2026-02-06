@@ -32,7 +32,13 @@ type Execute = (
 ) => Promise<ExecuteResult>;
 
 export type RemoveResult =
-  | { ok: true }
+  | {
+      ok: true;
+      forced?: boolean;
+      gitState?: GitState;
+      blockers?: string[];
+      containerCleanupFailed?: boolean;
+    }
   | {
       ok: false;
       error: { code: string; message: string; suggestion?: string };
@@ -174,13 +180,16 @@ export async function removeInstance(
     };
   }
 
-  // Step 3: Run git safety checks (if not forced)
-  if (!force) {
-    // We need to check git state inside the workspace, which may be inside the container.
-    // For safety checks, we run git commands against the workspace path on the host filesystem.
-    const gitResult = await deps.gitDetector.getGitState(wsPath.root);
+  // Step 3: Run git safety checks
+  // Always detect git state (even for force) — needed for warnings and audit log
+  const gitResult = await deps.gitDetector.getGitState(wsPath.root);
 
-    if (!gitResult.ok) {
+  let detectedGitState: GitState | undefined;
+  let detectedBlockers: string[] | undefined;
+
+  if (!gitResult.ok) {
+    // For non-force: this is an error
+    if (!force) {
       return {
         ok: false,
         error: {
@@ -190,44 +199,80 @@ export async function removeInstance(
         },
       };
     }
-
-    // Step 4: Evaluate safety checks
+    // For force: git detection failure is non-fatal, proceed without state
+  } else {
+    detectedGitState = gitResult.state;
     const blockers = evaluateSafetyChecks(gitResult.state);
 
     if (blockers.length > 0) {
+      detectedBlockers = blockers;
+
+      // Non-force: block removal
+      if (!force) {
+        return {
+          ok: false,
+          error: {
+            code: 'SAFETY_CHECK_FAILED',
+            message: 'Safety checks failed',
+            suggestion: 'Resolve the issues above, or use --force to bypass safety checks.',
+          },
+          gitState: gitResult.state,
+          blockers,
+        };
+      }
+    }
+  }
+
+  let containerCleanupFailed = false;
+
+  // Step 4: Stop container
+  const stopResult = await deps.container.containerStop(containerName);
+  if (!stopResult.ok) {
+    if (force) {
+      // For force: log warning but proceed with workspace deletion
+      // console.error here is a temporary measure, proper error reporting should be plumbed
+      console.error(
+        `Warning: Failed to stop container ${containerName}: ${stopResult.error.message}`
+      );
+      containerCleanupFailed = true;
+    } else {
       return {
         ok: false,
-        error: {
-          code: 'SAFETY_CHECK_FAILED',
-          message: 'Safety checks failed',
-          suggestion: 'Resolve the issues above, or use --force to bypass safety checks.',
-        },
-        gitState: gitResult.state,
-        blockers,
+        error: stopResult.error,
       };
     }
   }
 
-  // Step 5: Stop container
-  const stopResult = await deps.container.containerStop(containerName);
-  if (!stopResult.ok) {
-    return {
-      ok: false,
-      error: stopResult.error,
-    };
-  }
-
-  // Step 6: Remove container
+  // Step 5: Remove container
   const removeResult = await deps.container.containerRemove(containerName);
   if (!removeResult.ok) {
-    return {
-      ok: false,
-      error: removeResult.error,
-    };
+    if (force) {
+      // For force: log warning but proceed with workspace deletion
+      // console.error here is a temporary measure, proper error reporting should be plumbed
+      console.error(
+        `Warning: Failed to remove container ${containerName}: ${removeResult.error.message}`
+      );
+      containerCleanupFailed = true;
+    } else {
+      return {
+        ok: false,
+        error: removeResult.error,
+      };
+    }
   }
 
-  // Step 7: Delete workspace folder
+  // Step 6: Delete workspace folder
   await deleteWorkspace(wsPath, deps.deleteFsDeps);
+
+  if (force) {
+    return {
+      ok: true,
+      forced: true,
+      gitState: detectedGitState,
+      blockers: detectedBlockers,
+      containerCleanupFailed,
+    };
+  }
 
   return { ok: true };
 }
