@@ -7,7 +7,7 @@
  */
 
 import { appendFile, mkdir, readFile, rename, writeFile } from 'node:fs/promises';
-import { dirname, join } from 'node:path';
+import { join } from 'node:path';
 
 import type { InstanceState, WorkspacePath } from './types.js';
 
@@ -82,10 +82,10 @@ export async function writeStateAtomic(
   state: InstanceState,
   deps: StateFsDeps = defaultStateFsDeps
 ): Promise<void> {
-  const tmpPath = join(dirname(wsPath.stateFile), STATE_FILE_TMP);
+  const tmpPath = join(wsPath.agentEnvDir, STATE_FILE_TMP);
 
   // Ensure .agent-env directory exists
-  await deps.mkdir(dirname(wsPath.stateFile), { recursive: true });
+  await deps.mkdir(wsPath.agentEnvDir, { recursive: true });
 
   // Write to temp file, then atomic rename
   const content = JSON.stringify(state, null, 2) + '\n';

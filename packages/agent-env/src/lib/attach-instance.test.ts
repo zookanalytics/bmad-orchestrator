@@ -365,6 +365,27 @@ describe('attachInstance', () => {
     expect(result.error.message).toContain('tmux');
   });
 
+  it('returns generic attach error when docker exec fails without tmux issue', async () => {
+    const state = createTestState('repo-auth');
+    await createTestWorkspace('repo-auth', state);
+    const executor = vi.fn().mockResolvedValue({
+      ok: false,
+      stdout: '',
+      stderr: 'Error response from daemon: container is not running',
+      exitCode: 1,
+    } satisfies ExecuteResult);
+    const deps = createTestDeps({ executor });
+
+    const result = await attachInstance('auth', deps);
+
+    expect(result.ok).toBe(false);
+    if (result.ok) throw new Error('Expected failure');
+    expect(result.error.code).toBe('CONTAINER_ERROR');
+    expect(result.error.message).toContain('Failed to attach');
+    expect(result.error.message).not.toContain('tmux is not available');
+    expect(result.error.suggestion).toContain('Ensure the container is running');
+  });
+
   it('starts container when status is not-found (orphaned workspace)', async () => {
     const state = createTestState('repo-auth');
     await createTestWorkspace('repo-auth', state);

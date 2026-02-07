@@ -120,7 +120,8 @@ export async function findWorkspaceByName(
 export async function attachInstance(
   instanceName: string,
   deps: AttachInstanceDeps,
-  onContainerStarting?: () => void
+  onContainerStarting?: () => void,
+  onAttaching?: () => void
 ): Promise<AttachResult> {
   // Step 1: Find workspace
   const lookup = await findWorkspaceByName(instanceName, deps.workspaceFsDeps);
@@ -195,6 +196,7 @@ export async function attachInstance(
   }
 
   // Step 5: Attach to tmux session
+  onAttaching?.();
   const attachResult = await attachToInstance(containerName, deps.executor);
 
   if (!attachResult.ok) {

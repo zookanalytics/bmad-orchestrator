@@ -37,7 +37,7 @@ items:
   - id: 4
     action_item: "Technical Debt #2"
     workflow: bmad:bmm:workflows:quick-dev
-    status: pending
+    status: done
     summary: |
       Add cleanup on partial failure in createWorkspace when .agent-env mkdir fails. Currently
       in create-instance.ts (packages/agent-env), if the .agent-env directory creation fails
@@ -48,7 +48,7 @@ items:
   - id: 5
     action_item: "Technical Debt #3"
     workflow: bmad:bmm:workflows:quick-dev
-    status: pending
+    status: done
     summary: |
       Replace dirname() usage in state.ts with pre-computed wsPath.agentEnvDir. The state.ts
       module in packages/agent-env currently computes the agent-env directory path using
@@ -58,7 +58,7 @@ items:
   - id: 6
     action_item: "Technical Debt #4"
     workflow: bmad:bmm:workflows:quick-dev
-    status: pending
+    status: done
     summary: |
       Add missing tmux attach edge case test. The attach command in packages/agent-env is
       missing a test for a specific tmux attach edge case. Add the missing test case to
@@ -67,7 +67,7 @@ items:
   - id: 7
     action_item: "Technical Debt #5"
     workflow: bmad:bmm:workflows:quick-dev
-    status: pending
+    status: done
     summary: |
       Add visual separator before "Attaching..." message in the attach command output.
       Currently in packages/agent-env, the attach command displays "Attaching..." without a
@@ -77,7 +77,7 @@ items:
   - id: 8
     action_item: "Technical Debt #6"
     workflow: bmad:bmm:workflows:quick-dev
-    status: pending
+    status: done
     summary: |
       Remove or justify glob devDependency added for single debug test. The glob package was
       added as a devDependency in packages/agent-env for a single debug test. Either remove

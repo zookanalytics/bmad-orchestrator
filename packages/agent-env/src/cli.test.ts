@@ -1,6 +1,5 @@
 import { execa } from 'execa';
-import { glob } from 'glob';
-import { mkdir, rm, writeFile, chmod, readFile, stat } from 'node:fs/promises';
+import { mkdir, readdir, rm, writeFile, chmod, readFile, stat } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, it, expect, beforeAll, beforeEach, afterEach, afterAll } from 'vitest';
@@ -551,9 +550,11 @@ describe('MOCK EXECUTABLE DIRECT INVOKE DEBUG', () => {
     expect(execaResult.stderr).toContain('[MOCK-EXEC] Running mock for command: docker');
     expect(execaResult.stderr).toContain('[MOCK-EXEC] MOCK_DOCKER_AVAILABLE: true');
 
-    // Use glob to find the log file
-    const globPattern = join(specificTempDir, `mock_exec_env_*_docker.log`);
-    const files = await glob(globPattern);
+    // Find the log file by listing the directory and filtering
+    const allFiles = await readdir(specificTempDir);
+    const files = allFiles
+      .filter((f) => f.startsWith('mock_exec_env_') && f.endsWith('_docker.log'))
+      .map((f) => join(specificTempDir, f));
 
     expect(files.length).toBeGreaterThan(0);
     const logFilePath = files[0];
