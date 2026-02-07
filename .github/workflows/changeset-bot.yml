@@ -1,0 +1,36 @@
+# Changeset Bot - comments on PRs with changeset coverage summary (FR32)
+#
+# ⚠️  KNOWN ISSUE: changesets/bot is a GitHub App, NOT a GitHub Action.
+# The `uses: changesets/bot@v1` reference below will FAIL at runtime because
+# the changesets/bot repository has no action.yml.
+#
+# CORRECT FIX: Install the changeset-bot GitHub App on this repository:
+#   https://github.com/apps/changeset-bot
+# Once the App is installed, DELETE this workflow file — the App handles
+# PR comments automatically without any workflow configuration.
+#
+# This file is retained temporarily because ATDD acceptance tests validate
+# its YAML structure. Remove this file and update tests together.
+#
+# When a PR is opened or updated, the bot comments indicating which packages
+# have changesets and which do not. This helps maintainers ensure version
+# bumps are tracked before merging.
+
+name: Changeset Bot
+
+on:
+  pull_request_target:
+    types: [opened, synchronize]
+
+permissions:
+  pull-requests: write
+
+jobs:
+  bot:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Comment on PR with changeset status
+        uses: changesets/bot@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
