@@ -1,0 +1,117 @@
+# Publish workflow for @zookanalytics packages
+#
+# Trigger: push to main (after PR merge)
+# Pattern: "Version Packages" PR via changesets/action@v1
+#
+# FLOW:
+# 1. Developer merges feature PR to main (with changeset file included)
+# 2. This workflow triggers on push to main
+# 3. changesets/action detects pending changesets
+# 4. Action creates/updates "Version Packages" PR with bumped versions + changelogs
+# 5. Developer reviews and merges Version Packages PR
+# 6. This workflow triggers again on that merge
+# 7. Action runs `pnpm changeset publish` — checks each package against npm,
+#    publishes if version is newer, skips if already published
+# 8. Action creates GitHub release with changelog
+
+name: Publish
+
+on:
+  push:
+    branches: [main]
+
+# Queue concurrent publishes — never cancel a running publish (FR15)
+concurrency:
+  group: publish
+  cancel-in-progress: false
+
+# Explicit minimal permissions (NFR2)
+permissions:
+  contents: write       # Create GitHub releases, push version bumps
+  pull-requests: write  # Create/update "Version Packages" PR
+  id-token: write       # Enable Trusted Publishing (OIDC) for npm
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+
+    steps:
+      # Shallow clone (default depth=1) is intentional. changesets/action uses
+      # the GitHub API (not git log) for changelog generation, and creates its
+      # own branch for the Version Packages PR. Full history (fetch-depth: 0)
+      # is only needed in ci.yml for `changeset status` comparison.
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          registry-url: 'https://registry.npmjs.org'
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Get pnpm store directory
+        shell: bash
+        run: echo "STORE_PATH=$(pnpm store path --silent)" >> "$GITHUB_ENV"
+
+      - name: Setup pnpm cache
+        uses: actions/cache@v4
+        with:
+          path: ${{ env.STORE_PATH }}
+          key: ${{ runner.os }}-pnpm-store-${{ hashFiles('**/pnpm-lock.yaml') }}
+          restore-keys: |
+            ${{ runner.os }}-pnpm-store-
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build all packages
+        run: pnpm -r build
+
+      # RECOVERY PROCEDURES:
+      # ─────────────────────
+      # If a publish fails (version bumped in package.json but not yet on npm):
+      #   1. Re-run this workflow. `changeset publish` checks npm before publishing —
+      #      if the version is already published, it skips; if not, it publishes.
+      #   2. If re-run exits with "nothing to do" (changesets consumed, versions bumped):
+      #      Manual fallback from local checkout:
+      #        git checkout main && git pull
+      #        pnpm install && pnpm -r build
+      #        npm login  # authenticate to @zookanalytics org
+      #        pnpm changeset publish
+      #
+      # If @changesets/changelog-github crashes during `changeset version`:
+      #   Temporarily switch changelog in .changeset/config.json:
+      #     "changelog": "@changesets/changelog-git"
+      #   This unblocks publishing. Revert after the publish succeeds.
+      #
+      # ROLLBACK (deprecate a bad version):
+      #   npm deprecate @zookanalytics/agent-env@<version> "reason for deprecation"
+      #   This marks the version as deprecated but does not unpublish it.
+      #   Users on that version see a warning on `npm install`.
+      #
+      # TRUSTED PUBLISHING (OIDC):
+      # ──────────────────────────
+      # This workflow uses npm Trusted Publishing (OIDC) instead of a stored NPM_TOKEN.
+      # Configuration (completed 2026-02-06):
+      #   - Package: @zookanalytics/agent-env
+      #   - Repository: ZookAnalytics/bmad-orchestrator
+      #   - Workflow: publish.yml
+      # How it works:
+      #   - The `id-token: write` permission allows GitHub to issue an OIDC token
+      #   - npm verifies the token matches the configured repository and workflow
+      #   - No secret to leak, rotate, or expire
+      # To verify/fix:
+      #   - npm package settings → "Publishing access" → Trusted Publishing
+      #   - Ensure repository and workflow name match exactly
+      #   - If OIDC fails, the workflow itself fails visibly — no silent drift
+      - name: Create Release Pull Request or Publish
+        id: changesets
+        uses: changesets/action@v1
+        with:
+          publish: pnpm changeset publish
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          NPM_CONFIG_PROVENANCE: true
