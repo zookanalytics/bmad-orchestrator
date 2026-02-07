@@ -8,6 +8,10 @@ lastValidated: '2026-02-07'
 lastUpdated: '2026-02-07'
 updateHistory:
   - date: '2026-02-07'
+    change: 'FR32 (changeset bot) promoted from deferred to Epic 3 Story 3.3. CI changeset status step changed to advisory (warns, does not block). Stale changeset file better-parents-itch.md removed. Cross-cutting #8 and Pattern Verification updated. FR coverage 30→31/35.'
+  - date: '2026-02-07'
+    change: 'Pre-rel-3 validation: READY. No architecture drift found. publish.yml and README.md correctly absent (created by Stories 3.1/3.3). One pre-condition: stale changeset file better-parents-itch.md must be removed (breaks test). Test count updated 446→439.'
+  - date: '2026-02-07'
     change: 'Post-rel-2 validation: CONFORMANT. Test count updated 417→446. bmm-retrospective-module marked private (resolved). Orchestrator shared dep moved to devDependencies (resolved). Full rel-2 post-implementation validation entry added.'
   - date: '2026-02-06'
     change: 'Mid-rel-2 validation: schema version updated to 3.1.2, bmm-retrospective-module noted as non-private risk, orchestrator shared-dep forward note added'
@@ -33,6 +37,10 @@ validationFindings:
   - severity: low
     summary: 'Schema version mismatch: architecture had 3.1.1, actual is 3.1.2'
     status: 'resolved — architecture updated'
+  - severity: moderate
+    summary: 'Stale changeset file better-parents-itch.md has empty frontmatter (---\n---) — breaks changeset format validation test'
+    resolution: 'Remove the file before starting Epic rel-3'
+    status: 'open'
 postImplementationValidation:
   - epic: 'rel-1'
     date: '2026-02-05'
@@ -47,6 +55,10 @@ postImplementationValidation:
     result: 'CONFORMANT'
     notes: 'All 4 stories implemented per architecture. Changesets installed, configured, CI validation added, manual publish pipeline validated via 29 root-level tests. Two open findings resolved: (1) bmm-retrospective-module marked private. (2) orchestrator shared dep moved to devDependencies. Story 2.4 AC4 (actual npm publish) pending npm login — all automated validation passes. 446 total tests, zero regressions.'
 preImplementationValidation:
+  - epic: 'rel-3'
+    date: '2026-02-07'
+    result: 'READY'
+    notes: 'All architecture decisions confirmed conformant. publish.yml and README.md correctly absent (created by Epic 3). changeset config, package configs, CI integration, private package exclusions all match spec. One pre-condition: stale changeset file better-parents-itch.md (empty frontmatter) must be removed — breaks changeset format validation test. Test count 438 passing + 1 failing (the stale changeset). All Epic 3 dependencies satisfied (rel-1: done, rel-2: done).'
   - epic: 'rel-2'
     date: '2026-02-06'
     result: 'READY'
@@ -147,7 +159,7 @@ Architecturally, most FRs map to configuration (changesets config, package.json 
 5. **Integration test isolation is the critical design decision.** Fresh GitHub Actions job with no `actions/checkout`. Build job uploads tarball as artifact. Integration test job downloads only the tarball into an empty runner workspace. No checkout, no `node_modules`, no `pnpm-lock.yaml`. The only thing on disk is the `.tgz` file. This is the cleanest isolation achievable in GitHub Actions without Docker.
 6. **Husky/lint-staged — verified non-issue.** No commitlint, no commit-msg hook. Only `lint-staged` on pre-commit, which doesn't run in CI.
 7. **Conventional-commit plugin ordering.** Manual `pnpm changeset` is the true MVP mechanism. The conventional-commit plugin is an optimization to add after proving the pipeline works without it. This reduces moving parts during initial setup and isolates debugging (pipeline problem vs plugin problem).
-8. **Complexity budget — FR31-33 deferred.** Scope validation (FR31), changeset bot (FR32), and config drift detection (FR33) are deferred. At solo-maintainer scale with 2-3 packages, the feedback loops are short enough that these solve problems that barely exist. Architecture explicitly recommends deferral.
+8. **Complexity budget — FR31, FR33 deferred; FR32 promoted.** Scope validation (FR31) and config drift detection (FR33) remain deferred — at solo-maintainer scale with 2-3 packages, the feedback loops are short enough. **FR32 (changeset bot) promoted to Epic 3 Story 3.3** after readiness review identified that without it, a forgotten changeset is a silent failure: the merge succeeds but the package never publishes. The bot comments on PRs showing changeset coverage — low effort, eliminates the silent failure tier risk.
 9. **Token health monitoring — FR34 simplified with Trusted Publishing.** With OIDC-based authentication, there is no stored token to expire. The "expired token + no publishable merges = silent failure" scenario is eliminated. The `token-health.yml` workflow is no longer needed. If OIDC configuration drifts (package unlinked from repo), the publish workflow itself will fail visibly.
 
 ### Failure Mode Landscape
@@ -424,7 +436,8 @@ fi
 **Pattern Verification:**
 - PR review checks YAML style compliance
 - Integration test job validates assertion patterns work (if assertions themselves fail, the test fails visibly)
-- `pnpm changeset status` in CI verifies changeset files are well-formed
+- `pnpm changeset status` in CI is advisory (warns if no changesets found, does not block infrastructure-only PRs). Vitest format tests (`changeset-format.test.ts`) are the primary gate for malformed changesets.
+- Changeset bot (FR32) comments on PRs showing which packages have changesets and which do not — prevents silent omission of version bumps
 
 ### Anti-Patterns to Avoid
 
@@ -652,13 +665,21 @@ After analysis, `shared` is small (102 lines, 4 runtime functions) but `orchestr
 ### Confirmed Assumptions (No Drift)
 
 - `packages/shared/package.json` is correctly marked `"private": true` ✅
+- `packages/bmm-retrospective-module/package.json` is correctly marked `"private": true` ✅
+- `packages/orchestrator/package.json` is correctly marked `"private": true` ✅
 - `pnpm-workspace.yaml` configured with `packages: ['packages/*']` ✅
-- `.github/workflows/ci.yml` has the expected single `check` job structure ✅
-- No `.changeset/` directory exists (not yet initialized) ✅
-- No `publish.yml` or `token-health.yml` exist (not yet created) ✅
+- `.github/workflows/ci.yml` has `check` + `integration-test` job structure ✅ (updated in rel-1)
+- `.changeset/` directory exists with valid `config.json` and extended `README.md` ✅ (created in rel-2)
+- No `publish.yml` exists (to be created in Story 3.1) ✅
 - Root `package.json` is `"private": true` with husky + lint-staged (no commitlint) ✅
 - No README.md exists at root (to be created with badges in Story 3.3) ✅
 - `agent-env` uses `"type": "module"` with ESM exports ✅
+- `agent-env` build uses `tsup` with `noExternal: ['@zookanalytics/shared']` ✅
+- `@zookanalytics/agent-env@0.1.1` published on npm ✅ (published in rel-2-4)
+- `@zookanalytics/shared` in agent-env `devDependencies` (not runtime) ✅
+- `@zookanalytics/shared` in orchestrator `devDependencies` (not runtime) ✅
+- CI `changeset status` validation runs on PRs only ✅ (added in rel-2-3)
+- `"changeset": "changeset"` script in root `package.json` ✅
 
 ### Pre-Epic rel-2 Validation (2026-02-06)
 
@@ -715,7 +736,7 @@ No circular dependencies or contradictions found.
 
 ### Requirements Coverage
 
-**Functional Requirements: 30/35 covered (86%)**
+**Functional Requirements: 31/35 covered (89%)**
 
 | FR Range | Category | Count | Coverage | Notes |
 |----------|----------|-------|----------|-------|
@@ -728,10 +749,11 @@ No circular dependencies or contradictions found.
 | FR21-24 | Package Configuration | 4 | ✅ | package.json fields verified, no changes needed |
 | FR25-28 | Visibility & Recovery | 4 | ✅ | README badge, inline YAML docs, npm deprecate documented |
 | FR29-30 | Auth & Security | 2 | ✅ | Explicit permissions, Trusted Publishing (OIDC) |
-| FR31-33 | Conditional (Deferred) | 3 | ⏳ | Scope validation, changeset bot, config drift — deferred by design |
+| FR31, FR33 | Conditional (Deferred) | 2 | ⏳ | Scope validation, config drift — deferred by design |
+| FR32 | Changeset Bot | 1 | ✅ | PR comments showing changeset coverage (promoted from deferred) |
 | FR34 | Token Health | 1 | ✅ | Not needed — Trusted Publishing eliminates token expiry concern |
 
-**5 FRs explicitly deferred:** FR18 (tarball file assertions), FR20 (no-rebuild validation), FR31 (scope validation), FR32 (changeset bot), FR33 (config drift detection). All are build-up or conditional per PRD — none are MVP-blocking.
+**4 FRs explicitly deferred:** FR18 (tarball file assertions), FR20 (no-rebuild validation), FR31 (scope validation), FR33 (config drift detection). All are build-up or conditional per PRD — none are MVP-blocking.
 
 **Non-Functional Requirements: 15/15 covered (100%)**
 
