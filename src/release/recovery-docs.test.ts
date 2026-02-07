@@ -172,4 +172,21 @@ describe('documentation is inline in publish.yml (not a separate file)', () => {
     expect(trustedLine?.trimStart().startsWith('#')).toBe(true);
     expect(rollbackLine?.trimStart().startsWith('#')).toBe(true);
   });
+
+  it('documentation sections appear in logical order', () => {
+    const raw = loadWorkflowRaw();
+    const recoveryIdx = raw.indexOf('RECOVERY PROCEDURES');
+    const trustedIdx = raw.indexOf('TRUSTED PUBLISHING');
+    const rollbackIdx = raw.indexOf('ROLLBACK');
+
+    // All sections must be present
+    expect(recoveryIdx).toBeGreaterThan(-1);
+    expect(trustedIdx).toBeGreaterThan(-1);
+    expect(rollbackIdx).toBeGreaterThan(-1);
+
+    // Recovery procedures come before rollback
+    expect(recoveryIdx).toBeLessThan(rollbackIdx);
+    // Rollback comes before Trusted Publishing config section
+    expect(rollbackIdx).toBeLessThan(trustedIdx);
+  });
 });

@@ -6,7 +6,6 @@ stepsCompleted:
   - step-04-ux-alignment
   - step-05-epic-quality-review
   - step-06-final-assessment
-  - step-04-ux-alignment
 documents:
   prd: release-infrastructure/prd.md
   architecture: release-infrastructure/architecture.md
@@ -182,7 +181,7 @@ The PRD is **well-structured and thorough**. Requirements are clearly numbered (
 | FR29 | Authenticate via Trusted Publishing (OIDC) | Epic 3 (Story 3.1) | ✓ Covered |
 | FR30 | Explicit minimal workflow permissions | Epic 3 (Story 3.1) | ✓ Covered |
 | FR31 | Validate commit scopes (conditional) | Deferred per Architecture | ⏭ Deferred |
-| FR32 | Changeset bot on PRs (conditional) | Deferred per Architecture | ⏭ Deferred |
+| FR32 | Changeset bot on PRs (conditional) | Epic 3 (Story 3.3) | ✅ Covered |
 | FR33 | Config drift detection (conditional) | Deferred per Architecture | ⏭ Deferred |
 | FR34 | ~~Token health monitoring~~ | Superseded by OIDC | ~~Superseded~~ |
 
