@@ -159,7 +159,7 @@ development_status:
   rel-2-1-initialize-changesets-in-the-monorepo: done
   rel-2-2-configure-changeset-scope-mapping: done
   rel-2-3-create-manual-changeset-workflow: done
-  rel-2-4-perform-first-manual-publish-via-changesets: backlog
+  rel-2-4-perform-first-manual-publish-via-changesets: review
   rel-epic-2-retrospective: optional
 
   # ─── Release Epic 3: Automated Publishing & Distribution ───
