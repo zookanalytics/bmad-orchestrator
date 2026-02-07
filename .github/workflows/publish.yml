@@ -1,4 +1,5 @@
 # Publish workflow for @zookanalytics packages
+# Requirements (FRxx/NFRxx) defined in: _bmad-output/planning-artifacts/release-infrastructure/
 #
 # Trigger: push to main (after PR merge)
 # Pattern: "Version Packages" PR via changesets/action@v1
@@ -70,43 +71,74 @@ jobs:
       - name: Build all packages
         run: pnpm -r build
 
-      # RECOVERY PROCEDURES:
-      # ─────────────────────
-      # If a publish fails (version bumped in package.json but not yet on npm):
-      #   1. Re-run this workflow. `changeset publish` checks npm before publishing —
-      #      if the version is already published, it skips; if not, it publishes.
-      #   2. If re-run exits with "nothing to do" (changesets consumed, versions bumped):
-      #      Manual fallback from local checkout:
+      # RECOVERY PROCEDURES (FR10, FR11, FR12, FR28):
+      # ──────────────────────────────────────────────
+      # This workflow is idempotent — safe to re-run at any point:
+      #   - FR10: Re-running after failure produces no side effects
+      #   - FR11: `changeset version` detects already-bumped versions and skips them
+      #   - FR12: `changeset publish` checks npm registry before publishing —
+      #           already-published versions are skipped, unpublished versions are published
+      #
+      # Recovery scenarios:
+      #
+      # 1. PUBLISH FAILED (version bumped in package.json but not yet on npm):
+      #    → Re-run this workflow. Changesets detects the unpublished version and publishes it.
+      #
+      # 2. RE-RUN EXITS "NOTHING TO DO" (changesets consumed, versions already bumped):
+      #    → Manual fallback from local checkout:
       #        git checkout main && git pull
       #        pnpm install && pnpm -r build
       #        npm login  # authenticate to @zookanalytics org
       #        pnpm changeset publish
+      #    ⚠ Note: manual publish requires an npm automation/granular access token,
+      #      will NOT include SLSA provenance attestation, and will fail with 403
+      #      if token-based auth has been disabled on the npm package settings.
       #
-      # If @changesets/changelog-github crashes during `changeset version`:
-      #   Temporarily switch changelog in .changeset/config.json:
-      #     "changelog": "@changesets/changelog-git"
-      #   This unblocks publishing. Revert after the publish succeeds.
+      # 3. CHANGELOG PLUGIN CRASHES during `changeset version`:
+      #    → Temporarily switch changelog in .changeset/config.json:
+      #        "changelog": "@changesets/changelog-git"
+      #      This unblocks publishing. Revert after the publish succeeds.
       #
-      # ROLLBACK (deprecate a bad version):
+      # ROLLBACK — DEPRECATE A BAD VERSION (FR27):
+      # ───────────────────────────────────────────
+      # npm does not allow unpublishing versions older than 72 hours.
+      # The primary rollback mechanism is deprecation:
+      #
       #   npm deprecate @zookanalytics/agent-env@<version> "reason for deprecation"
-      #   This marks the version as deprecated but does not unpublish it.
-      #   Users on that version see a warning on `npm install`.
       #
-      # TRUSTED PUBLISHING (OIDC):
-      # ──────────────────────────
+      # This marks the version as deprecated — users see a warning on `npm install`.
+      # The deprecated version remains installable but is flagged.
+      # To undo deprecation: npm deprecate @zookanalytics/agent-env@<version> ""
+      #
+      # After deprecating, publish a fix version:
+      #   1. Create a changeset: pnpm changeset (select agent-env, patch bump)
+      #   2. Commit and merge the changeset to main
+      #   3. The automated pipeline handles the rest
+      #
+      # TRUSTED PUBLISHING (OIDC) CONFIGURATION (FR29, FR30):
+      # ───────────────────────────────────────────────────
       # This workflow uses npm Trusted Publishing (OIDC) instead of a stored NPM_TOKEN.
+      # No secret to leak, rotate, or expire — authentication is tied to this repo+workflow.
+      #
       # Configuration (completed 2026-02-06):
       #   - Package: @zookanalytics/agent-env
       #   - Repository: ZookAnalytics/bmad-orchestrator
       #   - Workflow: publish.yml
+      #   - npm settings: https://www.npmjs.com/package/@zookanalytics/agent-env/access
+      #
       # How it works:
-      #   - The `id-token: write` permission allows GitHub to issue an OIDC token
-      #   - npm verifies the token matches the configured repository and workflow
-      #   - No secret to leak, rotate, or expire
-      # To verify/fix:
-      #   - npm package settings → "Publishing access" → Trusted Publishing
-      #   - Ensure repository and workflow name match exactly
-      #   - If OIDC fails, the workflow itself fails visibly — no silent drift
+      #   1. The `id-token: write` permission allows GitHub to issue an OIDC token
+      #   2. npm verifies the token matches the configured repository and workflow
+      #   3. If verified, the publish is authorized — no NPM_TOKEN needed
+      #
+      # To verify/fix Trusted Publishing:
+      #   1. Go to npmjs.com/package/@zookanalytics/agent-env/access
+      #   2. Check "Publishing access" → "Trusted Publishing" section
+      #   3. Verify repository is "ZookAnalytics/bmad-orchestrator"
+      #   4. Verify workflow name is "publish.yml"
+      #   5. If OIDC fails with 403/401, re-check steps 3-4 — names must match exactly
+      #   6. If package is unlinked, re-link via npm package settings
+      #
       # GITHUB RELEASES (FR8, NFR10):
       # After a successful publish, changesets/action creates a GitHub release
       # per published package. Release notes come from @changesets/changelog-github
@@ -120,4 +152,5 @@ jobs:
           createGithubReleases: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # Generate SLSA provenance attestation for published packages (requires id-token: write)
           NPM_CONFIG_PROVENANCE: true
