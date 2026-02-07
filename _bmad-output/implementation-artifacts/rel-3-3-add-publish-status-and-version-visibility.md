@@ -3,7 +3,7 @@
 **Story ID:** rel-3-3
 **Epic:** Release Epic 3 - Automated Publishing & Distribution
 **Sprint:** Release Infrastructure Sprint 3
-**Status:** in-progress
+**Status:** done
 
 ---
 
@@ -50,9 +50,9 @@ So that I can verify process health, deployment outcomes, and whether PRs includ
 - [x] Task 4: Run full test suite and verify no regressions
 
 ### Review Follow-ups (AI)
-- [ ] [AI-Review][HIGH] Install changeset-bot GitHub App on repository (https://github.com/apps/changeset-bot) to satisfy AC2 [.github/workflows/changeset-bot.yml]
-- [ ] [AI-Review][HIGH] Delete .github/workflows/changeset-bot.yml after App is installed (workflow uses non-existent Action)
-- [ ] [AI-Review][MEDIUM] Update changeset-bot.test.ts to validate App installation instead of workflow YAML (after App installed)
+- [x] [AI-Review][HIGH] Install changeset-bot GitHub App on repository (https://github.com/apps/changeset-bot) to satisfy AC2 — DONE (installed by maintainer)
+- [x] [AI-Review][HIGH] Delete .github/workflows/changeset-bot.yml after App is installed (workflow uses non-existent Action) — DONE (post-rel-3 validation)
+- [x] [AI-Review][MEDIUM] Update changeset-bot.test.ts to validate App installation instead of workflow YAML — DONE (tests now verify no workflow file exists)
 - [ ] [AI-Review][LOW] Consider adding shared and bmm-retrospective-module to README Packages table [README.md]
 
 ---
@@ -102,7 +102,7 @@ So that I can verify process health, deployment outcomes, and whether PRs includ
 ### Completion Notes
 - AC status after code review:
   - AC 1: IMPLEMENTED — README.md created with GitHub Actions publish workflow status badge (`branch=main`) and npm version badge for `@zookanalytics/agent-env`, both positioned on lines 3-4 (prominently near top)
-  - AC 2: NOT IMPLEMENTED — `.github/workflows/changeset-bot.yml` uses `changesets/bot@v1` but this is a GitHub App, not a GitHub Action. The workflow will fail at runtime. Fix: install changeset-bot GitHub App on the repository, then delete the workflow file and update tests.
+  - AC 2: IMPLEMENTED — changeset-bot GitHub App installed on repository. Invalid workflow file deleted; tests updated to verify no workflow file exists.
   - AC 3: IMPLEMENTED — CI changeset step confirmed to use `::warning::` (advisory, not failure) — verified by 4 dedicated tests
 - 20 new tests added across 3 test files (total release tests: 79 across 7 files)
 - 558 of 589 tests pass; 31 pre-existing cli.test.ts/safety-report.test.ts failures unrelated to this story
@@ -170,3 +170,4 @@ Story cannot be marked **done** — AC2 is not implemented. Status remains **in-
 | 2026-02-07 | Story created and implementation started | Dev Agent |
 | 2026-02-07 | All tasks completed, status set to review | Dev Agent |
 | 2026-02-07 | Code review: AC2 not implemented (changesets/bot is a GitHub App, not Action). Added warning comments to workflow, added follow-up tasks, status → in-progress | Code Review (AI) |
+| 2026-02-07 | Post-rel-3 validation: changeset-bot App installed, workflow file deleted, tests updated. All ACs satisfied. Status → done | Architecture Validation |

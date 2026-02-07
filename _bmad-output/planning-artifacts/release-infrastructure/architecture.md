@@ -8,6 +8,8 @@ lastValidated: '2026-02-07'
 lastUpdated: '2026-02-07'
 updateHistory:
   - date: '2026-02-07'
+    change: 'Post-rel-3 validation: CONFORMANT. All 4 stories match architecture. publish.yml, README badges, GitHub releases, inline recovery docs all per spec. FR32 clarified as GitHub App (not Action). Stale changeset finding resolved. Test count 625 (10 invalid workflow tests replaced with 2 App-absence tests). changeset-bot.yml deleted (App replaces workflow).'
+  - date: '2026-02-07'
     change: 'FR32 (changeset bot) promoted from deferred to Epic 3 Story 3.3. CI changeset status step changed to advisory (warns, does not block). Stale changeset file better-parents-itch.md removed. Cross-cutting #8 and Pattern Verification updated. FR coverage 30→31/35.'
   - date: '2026-02-07'
     change: 'Pre-rel-3 validation: READY. No architecture drift found. publish.yml and README.md correctly absent (created by Stories 3.1/3.3). One pre-condition: stale changeset file better-parents-itch.md must be removed (breaks test). Test count updated 446→439.'
@@ -40,7 +42,7 @@ validationFindings:
   - severity: moderate
     summary: 'Stale changeset file better-parents-itch.md has empty frontmatter (---\n---) — breaks changeset format validation test'
     resolution: 'Remove the file before starting Epic rel-3'
-    status: 'open'
+    status: 'resolved — file removed before rel-3'
 postImplementationValidation:
   - epic: 'rel-1'
     date: '2026-02-05'
@@ -59,6 +61,10 @@ preImplementationValidation:
     date: '2026-02-07'
     result: 'READY'
     notes: 'All architecture decisions confirmed conformant. publish.yml and README.md correctly absent (created by Epic 3). changeset config, package configs, CI integration, private package exclusions all match spec. One pre-condition: stale changeset file better-parents-itch.md (empty frontmatter) must be removed — breaks changeset format validation test. Test count 438 passing + 1 failing (the stale changeset). All Epic 3 dependencies satisfied (rel-1: done, rel-2: done).'
+  - epic: 'rel-3 (complete — stories 3.1-3.4)'
+    date: '2026-02-07'
+    result: 'CONFORMANT'
+    notes: 'All 4 stories implemented per architecture. publish.yml created with changesets/action@v1, OIDC Trusted Publishing, concurrency queue, explicit permissions — exact match to spec. GitHub releases enabled via createGithubReleases: true. README.md created with publish status and npm version badges. Inline recovery/rollback/OIDC docs in publish.yml per convention (adjacent to step, not separate file). CI changeset step confirmed advisory. FR32 changeset bot delivered via GitHub App installation (not a workflow Action — architecture clarified). Stale changeset file pre-condition resolved. 633 total tests, zero regressions.'
   - epic: 'rel-2'
     date: '2026-02-06'
     result: 'READY'
@@ -159,7 +165,7 @@ Architecturally, most FRs map to configuration (changesets config, package.json 
 5. **Integration test isolation is the critical design decision.** Fresh GitHub Actions job with no `actions/checkout`. Build job uploads tarball as artifact. Integration test job downloads only the tarball into an empty runner workspace. No checkout, no `node_modules`, no `pnpm-lock.yaml`. The only thing on disk is the `.tgz` file. This is the cleanest isolation achievable in GitHub Actions without Docker.
 6. **Husky/lint-staged — verified non-issue.** No commitlint, no commit-msg hook. Only `lint-staged` on pre-commit, which doesn't run in CI.
 7. **Conventional-commit plugin ordering.** Manual `pnpm changeset` is the true MVP mechanism. The conventional-commit plugin is an optimization to add after proving the pipeline works without it. This reduces moving parts during initial setup and isolates debugging (pipeline problem vs plugin problem).
-8. **Complexity budget — FR31, FR33 deferred; FR32 promoted.** Scope validation (FR31) and config drift detection (FR33) remain deferred — at solo-maintainer scale with 2-3 packages, the feedback loops are short enough. **FR32 (changeset bot) promoted to Epic 3 Story 3.3** after readiness review identified that without it, a forgotten changeset is a silent failure: the merge succeeds but the package never publishes. The bot comments on PRs showing changeset coverage — low effort, eliminates the silent failure tier risk.
+8. **Complexity budget — FR31, FR33 deferred; FR32 promoted.** Scope validation (FR31) and config drift detection (FR33) remain deferred — at solo-maintainer scale with 2-3 packages, the feedback loops are short enough. **FR32 (changeset bot) promoted to Epic 3 Story 3.3** after readiness review identified that without it, a forgotten changeset is a silent failure: the merge succeeds but the package never publishes. The bot comments on PRs showing changeset coverage — low effort, eliminates the silent failure tier risk. **Note:** `changesets/bot` is a **GitHub App** (https://github.com/apps/changeset-bot), not a GitHub Action — it is installed on the repository, not referenced in a workflow file.
 9. **Token health monitoring — FR34 simplified with Trusted Publishing.** With OIDC-based authentication, there is no stored token to expire. The "expired token + no publishable merges = silent failure" scenario is eliminated. The `token-health.yml` workflow is no longer needed. If OIDC configuration drifts (package unlinked from repo), the publish workflow itself will fail visibly.
 
 ### Failure Mode Landscape
@@ -437,7 +443,7 @@ fi
 - PR review checks YAML style compliance
 - Integration test job validates assertion patterns work (if assertions themselves fail, the test fails visibly)
 - `pnpm changeset status` in CI is advisory (warns if no changesets found, does not block infrastructure-only PRs). Vitest format tests (`changeset-format.test.ts`) are the primary gate for malformed changesets.
-- Changeset bot (FR32) comments on PRs showing which packages have changesets and which do not — prevents silent omission of version bumps
+- Changeset bot (FR32) comments on PRs showing which packages have changesets and which do not — prevents silent omission of version bumps. Delivered via the changeset-bot GitHub App (installed on repo), not a workflow Action.
 
 ### Anti-Patterns to Avoid
 
@@ -467,7 +473,8 @@ bmad-orchestrator/                          # Existing repo root
 │   └── workflows/
 │       ├── ci.yml                          # DONE (Epic rel-1) — integration-test job,
 │       │                                   #                     pack-tarball step added
-│       └── publish.yml                     # NEW — changesets publish workflow with OIDC
+│       └── publish.yml                     # DONE (Epic rel-3) — changesets publish workflow with OIDC,
+│                                           #                     inline recovery docs, GitHub releases
 │       # token-health.yml                  # NOT NEEDED — Trusted Publishing eliminates token expiry
 ├── packages/
 │   ├── agent-env/
@@ -475,7 +482,7 @@ bmad-orchestrator/                          # Existing repo root
 │   └── shared/
 │       └── package.json                    # VERIFIED — "private": true (no changes)
 ├── package.json                            # VERIFIED — workspace root, private (no changes)
-└── README.md                               # MODIFIED — add publish status badge
+└── README.md                               # DONE (Epic rel-3) — publish status + npm version badges
 ```
 
 ### Files Modified: ci.yml Changes
@@ -670,9 +677,11 @@ After analysis, `shared` is small (102 lines, 4 runtime functions) but `orchestr
 - `pnpm-workspace.yaml` configured with `packages: ['packages/*']` ✅
 - `.github/workflows/ci.yml` has `check` + `integration-test` job structure ✅ (updated in rel-1)
 - `.changeset/` directory exists with valid `config.json` and extended `README.md` ✅ (created in rel-2)
-- No `publish.yml` exists (to be created in Story 3.1) ✅
+- `publish.yml` exists with changesets/action@v1, OIDC, concurrency, inline docs ✅ (created in rel-3-1)
 - Root `package.json` is `"private": true` with husky + lint-staged (no commitlint) ✅
-- No README.md exists at root (to be created with badges in Story 3.3) ✅
+- `README.md` exists at root with publish status and npm version badges ✅ (created in rel-3-3)
+- `createGithubReleases: true` explicitly set on changesets/action ✅ (added in rel-3-2)
+- Changeset bot GitHub App installed on repository (FR32) ✅ (installed in rel-3-3)
 - `agent-env` uses `"type": "module"` with ESM exports ✅
 - `agent-env` build uses `tsup` with `noExternal: ['@zookanalytics/shared']` ✅
 - `@zookanalytics/agent-env@0.1.1` published on npm ✅ (published in rel-2-4)
