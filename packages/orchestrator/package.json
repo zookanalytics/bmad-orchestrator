@@ -1,5 +1,6 @@
 {
   "name": "@zookanalytics/bmad-orchestrator",
+  "private": true,
   "version": "0.1.0",
   "description": "Unified command center for multi-DevPod development",
   "type": "module",
