@@ -160,7 +160,7 @@ development_status:
   rel-2-2-configure-changeset-scope-mapping: done
   rel-2-3-create-manual-changeset-workflow: done
   rel-2-4-perform-first-manual-publish-via-changesets: done
-  rel-epic-2-retrospective: optional
+  rel-epic-2-retrospective: done
 
   # ─── Release Epic 3: Automated Publishing & Distribution ───
   rel-epic-3: backlog
