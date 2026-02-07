@@ -7,6 +7,8 @@ import {
   DEVCONTAINER_UP_TIMEOUT,
   DOCKER_INFO_TIMEOUT,
   DOCKER_INSPECT_TIMEOUT,
+  DOCKER_RM_TIMEOUT,
+  DOCKER_STOP_TIMEOUT,
 } from './container.js';
 
 // ─── Test helpers ────────────────────────────────────────────────────────────
@@ -509,5 +511,141 @@ describe('devcontainerUp', () => {
     if (devcontainerCall) {
       expect(devcontainerCall[2]).toHaveProperty('timeout', DEVCONTAINER_UP_TIMEOUT);
     }
+  });
+});
+
+// ─── containerStop ──────────────────────────────────────────────────────────
+
+describe('containerStop', () => {
+  it('returns success when docker stop succeeds', async () => {
+    const executor = mockExecutor({
+      'docker stop': successResult,
+    });
+    const lifecycle = createContainerLifecycle(executor);
+
+    const result = await lifecycle.containerStop('ae-test');
+    expect(result.ok).toBe(true);
+  });
+
+  it('calls docker stop with correct container name', async () => {
+    const executor = mockExecutor({
+      'docker stop': successResult,
+    });
+    const lifecycle = createContainerLifecycle(executor);
+
+    await lifecycle.containerStop('ae-bmad-orch-auth');
+    expect(executor).toHaveBeenCalledWith(
+      'docker',
+      ['stop', 'ae-bmad-orch-auth'],
+      expect.objectContaining({ timeout: DOCKER_STOP_TIMEOUT })
+    );
+  });
+
+  it('returns success when container is not found (already removed)', async () => {
+    const executor = mockExecutor({
+      'docker stop': {
+        ok: false,
+        stdout: '',
+        stderr: 'Error: No such container: ae-test',
+        exitCode: 1,
+      },
+    });
+    const lifecycle = createContainerLifecycle(executor);
+
+    const result = await lifecycle.containerStop('ae-test');
+    expect(result.ok).toBe(true);
+  });
+
+  it('returns success when container is not running', async () => {
+    const executor = mockExecutor({
+      'docker stop': {
+        ok: false,
+        stdout: '',
+        stderr: 'Container ae-test is not running',
+        exitCode: 1,
+      },
+    });
+    const lifecycle = createContainerLifecycle(executor);
+
+    const result = await lifecycle.containerStop('ae-test');
+    expect(result.ok).toBe(true);
+  });
+
+  it('returns CONTAINER_STOP_TIMEOUT when stop fails unexpectedly', async () => {
+    const executor = mockExecutor({
+      'docker stop': {
+        ok: false,
+        stdout: '',
+        stderr: 'Cannot connect to the Docker daemon',
+        exitCode: 1,
+      },
+    });
+    const lifecycle = createContainerLifecycle(executor);
+
+    const result = await lifecycle.containerStop('ae-test');
+    expect(result.ok).toBe(false);
+    if (result.ok) throw new Error('Expected failure');
+    expect(result.error.code).toBe('CONTAINER_STOP_TIMEOUT');
+    expect(result.error.suggestion).toContain('docker rm -f');
+  });
+});
+
+// ─── containerRemove ────────────────────────────────────────────────────────
+
+describe('containerRemove', () => {
+  it('returns success when docker rm succeeds', async () => {
+    const executor = mockExecutor({
+      'docker rm': successResult,
+    });
+    const lifecycle = createContainerLifecycle(executor);
+
+    const result = await lifecycle.containerRemove('ae-test');
+    expect(result.ok).toBe(true);
+  });
+
+  it('calls docker rm with correct container name', async () => {
+    const executor = mockExecutor({
+      'docker rm': successResult,
+    });
+    const lifecycle = createContainerLifecycle(executor);
+
+    await lifecycle.containerRemove('ae-bmad-orch-auth');
+    expect(executor).toHaveBeenCalledWith(
+      'docker',
+      ['rm', 'ae-bmad-orch-auth'],
+      expect.objectContaining({ timeout: DOCKER_RM_TIMEOUT })
+    );
+  });
+
+  it('returns success when container not found (already cleaned up)', async () => {
+    const executor = mockExecutor({
+      'docker rm': {
+        ok: false,
+        stdout: '',
+        stderr: 'Error: No such container: ae-test',
+        exitCode: 1,
+      },
+    });
+    const lifecycle = createContainerLifecycle(executor);
+
+    const result = await lifecycle.containerRemove('ae-test');
+    expect(result.ok).toBe(true);
+  });
+
+  it('returns CONTAINER_ERROR when rm fails unexpectedly', async () => {
+    const executor = mockExecutor({
+      'docker rm': {
+        ok: false,
+        stdout: '',
+        stderr: 'Cannot connect to the Docker daemon',
+        exitCode: 1,
+      },
+    });
+    const lifecycle = createContainerLifecycle(executor);
+
+    const result = await lifecycle.containerRemove('ae-test');
+    expect(result.ok).toBe(false);
+    if (result.ok) throw new Error('Expected failure');
+    expect(result.error.code).toBe('CONTAINER_ERROR');
   });
 });

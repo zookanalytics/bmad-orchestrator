@@ -1141,10 +1141,13 @@ So that I never accidentally lose code.
 **Then** I get error "Instance 'nonexistent' not found"
 
 **Technical Requirements:**
-- Create `packages/agent-env/src/commands/remove.ts`
+- Create `packages/agent-env/src/lib/remove-instance.ts` orchestration module (follows attach-instance.ts DI pattern)
+- Update `packages/agent-env/src/commands/remove.ts` (replace placeholder)
 - Use `getGitState()` from Epic 3 for safety checks
-- Stop container before removing workspace (30 second timeout)
-- Handle running container: stop gracefully, then remove
+- Add `containerStop(containerName)` to `ContainerLifecycle` interface in `container.ts` — uses `docker stop` with 30 second timeout
+- Add `containerRemove(containerName)` to `ContainerLifecycle` interface in `container.ts` — uses `docker rm` to remove stopped container
+- Add `deleteWorkspace(wsPath)` to `workspace.ts` — recursively removes the workspace folder at `~/.agent-env/workspaces/<name>/`
+- Removal order: run safety checks → stop container → remove container → delete workspace folder
 - Delete workspace folder only if all checks pass
 - Safety check should complete in <3 seconds (NFR5)
 - Error code: `SAFETY_CHECK_FAILED`

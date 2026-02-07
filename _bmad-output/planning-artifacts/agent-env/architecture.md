@@ -2,7 +2,7 @@
 stepsCompleted: [1, 2, 3, 4, 5, 6, 7, 8]
 workflowComplete: true
 completedAt: '2026-01-27'
-lastUpdated: '2026-01-27'
+lastUpdated: '2026-02-06'
 inputDocuments:
   - '_bmad-output/planning-artifacts/agent-env/prd.md'
   - '_bmad-output/planning-artifacts/agent-env/product-brief.md'
@@ -628,26 +628,61 @@ All patterns aligned with BMAD Orchestrator for single-package consistency.
 
 ### Structure Patterns
 
-**Project Organization:**
+**Project Organization (Actual Implementation):**
+
+The implementation evolved to use orchestration modules in `lib/` instead of React hooks. This provides better testability and separation of concerns.
+
 ```
-src/
-├── agent-env/           # agent-env CLI
-│   ├── cli.ts           # Entry point
-│   ├── lib/             # Pure business logic (NO React)
-│   │   ├── __fixtures__/ # Test fixtures
-│   │   ├── types.ts
-│   │   ├── workspace.ts
-│   │   ├── workspace.test.ts
-│   │   └── ...
-│   ├── hooks/           # React hooks (useReducer, useEffect)
-│   ├── components/      # Ink React components
-│   └── commands/        # Commander subcommands
-├── orchestrator/        # bmad-orchestrator CLI (same structure)
-└── shared/              # Cross-CLI utilities
-    ├── errors.ts
-    ├── subprocess.ts
-    └── types.ts
+packages/
+├── agent-env/
+│   ├── src/
+│   │   ├── cli.ts               # Entry point, Commander setup
+│   │   ├── cli.test.ts
+│   │   ├── lib/                 # Pure business logic & orchestration
+│   │   │   ├── types.ts         # Shared types (GitState, InstanceState, etc.)
+│   │   │   ├── workspace.ts     # Workspace folder operations
+│   │   │   ├── state.ts         # State file management (atomic writes)
+│   │   │   ├── container.ts     # Docker/devcontainer lifecycle
+│   │   │   ├── git.ts           # Git state detection
+│   │   │   ├── devcontainer.ts  # Devcontainer config handling
+│   │   │   ├── completion.ts    # Shell completion generation
+│   │   │   ├── interactive-menu.ts  # Interactive menu logic
+│   │   │   ├── create-instance.ts   # Create orchestration
+│   │   │   ├── attach-instance.ts   # Attach orchestration
+│   │   │   ├── list-instances.ts    # List orchestration
+│   │   │   ├── purpose-instance.ts  # Purpose orchestration
+│   │   │   ├── remove-instance.ts   # Remove orchestration with safety checks
+│   │   │   ├── safety-report.ts     # Safety check formatting with severity tags
+│   │   │   ├── audit-log.ts         # Force-remove audit logging (JSON Lines)
+│   │   │   └── *.test.ts        # Co-located tests
+│   │   ├── components/          # Ink React components
+│   │   │   ├── InstanceList.tsx
+│   │   │   ├── InteractiveMenu.tsx
+│   │   │   └── StatusIndicator.tsx
+│   │   └── commands/            # Commander subcommands
+│   │       ├── create.ts
+│   │       ├── list.ts
+│   │       ├── attach.ts
+│   │       ├── remove.ts        # Remove with --force/--yes flags
+│   │       ├── purpose.ts
+│   │       └── completion.ts
+│   └── config/
+│       └── baseline/            # Baseline devcontainer config
+│           ├── devcontainer.json
+│           ├── Dockerfile
+│           ├── post-create.sh
+│           ├── init-host.sh
+│           └── git-config
+├── orchestrator/                # bmad-orchestrator CLI (same structure)
+└── shared/                      # Cross-CLI utilities
+    └── src/
+        ├── index.ts
+        ├── errors.ts
+        ├── subprocess.ts
+        └── types.ts
 ```
+
+**Note:** The `hooks/` directory was not implemented. Instead, orchestration logic lives in `lib/*-instance.ts` modules which are called directly by commands and components. This provides equivalent functionality with better testability through dependency injection.
 
 **Import Order (ESLint enforced):**
 1. Node built-ins (`node:fs`, `node:path`)
@@ -695,32 +730,50 @@ interface AppError {
 
 ### State Management Patterns
 
-**Reducer Action Format:**
+**Implementation Note:** The original architecture specified a React hooks pattern (`useAgentEnv` with `useReducer`). The actual implementation uses orchestration modules with dependency injection instead. This provides equivalent functionality with better testability.
+
+**Orchestration Module Pattern (Actual Implementation):**
 ```typescript
-// Domain-prefixed SCREAMING_SNAKE
-type AgentEnvAction =
-  | { type: 'INSTANCES_LOAD_START' }
-  | { type: 'INSTANCES_LOAD_COMPLETE'; payload: Instance[] }
-  | { type: 'INSTANCES_LOAD_ERROR'; payload: AppError }
-  | { type: 'INSTANCE_SELECT'; payload: string }
-  | { type: 'INSTANCE_DESELECT' };
-```
+// Each operation has a dedicated orchestration module
+// e.g., lib/attach-instance.ts
 
-**Hook Pattern:**
-```typescript
-function useAgentEnv() {
-  const [state, dispatch] = useReducer(reducer, initialState);
+export interface AttachInstanceDeps {
+  executor: Execute;
+  container: ContainerLifecycle;
+  workspaceFsDeps: FsDeps;
+  stateFsDeps: StateFsDeps;
+}
 
-  // Effects grouped together
-  useEffect(() => { /* initial load */ }, []);
-  useInput((input, key) => { /* keyboard */ });
-
-  // Actions as callbacks
-  const refresh = useCallback(async () => {...}, []);
-
-  return { ...state, refresh };
+export async function attachInstance(
+  instanceName: string,
+  deps: AttachInstanceDeps
+): Promise<AttachResult> {
+  // 1. Find workspace
+  // 2. Check Docker availability
+  // 3. Check/start container
+  // 4. Attach to tmux
+  // 5. Update state
 }
 ```
+
+**Factory Pattern for Dependencies:**
+```typescript
+export function createAttachDefaultDeps(): AttachInstanceDeps {
+  const executor = createExecutor();
+  return {
+    executor,
+    container: createContainerLifecycle(executor),
+    workspaceFsDeps: { mkdir, readdir, stat, homedir },
+    stateFsDeps: { readFile, writeFile, rename, mkdir, appendFile },
+  };
+}
+```
+
+This pattern enables:
+- Full testability through dependency injection
+- Clear separation of concerns
+- No React dependency for core logic
+- Easy mocking of filesystem and subprocess operations
 
 ### Process Patterns
 
@@ -1157,10 +1210,10 @@ export { createExecutor } from './subprocess.js';
 ### Project Success Factors
 
 **Clear Decision Framework**
-Every technology choice was made collaboratively with clear rationale. Single package `@zookanalytics/agent-tools` unifies both CLIs for easy adoption.
+Every technology choice was made collaboratively with clear rationale. Monorepo with `@zookanalytics/agent-env`, `@zookanalytics/bmad-orchestrator`, and `@zookanalytics/shared` provides clean separation with shared foundations.
 
 **Consistency Guarantee**
-Implementation patterns align 100% with BMAD Orchestrator. Multiple AI agents will produce compatible, consistent code.
+Implementation patterns align 100% with BMAD Orchestrator. Multiple AI agents produced compatible, consistent code across all 5 epics.
 
 **Complete Coverage**
 All project requirements are architecturally supported, with clear mapping from FRs to specific files.
@@ -1170,9 +1223,85 @@ Workspace-as-atomic-unit model provides clean separation of durable state (works
 
 ---
 
-**Architecture Status:** ✅ READY FOR IMPLEMENTATION
+**Architecture Status:** ✅ IMPLEMENTATION COMPLETE (All 5 Epics)
 
-**Next Phase:** Create epics and stories, then begin implementation using the architectural decisions documented herein.
+**Completed:** 2026-02-06. All epics (1-5) delivered. See Implementation Status section for drift log and known limitations.
 
-**Document Maintenance:** Update this architecture when major technical decisions are made during implementation.
+**Document Maintenance:** Update this architecture when post-MVP enhancements or new epics introduce architectural changes.
+
+---
+
+## Implementation Status (Updated 2026-02-06)
+
+This section tracks actual implementation against the architecture to identify drift and maintain alignment.
+
+### Epic Implementation Status
+
+| Epic | Status | Notes |
+|------|--------|-------|
+| Epic 1: Monorepo Setup | ✅ Complete | pnpm workspaces, shared package, agent-env scaffold |
+| Epic 2: Instance Creation | ✅ Complete | create command, baseline devcontainer, container lifecycle |
+| Epic 3: Instance Discovery & Git State | ✅ Complete | list command, git state detection, JSON output |
+| Epic 4: Instance Access & Management | ✅ Complete | attach, purpose, interactive menu, shell completion |
+| Epic 5: Safe Instance Removal | ✅ Complete | remove command with safety checks, force-remove, audit log |
+
+### Architecture Drift Log
+
+**Drift #1: Hooks Pattern → Orchestration Modules** (Epics 2-4)
+- Original: `hooks/useAgentEnv.ts` with React useReducer pattern
+- Actual: `lib/*-instance.ts` orchestration modules with dependency injection
+- Rationale: Better testability, no React dependency for core logic
+- Impact: Positive - improved separation of concerns
+
+**Drift #2: Additional Lib Modules** (Epics 2-4)
+- Original: workspace.ts, container.ts, git.ts, state.ts
+- Actual: Added devcontainer.ts, completion.ts, interactive-menu.ts, and orchestration modules
+- Rationale: Emerged from implementation needs
+- Impact: Neutral - follows same patterns
+
+**Drift #3: Baseline Config Files** (Epic 2)
+- Original: devcontainer.json, Dockerfile, features.json
+- Actual: devcontainer.json, Dockerfile, post-create.sh, init-host.sh, git-config
+- Rationale: Shell scripts needed for proper container initialization
+- Impact: Positive - better container setup
+
+**Drift #4: SafetyPrompt Component → safety-report Module** (Epic 5)
+- Original: `components/SafetyPrompt.tsx` React component specified
+- Actual: Implemented as `lib/safety-report.ts` text-based module with `formatSafetyReport()` and `getSuggestions()`
+- Rationale: Consistent with Drift #1 — orchestration logic lives in `lib/` modules, not React components. Safety output is formatted terminal text, not interactive UI
+- Impact: Positive — follows established lib-first pattern, better testability
+
+**Drift #5: New Modules for Epic 5** (Epic 5)
+- Original: Only `remove-instance.ts` and `SafetyPrompt.tsx` specified
+- Actual: Added `lib/audit-log.ts` (force-remove audit logging) and `lib/safety-report.ts` (severity-tagged safety formatting with suggestions)
+- Rationale: Clean separation of concerns — audit logging and safety formatting are distinct responsibilities
+- Impact: Positive — follows DI pattern with `AuditLogDeps` and co-located tests
+
+**Drift #6: GitState Type Limitations** (Epic 5)
+- Original: Story 5.2 ACs expected file counts per type (staged/unstaged/untracked), unpushed commit counts per branch, and first stash message
+- Actual: `GitState` from Epic 3 only provides booleans (`hasStaged`, `hasUnstaged`, `hasUntracked`) and arrays of branch names without counts
+- Rationale: GitState was designed for Epic 3's list display (indicators only). Enriching it for detailed safety reports would require upstream changes to `git.ts`
+- Impact: Minor — safety report shows presence/absence rather than counts. Functionally sufficient for safety blocking decisions. Enhancement candidate for post-MVP
+- Status: Documented as known limitation in Story 5.2
+
+### Epic 5 Implementation Checklist (Completed 2026-02-06)
+
+**Existing Modules Used:**
+- [x] `lib/git.ts` - Full git state detection (staged, unstaged, untracked, stashed, unpushed, never-pushed, detached HEAD)
+- [x] `lib/workspace.ts` - Workspace path resolution, scanning, and deletion (`deleteWorkspace()`)
+- [x] `lib/state.ts` - State file reading
+- [x] `lib/container.ts` - Container status, stop (`containerStop()`), and remove (`containerRemove()`)
+
+**New Modules Delivered:**
+- [x] `lib/remove-instance.ts` - Remove orchestration with safety checks and force mode
+- [x] `lib/safety-report.ts` - Severity-tagged safety report formatting with actionable suggestions (replaces planned `SafetyPrompt.tsx`)
+- [x] `lib/audit-log.ts` - Force-remove audit logging to `~/.agent-env/audit.log` (JSON Lines)
+- [x] `commands/remove.ts` - Full CLI command with `--force` and `--yes` flags, interactive confirmation
+
+**Container Functionality Added:**
+- [x] `containerStop(containerName)` - `docker stop` with 30s timeout, idempotent
+- [x] `containerRemove(containerName)` - `docker rm` with 10s timeout, idempotent
+
+**Audit Log:**
+- [x] `~/.agent-env/audit.log` - JSON Lines format tracking: timestamp, action, instanceName, gitState, confirmationMethod
 

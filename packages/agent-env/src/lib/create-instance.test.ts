@@ -105,6 +105,8 @@ function createMockContainer(overrides: Partial<ContainerLifecycle> = {}): Conta
       containerId: 'container-123',
       error: null,
     }),
+    containerStop: vi.fn().mockResolvedValue({ ok: true }),
+    containerRemove: vi.fn().mockResolvedValue({ ok: true }),
     ...overrides,
   };
 }
@@ -288,6 +290,61 @@ describe('createInstance', () => {
       exists = false;
     }
     expect(exists).toBe(false);
+  });
+
+  it('returns WORKSPACE_ERROR and rolls back when .agent-env mkdir fails', async () => {
+    const deps = createTestDeps(gitCloneSuccess);
+    // Override mkdir to fail only for the workspace's .agent-env directory (exact path)
+    const realMkdir = mkdir;
+    const agentEnvPath = join(
+      tempDir,
+      AGENT_ENV_DIR,
+      WORKSPACES_DIR,
+      'bmad-orch-auth',
+      AGENT_ENV_DIR
+    );
+    deps.workspaceFsDeps.mkdir = vi.fn().mockImplementation(async (path: string, opts?: object) => {
+      if (path === agentEnvPath) {
+        throw new Error('EACCES: permission denied');
+      }
+      return realMkdir(path, opts);
+    }) as unknown as typeof mkdir;
+
+    const result = await createInstance('auth', 'https://github.com/user/bmad-orch.git', deps);
+
+    expect(result.ok).toBe(false);
+    if (result.ok) throw new Error('Expected failure');
+    expect(result.error.code).toBe('WORKSPACE_ERROR');
+    expect(result.error.message).toContain('.agent-env');
+    expect(result.error.message).toContain('EACCES');
+
+    // Workspace should not exist after rollback
+    const wsDir = join(tempDir, AGENT_ENV_DIR, WORKSPACES_DIR, 'bmad-orch-auth');
+    let exists = false;
+    try {
+      await stat(wsDir);
+      exists = true;
+    } catch {
+      exists = false;
+    }
+    expect(exists).toBe(false);
+  });
+
+  it('returns WORKSPACE_ERROR when parent directory mkdir fails', async () => {
+    const deps = createTestDeps(gitCloneSuccess);
+    // Override mkdir to always fail (simulates permission denied on parent dirs)
+    deps.workspaceFsDeps.mkdir = vi
+      .fn()
+      .mockRejectedValue(new Error('EACCES: permission denied')) as unknown as typeof mkdir;
+
+    const result = await createInstance('auth', 'https://github.com/user/bmad-orch.git', deps);
+
+    expect(result.ok).toBe(false);
+    if (result.ok) throw new Error('Expected failure');
+    expect(result.error.code).toBe('WORKSPACE_ERROR');
+    expect(result.error.message).toContain('workspace directory');
+    expect(result.error.message).toContain('EACCES');
+    expect(result.error.suggestion).toContain('~/.agent-env');
   });
 
   it('returns CONTAINER_ERROR when devcontainerUp fails', async () => {

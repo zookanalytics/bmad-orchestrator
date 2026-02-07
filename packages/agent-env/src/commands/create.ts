@@ -54,6 +54,7 @@ export const createCommand = new Command('create')
     console.log(`  Container: ${containerName}`);
 
     if (options.attach) {
+      console.log();
       console.log('Attaching to instance...');
       const attachResult = await attachToInstance(containerName, deps.executor);
 

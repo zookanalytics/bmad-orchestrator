@@ -279,7 +279,18 @@ export async function createInstance(
 
   // Step 3: Clone repo into workspace path
   // Create parent directories first
-  await deps.workspaceFsDeps.mkdir(dirname(wsPath.root), { recursive: true });
+  try {
+    await deps.workspaceFsDeps.mkdir(dirname(wsPath.root), { recursive: true });
+  } catch (err) {
+    return {
+      ok: false,
+      error: {
+        code: 'WORKSPACE_ERROR',
+        message: `Failed to create workspace directory: ${err instanceof Error ? err.message : String(err)}`,
+        suggestion: 'Check filesystem permissions for the ~/.agent-env directory.',
+      },
+    };
+  }
 
   const cloneResult = await deps.executor('git', ['clone', repoUrl, wsPath.root], {
     timeout: GIT_CLONE_TIMEOUT,
@@ -299,7 +310,19 @@ export async function createInstance(
   }
 
   // Step 4: Create .agent-env directory in workspace
-  await deps.workspaceFsDeps.mkdir(wsPath.agentEnvDir, { recursive: true });
+  try {
+    await deps.workspaceFsDeps.mkdir(wsPath.agentEnvDir, { recursive: true });
+  } catch (err) {
+    await safeRollback(wsPath.root, deps.rm);
+    return {
+      ok: false,
+      error: {
+        code: 'WORKSPACE_ERROR',
+        message: `Failed to create .agent-env directory: ${err instanceof Error ? err.message : String(err)}`,
+        suggestion: 'Check filesystem permissions in the cloned workspace directory.',
+      },
+    };
+  }
 
   // Step 5: Copy baseline devcontainer config if none exists
   const hasConfig = await hasDevcontainerConfig(wsPath.root, deps.devcontainerFsDeps);

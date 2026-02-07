@@ -132,11 +132,11 @@ development_status:
   env-epic-4-retrospective: done
 
   # ─── agent-env Epic 5: Safe Instance Removal & Data Protection ───
-  env-epic-5: backlog
-  env-5-1-implement-remove-command-with-safety-checks: backlog
-  env-5-2-implement-safety-prompt-ui: backlog
-  env-5-3-implement-force-remove: backlog
-  env-epic-5-retrospective: optional
+  env-epic-5: done
+  env-5-1-implement-remove-command-with-safety-checks: done
+  env-5-2-implement-safety-prompt-ui: done  # Accepted with noted limitations: GitState provides booleans not counts (AC #2/#3/#5 partial)
+  env-5-3-implement-force-remove: done
+  env-epic-5-retrospective: done
 
 # ══════════════════════════════════════════════════════════════════════════════
 # COMPONENT: Release Infrastructure (rel-)

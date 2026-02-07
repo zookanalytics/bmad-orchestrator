@@ -86,13 +86,14 @@ export function createGitStateDetector(executor: Execute = createExecutor()): Gi
     }
 
     // Parse working tree status
-    const { hasStaged, hasUnstaged, hasUntracked } = parseStatus(status.stdout);
+    const { hasStaged, stagedCount, hasUnstaged, unstagedCount, hasUntracked, untrackedCount } =
+      parseStatus(status.stdout);
 
-    // Parse stash count
-    const stashCount = parseStashCount(stash);
+    // Parse stash info
+    const { stashCount, firstStashMessage } = parseStash(stash);
 
     // Parse branch information
-    const { unpushedBranches, neverPushedBranches } = parseBranches(branch);
+    const { unpushedBranches, unpushedCommitCounts, neverPushedBranches } = parseBranches(branch);
 
     // Detect detached HEAD: symbolic-ref fails when HEAD is detached
     const isDetachedHead = !head || !head.ok;
@@ -109,10 +110,15 @@ export function createGitStateDetector(executor: Execute = createExecutor()): Gi
 
     const state: GitState = {
       hasStaged,
+      stagedCount,
       hasUnstaged,
+      unstagedCount,
       hasUntracked,
+      untrackedCount,
       stashCount,
+      firstStashMessage,
       unpushedBranches,
+      unpushedCommitCounts,
       neverPushedBranches,
       isDetachedHead,
       isClean,
@@ -136,22 +142,37 @@ export function createGitStateDetector(executor: Execute = createExecutor()): Gi
  */
 function parseStatus(stdout: string): {
   hasStaged: boolean;
+  stagedCount: number;
   hasUnstaged: boolean;
+  unstagedCount: number;
   hasUntracked: boolean;
+  untrackedCount: number;
 } {
-  let hasStaged = false;
-  let hasUnstaged = false;
-  let hasUntracked = false;
+  let stagedCount = 0;
+  let unstagedCount = 0;
+  let untrackedCount = 0;
 
   if (!stdout.trim()) {
-    return { hasStaged, hasUnstaged, hasUntracked };
+    return {
+      hasStaged: false,
+      stagedCount: 0,
+      hasUnstaged: false,
+      unstagedCount: 0,
+      hasUntracked: false,
+      untrackedCount: 0,
+    };
   }
 
   for (const line of stdout.split('\n')) {
     if (!line || line.length < 2) continue;
 
     if (line.startsWith('??')) {
-      hasUntracked = true;
+      untrackedCount++;
+      continue;
+    }
+
+    // Skip ignored files (!! prefix, only appears with --ignored flag)
+    if (line.startsWith('!!')) {
       continue;
     }
 
@@ -159,26 +180,47 @@ function parseStatus(stdout: string): {
     const workTreeStatus = line[1];
 
     // Staged: valid index status chars are M, A, D, R, C (modified, added, deleted, renamed, copied)
+    // Note: U (unmerged/conflict) is intentionally excluded — conflicts are counted as unstaged
+    // to ensure dirty state blocks removal. Precise conflict detection is a future enhancement.
     if ('MADRC'.includes(indexStatus)) {
-      hasStaged = true;
+      stagedCount++;
     }
     // Unstaged: non-space in column 2 indicates working tree changes
     if (workTreeStatus !== ' ') {
-      hasUnstaged = true;
+      unstagedCount++;
     }
   }
 
-  return { hasStaged, hasUnstaged, hasUntracked };
+  return {
+    hasStaged: stagedCount > 0,
+    stagedCount,
+    hasUnstaged: unstagedCount > 0,
+    unstagedCount,
+    hasUntracked: untrackedCount > 0,
+    untrackedCount,
+  };
 }
 
 /**
  * Parse `git stash list` output — each line is a stash entry.
+ * Returns count and first stash message.
  */
-function parseStashCount(result: ExecuteResult | null): number {
+function parseStash(result: ExecuteResult | null): {
+  stashCount: number;
+  firstStashMessage: string;
+} {
   if (!result || !result.ok || !result.stdout.trim()) {
-    return 0;
+    return { stashCount: 0, firstStashMessage: '' };
   }
-  return result.stdout.trim().split('\n').length;
+  const lines = result.stdout.trim().split('\n');
+  // Format: "stash@{0}: WIP on branch: hash message" or "stash@{0}: On branch: message"
+  // Extract message after the first ": " following the stash ref
+  let firstStashMessage = '';
+  if (lines[0]) {
+    const colonIndex = lines[0].indexOf(': ');
+    firstStashMessage = colonIndex !== -1 ? lines[0].slice(colonIndex + 2) : lines[0];
+  }
+  return { stashCount: lines.length, firstStashMessage };
 }
 
 /**
@@ -190,13 +232,15 @@ function parseStashCount(result: ExecuteResult | null): number {
  */
 function parseBranches(result: ExecuteResult | null): {
   unpushedBranches: string[];
+  unpushedCommitCounts: Record<string, number>;
   neverPushedBranches: string[];
 } {
   const unpushedBranches: string[] = [];
+  const unpushedCommitCounts: Record<string, number> = {};
   const neverPushedBranches: string[] = [];
 
   if (!result || !result.ok || !result.stdout.trim()) {
-    return { unpushedBranches, neverPushedBranches };
+    return { unpushedBranches, unpushedCommitCounts, neverPushedBranches };
   }
 
   for (const line of result.stdout.trim().split('\n')) {
@@ -212,11 +256,14 @@ function parseBranches(result: ExecuteResult | null): {
       // Only branch name, no upstream fields — never pushed
       neverPushedBranches.push(branchName);
     } else if (trackInfo.includes('[ahead')) {
-      // Has upstream with unpushed commits
+      // Has upstream with unpushed commits — extract count from "[ahead N]" or "[ahead N, behind M]"
+      const aheadMatch = trackInfo.match(/\[ahead (\d+)/);
+      const count = aheadMatch ? parseInt(aheadMatch[1], 10) : 0;
       unpushedBranches.push(branchName);
+      unpushedCommitCounts[branchName] = count;
     }
     // else: has upstream, up-to-date or behind only — not relevant
   }
 
-  return { unpushedBranches, neverPushedBranches };
+  return { unpushedBranches, unpushedCommitCounts, neverPushedBranches };
 }

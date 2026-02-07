@@ -9,9 +9,17 @@ export const attachCommand = new Command('attach')
   .action(async (name: string) => {
     const deps = createAttachDefaultDeps();
 
-    const result = await attachInstance(name, deps, () => {
-      console.log('Starting container...');
-    });
+    const result = await attachInstance(
+      name,
+      deps,
+      () => {
+        console.log('Starting container...');
+      },
+      () => {
+        console.log();
+        console.log('Attaching to tmux session...');
+      }
+    );
 
     if (!result.ok) {
       const { code, message, suggestion } = result.error;

@@ -1,0 +1,85 @@
+source: _bmad-output/implementation-artifacts/epic-env-5-retro-2026-02-06.md
+generated: 2026-02-07
+
+items:
+  - id: 1
+    action_item: "Process Improvement #1"
+    workflow: human
+    status: skipped
+    summary: |
+      Multi-model review for complex stories: SM (Bob) to flag stories with cross-module
+      dependencies or 4+ ACs for multi-model code review during story creation. Success
+      criteria: flagged during story creation. Context: Story 5.2 benefited from Gemini +
+      Claude Opus review catching different issue categories. New team agreement from env-5.
+
+  - id: 2
+    action_item: "Process Improvement #2"
+    workflow: human
+    status: done
+    summary: |
+      Carry forward "embed actions in stories" agreement: SM (Bob) to continue ensuring
+      retro action items are embedded directly into stories rather than tracked as orphan
+      follow-ups. Success criteria: no orphan follow-ups in next component. Context: achieved
+      100% follow-through in env-5 using this approach from env-4.
+
+  - id: 3
+    action_item: "Technical Debt #1"
+    workflow: bmad:bmm:workflows:quick-dev
+    status: done
+    summary: |
+      Enrich GitState type with counts, stash messages, and commit counts. Currently GitState
+      (from Epic 3) provides only booleans (hasStaged, hasUnstaged, hasUntracked). Story 5.2
+      ACs expected richer data: number of staged files, commits per branch, first stash message.
+      Update git-state.ts in packages/agent-env to add numeric counts and string details.
+      This resolves the 3 partial ACs from Story 5.2 (#2 file counts, #3 commit counts, #5
+      stash messages). Safety blocking works — gap is in reporting detail only.
+
+  - id: 4
+    action_item: "Technical Debt #2"
+    workflow: bmad:bmm:workflows:quick-dev
+    status: done
+    summary: |
+      Add cleanup on partial failure in createWorkspace when .agent-env mkdir fails. Currently
+      in create-instance.ts (packages/agent-env), if the .agent-env directory creation fails
+      after workspace creation, no cleanup of the partially created workspace occurs. Add
+      rollback logic to remove the workspace directory on .agent-env mkdir failure. Source:
+      Epic 2 Story 2.1. Priority: LOW.
+
+  - id: 5
+    action_item: "Technical Debt #3"
+    workflow: bmad:bmm:workflows:quick-dev
+    status: done
+    summary: |
+      Replace dirname() usage in state.ts with pre-computed wsPath.agentEnvDir. The state.ts
+      module in packages/agent-env currently computes the agent-env directory path using
+      dirname() at runtime instead of using the pre-computed wsPath.agentEnvDir property.
+      Simple refactor to use the existing computed path. Source: Epic 2 Story 2.1. Priority: LOW.
+
+  - id: 6
+    action_item: "Technical Debt #4"
+    workflow: bmad:bmm:workflows:quick-dev
+    status: done
+    summary: |
+      Add missing tmux attach edge case test. The attach command in packages/agent-env is
+      missing a test for a specific tmux attach edge case. Add the missing test case to
+      attach-instance.test.ts to improve coverage. Source: Epic 2 Story 2.5. Priority: LOW.
+
+  - id: 7
+    action_item: "Technical Debt #5"
+    workflow: bmad:bmm:workflows:quick-dev
+    status: done
+    summary: |
+      Add visual separator before "Attaching..." message in the attach command output.
+      Currently in packages/agent-env, the attach command displays "Attaching..." without a
+      visual separator from preceding output. Add a separator line (e.g., dashes or blank
+      line) before the attach message for better UX. Source: Epic 2 Story 2.5. Priority: LOW.
+
+  - id: 8
+    action_item: "Technical Debt #6"
+    workflow: bmad:bmm:workflows:quick-dev
+    status: done
+    summary: |
+      Remove or justify glob devDependency added for single debug test. The glob package was
+      added as a devDependency in packages/agent-env for a single debug test. Either remove
+      the dependency and refactor the test, or document why it's needed. Source: Epic 5
+      Story 5.1. Priority: LOW.

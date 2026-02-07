@@ -8,6 +8,7 @@ import type { FsDeps } from './workspace.js';
 import { AGENT_ENV_DIR, STATE_FILE, WORKSPACES_DIR } from './types.js';
 import {
   createWorkspace,
+  deleteWorkspace,
   deriveContainerName,
   deriveWorkspaceName,
   getWorkspacePathByName,
@@ -252,5 +253,42 @@ describe('scanWorkspaces', () => {
 
     const workspaces = await scanWorkspaces(deps);
     expect(workspaces).toEqual(['real-workspace']);
+  });
+});
+
+// ─── deleteWorkspace tests ──────────────────────────────────────────────────
+
+describe('deleteWorkspace', () => {
+  it('deletes an existing workspace recursively', async () => {
+    const deps = createTestDeps(tempDir);
+    const wsPath = await createWorkspace('repo', 'auth', deps);
+
+    // Write a file inside to ensure recursive delete
+    await writeFile(join(wsPath.root, 'some-file.txt'), 'content');
+
+    await deleteWorkspace(wsPath, { rm });
+
+    // Verify directory no longer exists
+    const exists = await workspaceExists('repo', 'auth', deps);
+    expect(exists).toBe(false);
+  });
+
+  it('succeeds when workspace does not exist (force: true is idempotent)', async () => {
+    const deps = createTestDeps(tempDir);
+    const wsPath = getWorkspacePath('nonexistent', 'ws', deps);
+
+    // Should not throw — rm with force: true is idempotent
+    await deleteWorkspace(wsPath, { rm });
+  });
+
+  it('re-throws unexpected errors', async () => {
+    const deps = createTestDeps(tempDir);
+    const wsPath = getWorkspacePath('any', 'ws', deps);
+
+    const mockError = new Error('Permission denied') as NodeJS.ErrnoException;
+    mockError.code = 'EACCES';
+    const mockRm = vi.fn().mockRejectedValue(mockError);
+
+    await expect(deleteWorkspace(wsPath, { rm: mockRm })).rejects.toThrow('Permission denied');
   });
 });

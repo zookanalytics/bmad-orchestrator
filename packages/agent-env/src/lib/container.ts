@@ -23,6 +23,12 @@ export const DOCKER_INSPECT_TIMEOUT = 10_000;
 /** Timeout for docker info availability check (5 seconds) */
 export const DOCKER_INFO_TIMEOUT = 5_000;
 
+/** Timeout for docker stop operation (30 seconds) */
+export const DOCKER_STOP_TIMEOUT = 30_000;
+
+/** Timeout for docker rm operation (10 seconds) */
+export const DOCKER_RM_TIMEOUT = 10_000;
+
 // ─── Types ───────────────────────────────────────────────────────────────────
 
 type Execute = (
@@ -36,7 +42,19 @@ export interface ContainerLifecycle {
   containerStatus(containerName: string): Promise<ContainerResult>;
   getContainerNameById(containerId: string): Promise<string | null>;
   devcontainerUp(workspacePath: string, containerName: string): Promise<ContainerResult>;
+  containerStop(containerName: string): Promise<ContainerStopResult>;
+  containerRemove(containerName: string): Promise<ContainerRemoveResult>;
 }
+
+/** Result from a container stop operation */
+export type ContainerStopResult =
+  | { ok: true }
+  | { ok: false; error: { code: string; message: string; suggestion?: string } };
+
+/** Result from a container remove operation */
+export type ContainerRemoveResult =
+  | { ok: true }
+  | { ok: false; error: { code: string; message: string; suggestion?: string } };
 
 // ─── Factory ─────────────────────────────────────────────────────────────────
 
@@ -241,10 +259,81 @@ export function createContainerLifecycle(executor: Execute = createExecutor()): 
     };
   }
 
+  /**
+   * Stop a running container gracefully.
+   *
+   * Uses `docker stop` with a 30-second timeout. If the container
+   * is already stopped or not found, this is treated as success.
+   *
+   * @param containerName - Container name (e.g., "ae-bmad-orch-auth")
+   * @returns ContainerStopResult with success/failure info
+   */
+  async function containerStop(containerName: string): Promise<ContainerStopResult> {
+    const result = await executor('docker', ['stop', containerName], {
+      timeout: DOCKER_STOP_TIMEOUT,
+    });
+
+    if (result.ok) {
+      return { ok: true };
+    }
+
+    // Container already stopped or not found — treat as success
+    if (
+      result.stderr.includes('No such') ||
+      result.stderr.includes('not found') ||
+      result.stderr.includes('is not running')
+    ) {
+      return { ok: true };
+    }
+
+    return {
+      ok: false,
+      error: {
+        code: 'CONTAINER_STOP_TIMEOUT',
+        message: `Failed to stop container '${containerName}': ${result.stderr}`,
+        suggestion: `Try manually: docker rm -f ${containerName}`,
+      },
+    };
+  }
+
+  /**
+   * Remove a stopped container.
+   *
+   * Uses `docker rm` to remove the container. If the container
+   * is not found, this is treated as success (already cleaned up).
+   *
+   * @param containerName - Container name (e.g., "ae-bmad-orch-auth")
+   * @returns ContainerRemoveResult with success/failure info
+   */
+  async function containerRemove(containerName: string): Promise<ContainerRemoveResult> {
+    const result = await executor('docker', ['rm', containerName], {
+      timeout: DOCKER_RM_TIMEOUT,
+    });
+
+    if (result.ok) {
+      return { ok: true };
+    }
+
+    // Container not found — treat as success (already cleaned up)
+    if (result.stderr.includes('No such') || result.stderr.includes('not found')) {
+      return { ok: true };
+    }
+
+    return {
+      ok: false,
+      error: {
+        code: 'CONTAINER_ERROR',
+        message: `Failed to remove container '${containerName}': ${result.stderr}`,
+      },
+    };
+  }
+
   return {
     isDockerAvailable,
     containerStatus,
     getContainerNameById,
     devcontainerUp,
+    containerStop,
+    containerRemove,
   };
 }

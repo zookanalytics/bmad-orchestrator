@@ -12,10 +12,15 @@ import { InstanceList } from './InstanceList.js';
 function cleanGitState(): GitState {
   return {
     hasStaged: false,
+    stagedCount: 0,
     hasUnstaged: false,
+    unstagedCount: 0,
     hasUntracked: false,
+    untrackedCount: 0,
     stashCount: 0,
+    firstStashMessage: '',
     unpushedBranches: [],
+    unpushedCommitCounts: {},
     neverPushedBranches: [],
     isDetachedHead: false,
     isClean: true,
