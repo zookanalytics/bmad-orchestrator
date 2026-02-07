@@ -4,9 +4,11 @@ workflowType: 'architecture'
 lastStep: 8
 status: 'complete'
 completedAt: '2026-02-02'
-lastValidated: '2026-02-06'
-lastUpdated: '2026-02-06'
+lastValidated: '2026-02-07'
+lastUpdated: '2026-02-07'
 updateHistory:
+  - date: '2026-02-07'
+    change: 'Post-rel-2 validation: CONFORMANT. Test count updated 417→446. bmm-retrospective-module marked private (resolved). Orchestrator shared dep moved to devDependencies (resolved). Full rel-2 post-implementation validation entry added.'
   - date: '2026-02-06'
     change: 'Mid-rel-2 validation: schema version updated to 3.1.2, bmm-retrospective-module noted as non-private risk, orchestrator shared-dep forward note added'
   - date: '2026-02-06'
@@ -23,8 +25,8 @@ validationFindings:
     status: 'resolved in rel-1-1'
   - severity: moderate
     summary: 'bmm-retrospective-module lacks "private": true — visible to changesets as publishable but has no build/publish config'
-    resolution: 'Must add "private": true or changesets ignore before Epic 3'
-    status: 'open'
+    resolution: 'Added "private": true to bmm-retrospective-module/package.json (2026-02-07)'
+    status: 'resolved'
   - severity: low
     summary: 'bin wrapper pattern is correct but architecture description was imprecise'
     status: 'resolved in rel-1-1'
@@ -40,6 +42,10 @@ postImplementationValidation:
     date: '2026-02-06'
     result: 'CONFORMANT with findings'
     notes: 'Changesets installed and configured per architecture. Config matches spec. 3 findings: (1) LOW schema version 3.1.2 vs 3.1.1 — updated. (2) MODERATE bmm-retrospective-module not private — must resolve before Epic 3. (3) LOW orchestrator shared-dep forward note added.'
+  - epic: 'rel-2 (complete — stories 2.1-2.4)'
+    date: '2026-02-07'
+    result: 'CONFORMANT'
+    notes: 'All 4 stories implemented per architecture. Changesets installed, configured, CI validation added, manual publish pipeline validated via 29 root-level tests. Two open findings resolved: (1) bmm-retrospective-module marked private. (2) orchestrator shared dep moved to devDependencies. Story 2.4 AC4 (actual npm publish) pending npm login — all automated validation passes. 446 total tests, zero regressions.'
 preImplementationValidation:
   - epic: 'rel-2'
     date: '2026-02-06'
@@ -101,7 +107,7 @@ Architecturally, most FRs map to configuration (changesets config, package.json 
 | npm public registry | `@zookanalytics` org scope, public packages |
 | agent-env as pilot | Prove pipeline with one TypeScript CLI package before scaling |
 | `shared` stays private | `"private": true` — never published regardless of changesets config |
-| `bmm-retrospective-module` not publishable | No build script, no dist output, no publish config. Lacks `"private": true` — should be added or explicitly ignored in changesets config before Epic 3 |
+| `bmm-retrospective-module` not publishable | No build script, no dist output, no publish config. Marked `"private": true` (2026-02-07) — excluded from changesets. |
 
 ### Configuration Surface
 
@@ -619,7 +625,7 @@ After analysis, `shared` is small (102 lines, 4 runtime functions) but `orchestr
 - Change build script from `tsc` to `tsup`
 - Move `@zookanalytics/shared` from `dependencies` to `devDependencies` (bundled at build time, consumers never need it)
 - `bin/agent-env.js` wrapper unchanged — it imports `../dist/cli.js` which tsup produces
-- `orchestrator` unchanged — not being published yet, continues using shared via workspace protocol. **⚠️ When orchestrator is published, it will need the same tsup bundling treatment** (shared in devDependencies, noExternal config).
+- `orchestrator` — `@zookanalytics/shared` moved to devDependencies (2026-02-07). Not being published yet — continues using shared via workspace protocol at dev time. **⚠️ When orchestrator is published, it will need tsup bundling** (noExternal config, same pattern as agent-env).
 
 **Verification criteria:**
 - `dist/cli.js` contains no imports from `@zookanalytics/shared`
@@ -686,12 +692,12 @@ Validated architecture against actual codebase after Stories 2.1 and 2.2 complet
 - `.changeset/README.md` extended with project-specific config rationale and private package exclusion docs ✅
 - `pnpm changeset status` runs clean with no configuration drift ✅
 - `shared` is correctly excluded by changesets via `"private": true` (no explicit `ignore` needed) ✅
-- All 417 tests pass, zero regressions ✅
+- All 446 tests pass, zero regressions ✅
 
 **Drift Found:**
 1. **(LOW) Schema version**: Architecture doc had `@changesets/config@3.1.1`, actual is `@changesets/config@3.1.2` (installed version). Architecture updated to match.
-2. **(MODERATE) `bmm-retrospective-module` not private**: This 4th workspace package lacks `"private": true` and is visible to changesets as publishable. It has no build script, no dist output, and is not intended for npm publish. Should be marked `"private": true` or added to changesets `ignore` before Epic 3 automated publishing. Architecture constraints table updated.
-3. **(LOW) Orchestrator `shared` dependency**: `orchestrator` still has `@zookanalytics/shared` in runtime `dependencies` with `workspace:*`. Architecture correctly notes it's not being published yet, but a forward-looking note was added about needing tsup bundling when orchestrator publishes.
+2. **(MODERATE) `bmm-retrospective-module` not private**: This 4th workspace package lacks `"private": true` and is visible to changesets as publishable. It has no build script, no dist output, and is not intended for npm publish. **RESOLVED (2026-02-07):** Added `"private": true` to package.json.
+3. **(LOW) Orchestrator `shared` dependency**: `orchestrator` still has `@zookanalytics/shared` in runtime `dependencies` with `workspace:*`. **RESOLVED (2026-02-07):** Moved to devDependencies. Forward-looking note retained — tsup bundling needed when orchestrator publishes.
 
 ## Architecture Validation Results
 

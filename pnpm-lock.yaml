@@ -113,9 +113,6 @@ importers:
       '@inkjs/ui':
         specifier: ^2.0.0
         version: 2.0.0(ink@6.6.0(@types/react@19.2.8)(react@19.2.3))
-      '@zookanalytics/shared':
-        specifier: workspace:*
-        version: link:../shared
       clipboardy:
         specifier: ^5.0.2
         version: 5.0.2
@@ -144,6 +141,9 @@ importers:
       '@types/react':
         specifier: ^19.2.8
         version: 19.2.8
+      '@zookanalytics/shared':
+        specifier: workspace:*
+        version: link:../shared
       ink-testing-library:
         specifier: ^4.0.0
         version: 4.0.0(@types/react@19.2.8)
