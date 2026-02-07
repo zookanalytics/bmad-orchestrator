@@ -15,11 +15,11 @@ Only packages without `"private": true` in their `package.json` are managed by c
 Currently publishable:
 
 - `@zookanalytics/agent-env` — CLI for creating isolated, AI-ready development environments
-- `@zookanalytics/bmad-orchestrator` — Unified command center for multi-DevPod development
 
 ### Private Package Exclusion
 
-The `@zookanalytics/shared`, `@zookanalytics/bmm-retrospective-module`, and the monorepo
+The `@zookanalytics/bmad-orchestrator`, `@zookanalytics/shared`,
+`@zookanalytics/bmm-retrospective-module`, and the monorepo
 root are marked `"private": true` in their respective `package.json` files. Changesets
 natively respects this flag and excludes private packages from version bumps and publishing.
 No explicit `ignore` array entry is needed in `config.json`.

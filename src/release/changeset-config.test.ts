@@ -2,12 +2,9 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
-import { CHANGESET_DIR, PROJECT_ROOT } from './changeset-test-utils.js';
+import { CHANGESET_DIR } from './changeset-test-utils.js';
 
-const PACKAGE_JSON_PATH = join(PROJECT_ROOT, 'package.json');
-const PROJECT_REPO = (
-  JSON.parse(readFileSync(PACKAGE_JSON_PATH, 'utf-8')) as { repository: string }
-).repository.split(':')[1];
+const PROJECT_REPO = 'ZookAnalytics/bmad-orchestrator';
 
 /**
  * Validates .changeset/config.json matches the architecture specification.

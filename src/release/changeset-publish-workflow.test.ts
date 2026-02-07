@@ -88,9 +88,9 @@ describe('publish readiness', () => {
 
       const files = output.trim().split('\n');
 
-      expect(files.some((f) => f.includes('dist/'))).toBe(true);
-      expect(files.some((f) => f.includes('bin/'))).toBe(true);
-      expect(files.some((f) => f.includes('config/'))).toBe(true);
+      expect(files.some((f) => f.startsWith('package/dist/'))).toBe(true);
+      expect(files.some((f) => f.startsWith('package/bin/'))).toBe(true);
+      expect(files.some((f) => f.startsWith('package/config/'))).toBe(true);
       expect(files.some((f) => f.includes('README.md'))).toBe(true);
       expect(files.some((f) => f.includes('LICENSE'))).toBe(true);
       expect(files.some((f) => f.includes('package.json'))).toBe(true);
@@ -104,7 +104,7 @@ describe('publish readiness', () => {
 
       const files = output.trim().split('\n');
 
-      expect(files.some((f) => f.includes('src/'))).toBe(false);
+      expect(files.some((f) => f.startsWith('package/src/'))).toBe(false);
       expect(files.some((f) => f.includes('.test.'))).toBe(false);
       expect(files.some((f) => f.includes('tsup.config'))).toBe(false);
       expect(files.some((f) => f.includes('tsconfig'))).toBe(false);

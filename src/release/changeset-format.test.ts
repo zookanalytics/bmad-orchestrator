@@ -13,11 +13,8 @@ import { CHANGESET_DIR, getChangesetFiles } from './changeset-test-utils.js';
  * Story: rel-2-3 (Create Manual Changeset Workflow)
  */
 
-// Known publishable packages in this monorepo
-const PUBLISHABLE_PACKAGES = [
-  '@zookanalytics/agent-env',
-  '@zookanalytics/bmad-orchestrator',
-] as const;
+// Known publishable packages in this monorepo (non-private packages only)
+const PUBLISHABLE_PACKAGES = ['@zookanalytics/agent-env'] as const;
 
 const VALID_BUMP_TYPES = ['patch', 'minor', 'major'] as const;
 
@@ -44,6 +41,8 @@ describe('changeset file format', () => {
     expect(files).toContain('README.md');
   });
 
+  // NOTE: On main branch, getChangesetFiles() typically returns empty (changesets are consumed
+  // during version). This test validates format on feature branches where changeset files exist.
   it('all pending changeset files have valid format', () => {
     const changesetFiles = getChangesetFiles();
 
