@@ -107,11 +107,17 @@ jobs:
       #   - npm package settings → "Publishing access" → Trusted Publishing
       #   - Ensure repository and workflow name match exactly
       #   - If OIDC fails, the workflow itself fails visibly — no silent drift
+      # GITHUB RELEASES (FR8, NFR10):
+      # After a successful publish, changesets/action creates a GitHub release
+      # per published package. Release notes come from @changesets/changelog-github
+      # entries (configured in .changeset/config.json). The `contents: write`
+      # permission above authorizes release creation via the GitHub API.
       - name: Create Release Pull Request or Publish
         id: changesets
         uses: changesets/action@v1
         with:
           publish: pnpm changeset publish
+          createGithubReleases: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           NPM_CONFIG_PROVENANCE: true

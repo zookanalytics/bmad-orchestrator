@@ -3,20 +3,21 @@ import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { parse } from 'yaml';
 
-import { PROJECT_ROOT } from './changeset-test-utils.js';
+import { CHANGESET_DIR, PROJECT_ROOT } from './changeset-test-utils.js';
 
 /**
  * Validates .github/workflows/publish.yml matches the architecture specification.
  * Catches configuration drift that could break the automated publishing pipeline.
  *
  * Architecture source: _bmad-output/planning-artifacts/release-infrastructure/architecture.md
- * Story: rel-3-1 (Implement Automated Publish Workflow)
+ * Story: rel-3-1 (Implement Automated Publish Workflow), rel-3-2 (Configure GitHub Release Automation)
  *
  * Key requirements validated:
  * - Trusted Publishing (OIDC) via id-token: write permission
  * - Explicit minimal permissions (NFR2)
  * - Concurrency queue with cancel-in-progress: false (FR15)
  * - changesets/action@v1 integration
+ * - GitHub release creation (FR8, NFR10)
  */
 
 const PUBLISH_WORKFLOW_PATH = resolve(PROJECT_ROOT, '.github/workflows/publish.yml');
@@ -40,7 +41,7 @@ interface WorkflowYaml {
       steps: Array<{
         name?: string;
         uses?: string;
-        with?: Record<string, string>;
+        with?: Record<string, string | boolean>;
         env?: Record<string, string | boolean>;
         id?: string;
         run?: string;
@@ -284,5 +285,39 @@ describe('publish workflow safety guards', () => {
     const raw = readFileSync(PUBLISH_WORKFLOW_PATH, 'utf-8');
     expect(raw).toContain('"$GITHUB_ENV"');
     expect(raw).not.toMatch(/>> \$GITHUB_ENV/);
+  });
+});
+
+describe('publish workflow GitHub release automation (FR8, NFR10)', () => {
+  it('enables createGithubReleases on changesets/action', () => {
+    const workflow = loadWorkflow();
+    const changesetsStep = workflow.jobs.publish.steps.find(
+      (s) => s.uses === 'changesets/action@v1'
+    );
+    // YAML parses unquoted `true` as boolean true
+    expect(changesetsStep?.with?.createGithubReleases).toBe(true);
+  });
+
+  it('changelog-github plugin is configured for PR-linked release notes', () => {
+    const configPath = resolve(CHANGESET_DIR, 'config.json');
+    const config = JSON.parse(readFileSync(configPath, 'utf-8'));
+    // changelog must be an array with @changesets/changelog-github as the plugin
+    expect(Array.isArray(config.changelog)).toBe(true);
+    expect(config.changelog[0]).toBe('@changesets/changelog-github');
+  });
+
+  it('changelog-github plugin references correct repository', () => {
+    const configPath = resolve(CHANGESET_DIR, 'config.json');
+    const config = JSON.parse(readFileSync(configPath, 'utf-8'));
+    expect(config.changelog[1]).toEqual({ repo: 'ZookAnalytics/bmad-orchestrator' });
+  });
+
+  // Note: contents: write permission (required for release creation) is tested in
+  // 'publish workflow permissions (NFR2)' → 'has contents: write for GitHub releases'
+
+  it('documents GitHub release behavior in workflow comments', () => {
+    const raw = readFileSync(PUBLISH_WORKFLOW_PATH, 'utf-8');
+    expect(raw).toContain('GITHUB RELEASES');
+    expect(raw).toContain('changelog-github');
   });
 });
