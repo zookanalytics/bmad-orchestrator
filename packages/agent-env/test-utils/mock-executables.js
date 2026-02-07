@@ -39,6 +39,13 @@ async function main() { // Wrap in async function
 
   async function handleGit() { // Made async to be consistent with main
     console.error(`[MOCK-EXEC] Handling git command: ${args.join(' ')}`);
+
+    // git remote get-url origin — used by resolveRepoUrl for --repo .
+    if (args[0] === 'remote' && args[1] === 'get-url' && args[2] === 'origin') {
+      console.log('https://github.com/mock-user/mock-repo.git');
+      process.exit(0);
+    }
+
     const mockGitState = process.env.MOCK_GIT_STATE;
     if (!mockGitState) {
       exitWithError('MOCK_GIT_STATE not set for mock git command.');
