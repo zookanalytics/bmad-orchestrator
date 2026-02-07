@@ -61,10 +61,15 @@ function createTestState(
 function createCleanGitState(): GitState {
   return {
     hasStaged: false,
+    stagedCount: 0,
     hasUnstaged: false,
+    unstagedCount: 0,
     hasUntracked: false,
+    untrackedCount: 0,
     stashCount: 0,
+    firstStashMessage: '',
     unpushedBranches: [],
+    unpushedCommitCounts: {},
     neverPushedBranches: [],
     isDetachedHead: false,
     isClean: true,
@@ -93,6 +98,10 @@ function createMockContainer(overrides: Partial<ContainerLifecycle> = {}): Conta
 
 function createMockGitDetector(gitState?: Partial<GitState>): GitStateDetector {
   const state = { ...createCleanGitState(), ...gitState };
+  // Ensure counts are consistent with booleans when overrides only set booleans
+  if (state.hasStaged && state.stagedCount === 0) state.stagedCount = 1;
+  if (state.hasUnstaged && state.unstagedCount === 0) state.unstagedCount = 1;
+  if (state.hasUntracked && state.untrackedCount === 0) state.untrackedCount = 1;
   // Recompute isClean based on actual field values
   state.isClean =
     !state.hasStaged &&
@@ -141,18 +150,30 @@ describe('evaluateSafetyChecks', () => {
   });
 
   it('detects staged changes', () => {
-    const blockers = evaluateSafetyChecks({ ...createCleanGitState(), hasStaged: true });
-    expect(blockers).toContain('staged changes detected');
+    const blockers = evaluateSafetyChecks({
+      ...createCleanGitState(),
+      hasStaged: true,
+      stagedCount: 1,
+    });
+    expect(blockers).toContain('1 staged file detected');
   });
 
   it('detects unstaged changes', () => {
-    const blockers = evaluateSafetyChecks({ ...createCleanGitState(), hasUnstaged: true });
-    expect(blockers).toContain('unstaged changes detected');
+    const blockers = evaluateSafetyChecks({
+      ...createCleanGitState(),
+      hasUnstaged: true,
+      unstagedCount: 1,
+    });
+    expect(blockers).toContain('1 unstaged change detected');
   });
 
   it('detects untracked files', () => {
-    const blockers = evaluateSafetyChecks({ ...createCleanGitState(), hasUntracked: true });
-    expect(blockers).toContain('untracked files detected');
+    const blockers = evaluateSafetyChecks({
+      ...createCleanGitState(),
+      hasUntracked: true,
+      untrackedCount: 1,
+    });
+    expect(blockers).toContain('1 untracked file detected');
   });
 
   it('detects stashed changes with count', () => {
@@ -190,12 +211,14 @@ describe('evaluateSafetyChecks', () => {
     const blockers = evaluateSafetyChecks({
       ...createCleanGitState(),
       hasStaged: true,
+      stagedCount: 2,
       hasUntracked: true,
+      untrackedCount: 3,
       unpushedBranches: ['main'],
     });
     expect(blockers).toHaveLength(3);
-    expect(blockers).toContain('staged changes detected');
-    expect(blockers).toContain('untracked files detected');
+    expect(blockers).toContain('2 staged files detected');
+    expect(blockers).toContain('3 untracked files detected');
     expect(blockers).toContain('unpushed commits on branches: main');
   });
 });
@@ -318,7 +341,7 @@ describe('removeInstance', () => {
     if (result.ok) throw new Error('Expected failure');
     expect(result.error.code).toBe('SAFETY_CHECK_FAILED');
     expect(result.error.message).toBe('Safety checks failed');
-    expect(result.blockers).toContain('unstaged changes detected');
+    expect(result.blockers).toContain('1 unstaged change detected');
   });
 
   it('blocks removal when untracked files detected', async () => {
@@ -334,7 +357,7 @@ describe('removeInstance', () => {
     if (result.ok) throw new Error('Expected failure');
     expect(result.error.code).toBe('SAFETY_CHECK_FAILED');
     expect(result.error.message).toBe('Safety checks failed');
-    expect(result.blockers).toContain('untracked files detected');
+    expect(result.blockers).toContain('1 untracked file detected');
   });
 
   it('blocks removal when stashed changes detected', async () => {
@@ -431,7 +454,7 @@ describe('removeInstance', () => {
     expect(result.gitState?.hasStaged).toBe(true);
     expect(result.gitState?.unpushedBranches).toEqual(['feature-x']);
     expect(result.blockers).toBeDefined();
-    expect(result.blockers).toContain('staged changes detected');
+    expect(result.blockers).toContain('1 staged file detected');
     expect(result.blockers).toContain('unpushed commits on branches: feature-x');
   });
 
@@ -492,7 +515,7 @@ describe('removeInstance', () => {
     expect(result.gitState).toBeDefined();
     expect(result.gitState?.hasStaged).toBe(true);
     expect(result.gitState?.neverPushedBranches).toEqual(['feature']);
-    expect(result.blockers).toContain('staged changes detected');
+    expect(result.blockers).toContain('1 staged file detected');
     expect(result.blockers).toContain('branches never pushed: feature');
   });
 

@@ -27,10 +27,15 @@ afterEach(async () => {
 function createCleanGitState(): GitState {
   return {
     hasStaged: false,
+    stagedCount: 0,
     hasUnstaged: false,
+    unstagedCount: 0,
     hasUntracked: false,
+    untrackedCount: 0,
     stashCount: 0,
+    firstStashMessage: '',
     unpushedBranches: [],
+    unpushedCommitCounts: {},
     neverPushedBranches: [],
     isDetachedHead: false,
     isClean: true,
@@ -40,10 +45,15 @@ function createCleanGitState(): GitState {
 function createDirtyGitState(): GitState {
   return {
     hasStaged: true,
+    stagedCount: 1,
     hasUnstaged: true,
+    unstagedCount: 1,
     hasUntracked: false,
+    untrackedCount: 0,
     stashCount: 2,
+    firstStashMessage: 'WIP on main: abc1234 some commit',
     unpushedBranches: ['feature-x'],
+    unpushedCommitCounts: { 'feature-x': 1 },
     neverPushedBranches: ['new-branch'],
     isDetachedHead: false,
     isClean: false,

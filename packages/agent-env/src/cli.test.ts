@@ -281,7 +281,7 @@ describe('agent-env CLI', () => {
 
       expect(result.exitCode).toBe(1);
       expect(stderrStripped).toContain("Cannot remove 'dirty-instance'");
-      expect(stderrStripped).toContain('unstaged changes detected');
+      expect(stderrStripped).toContain('1 unstaged change detected');
       expect(stderrStripped).toContain('--force');
     });
 
@@ -345,7 +345,7 @@ describe('agent-env CLI', () => {
 
       expect(result.exitCode).toBe(1);
       expect(stderrStripped).toContain('[Warning]');
-      expect(stderrStripped).toContain('staged changes detected');
+      expect(stderrStripped).toContain('1 staged file detected');
       expect(stderrStripped).toContain('Suggestions');
       expect(stderrStripped).toContain('git commit');
     });
@@ -380,7 +380,7 @@ describe('agent-env CLI', () => {
       expect(result.exitCode).toBe(1);
       expect(stderrStripped).toContain('[Warning]');
       expect(stderrStripped).toContain('[Danger]');
-      expect(stderrStripped).toContain('unstaged changes detected');
+      expect(stderrStripped).toContain('1 unstaged change detected');
       expect(stderrStripped).toContain('feature-x');
       expect(stderrStripped).toContain('Suggestions');
     });
@@ -395,7 +395,9 @@ describe('agent-env CLI', () => {
       const stderrStripped = stripAnsiCodes(result.stderr);
 
       expect(result.exitCode).toBe(1);
-      expect(stderrStripped).toContain('unpushed commits on branches: main, develop');
+      expect(stderrStripped).toContain(
+        'unpushed commits on branches: main (1 commit), develop (1 commit)'
+      );
       expect(stderrStripped).toContain('git push');
     });
 

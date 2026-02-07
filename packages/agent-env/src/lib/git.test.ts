@@ -192,7 +192,7 @@ describe('untracked files detection', () => {
 });
 
 describe('parseStatus edge cases', () => {
-  it('does not treat ignored file markers as staged changes', async () => {
+  it('does not treat ignored file markers as staged or unstaged changes', async () => {
     // !! is the porcelain indicator for ignored files (when --ignored is used)
     const executor = mockExecutor({
       'git status --porcelain': okResult('!! ignored-dir/\n'),
@@ -206,6 +206,10 @@ describe('parseStatus edge cases', () => {
     expect(result.ok).toBe(true);
     if (!result.ok) throw new Error('Expected success');
     expect(result.state.hasStaged).toBe(false);
+    expect(result.state.stagedCount).toBe(0);
+    expect(result.state.hasUnstaged).toBe(false);
+    expect(result.state.unstagedCount).toBe(0);
+    expect(result.state.isClean).toBe(true);
   });
 });
 
@@ -723,6 +727,224 @@ describe('command execution', () => {
       ],
       expect.objectContaining({ timeout: GIT_COMMAND_TIMEOUT })
     );
+  });
+});
+
+// ─── File count enrichment ───────────────────────────────────────────────────
+
+describe('file count enrichment', () => {
+  it('counts staged files accurately', async () => {
+    const executor = mockExecutor({
+      'git status --porcelain': okResult('A  file1.ts\nM  file2.ts\nD  file3.ts\n'),
+      'git stash list': okResult(''),
+      'git for-each-ref': okResult(''),
+      'git symbolic-ref': okResult('refs/heads/main'),
+    });
+    const detector = createGitStateDetector(executor);
+
+    const result = await detector.getGitState('/workspace');
+    expect(result.ok).toBe(true);
+    if (!result.ok) throw new Error('Expected success');
+    expect(result.state.hasStaged).toBe(true);
+    expect(result.state.stagedCount).toBe(3);
+  });
+
+  it('counts unstaged files accurately', async () => {
+    const executor = mockExecutor({
+      'git status --porcelain': okResult(' M file1.ts\n M file2.ts\n'),
+      'git stash list': okResult(''),
+      'git for-each-ref': okResult(''),
+      'git symbolic-ref': okResult('refs/heads/main'),
+    });
+    const detector = createGitStateDetector(executor);
+
+    const result = await detector.getGitState('/workspace');
+    expect(result.ok).toBe(true);
+    if (!result.ok) throw new Error('Expected success');
+    expect(result.state.hasUnstaged).toBe(true);
+    expect(result.state.unstagedCount).toBe(2);
+  });
+
+  it('counts untracked files accurately', async () => {
+    const executor = mockExecutor({
+      'git status --porcelain': okResult('?? file1.ts\n?? file2.ts\n?? file3.ts\n'),
+      'git stash list': okResult(''),
+      'git for-each-ref': okResult(''),
+      'git symbolic-ref': okResult('refs/heads/main'),
+    });
+    const detector = createGitStateDetector(executor);
+
+    const result = await detector.getGitState('/workspace');
+    expect(result.ok).toBe(true);
+    if (!result.ok) throw new Error('Expected success');
+    expect(result.state.hasUntracked).toBe(true);
+    expect(result.state.untrackedCount).toBe(3);
+  });
+
+  it('returns zero counts for clean repo', async () => {
+    const executor = mockExecutor({
+      'git status --porcelain': okResult(''),
+      'git stash list': okResult(''),
+      'git for-each-ref': okResult('main origin/main\n'),
+      'git symbolic-ref': okResult('refs/heads/main'),
+    });
+    const detector = createGitStateDetector(executor);
+
+    const result = await detector.getGitState('/workspace');
+    expect(result.ok).toBe(true);
+    if (!result.ok) throw new Error('Expected success');
+    expect(result.state.stagedCount).toBe(0);
+    expect(result.state.unstagedCount).toBe(0);
+    expect(result.state.untrackedCount).toBe(0);
+  });
+
+  it('counts staged and unstaged separately for same file', async () => {
+    // MM = staged modification + further unstaged modification
+    const executor = mockExecutor({
+      'git status --porcelain': okResult('MM file.ts\n'),
+      'git stash list': okResult(''),
+      'git for-each-ref': okResult(''),
+      'git symbolic-ref': okResult('refs/heads/main'),
+    });
+    const detector = createGitStateDetector(executor);
+
+    const result = await detector.getGitState('/workspace');
+    expect(result.ok).toBe(true);
+    if (!result.ok) throw new Error('Expected success');
+    expect(result.state.stagedCount).toBe(1);
+    expect(result.state.unstagedCount).toBe(1);
+  });
+});
+
+// ─── Stash message enrichment ───────────────────────────────────────────────
+
+describe('stash message enrichment', () => {
+  it('extracts first stash message', async () => {
+    const executor = mockExecutor({
+      'git status --porcelain': okResult(''),
+      'git stash list': okResult(
+        'stash@{0}: WIP on main: abc1234 some commit\nstash@{1}: WIP on feature: def5678 another\n'
+      ),
+      'git for-each-ref': okResult(''),
+      'git symbolic-ref': okResult('refs/heads/main'),
+    });
+    const detector = createGitStateDetector(executor);
+
+    const result = await detector.getGitState('/workspace');
+    expect(result.ok).toBe(true);
+    if (!result.ok) throw new Error('Expected success');
+    expect(result.state.firstStashMessage).toBe('WIP on main: abc1234 some commit');
+  });
+
+  it('returns empty string when no stashes', async () => {
+    const executor = mockExecutor({
+      'git status --porcelain': okResult(''),
+      'git stash list': okResult(''),
+      'git for-each-ref': okResult(''),
+      'git symbolic-ref': okResult('refs/heads/main'),
+    });
+    const detector = createGitStateDetector(executor);
+
+    const result = await detector.getGitState('/workspace');
+    expect(result.ok).toBe(true);
+    if (!result.ok) throw new Error('Expected success');
+    expect(result.state.firstStashMessage).toBe('');
+  });
+
+  it('returns empty string when stash command fails', async () => {
+    const executor = mockExecutor({
+      'git status --porcelain': okResult(''),
+      'git stash list': failResult('not a git repo'),
+      'git for-each-ref': okResult(''),
+      'git symbolic-ref': okResult('refs/heads/main'),
+    });
+    const detector = createGitStateDetector(executor);
+
+    const result = await detector.getGitState('/workspace');
+    expect(result.ok).toBe(true);
+    if (!result.ok) throw new Error('Expected success');
+    expect(result.state.firstStashMessage).toBe('');
+  });
+
+  it('extracts message with On branch format', async () => {
+    const executor = mockExecutor({
+      'git status --porcelain': okResult(''),
+      'git stash list': okResult('stash@{0}: On main: saved work in progress\n'),
+      'git for-each-ref': okResult(''),
+      'git symbolic-ref': okResult('refs/heads/main'),
+    });
+    const detector = createGitStateDetector(executor);
+
+    const result = await detector.getGitState('/workspace');
+    expect(result.ok).toBe(true);
+    if (!result.ok) throw new Error('Expected success');
+    expect(result.state.firstStashMessage).toBe('On main: saved work in progress');
+  });
+});
+
+// ─── Unpushed commit count enrichment ───────────────────────────────────────
+
+describe('unpushed commit count enrichment', () => {
+  it('extracts commit count per unpushed branch', async () => {
+    const executor = mockExecutor({
+      'git status --porcelain': okResult(''),
+      'git stash list': okResult(''),
+      'git for-each-ref': okResult(
+        'main origin/main [ahead 2]\nfeature origin/feature [ahead 5]\n'
+      ),
+      'git symbolic-ref': okResult('refs/heads/main'),
+    });
+    const detector = createGitStateDetector(executor);
+
+    const result = await detector.getGitState('/workspace');
+    expect(result.ok).toBe(true);
+    if (!result.ok) throw new Error('Expected success');
+    expect(result.state.unpushedCommitCounts).toEqual({ main: 2, feature: 5 });
+  });
+
+  it('extracts commit count from ahead+behind combination', async () => {
+    const executor = mockExecutor({
+      'git status --porcelain': okResult(''),
+      'git stash list': okResult(''),
+      'git for-each-ref': okResult('main origin/main [ahead 3, behind 1]\n'),
+      'git symbolic-ref': okResult('refs/heads/main'),
+    });
+    const detector = createGitStateDetector(executor);
+
+    const result = await detector.getGitState('/workspace');
+    expect(result.ok).toBe(true);
+    if (!result.ok) throw new Error('Expected success');
+    expect(result.state.unpushedCommitCounts).toEqual({ main: 3 });
+  });
+
+  it('returns empty object when no unpushed branches', async () => {
+    const executor = mockExecutor({
+      'git status --porcelain': okResult(''),
+      'git stash list': okResult(''),
+      'git for-each-ref': okResult('main origin/main\n'),
+      'git symbolic-ref': okResult('refs/heads/main'),
+    });
+    const detector = createGitStateDetector(executor);
+
+    const result = await detector.getGitState('/workspace');
+    expect(result.ok).toBe(true);
+    if (!result.ok) throw new Error('Expected success');
+    expect(result.state.unpushedCommitCounts).toEqual({});
+  });
+
+  it('returns empty object when for-each-ref fails', async () => {
+    const executor = mockExecutor({
+      'git status --porcelain': okResult(''),
+      'git stash list': okResult(''),
+      'git for-each-ref': failResult('error'),
+      'git symbolic-ref': okResult('refs/heads/main'),
+    });
+    const detector = createGitStateDetector(executor);
+
+    const result = await detector.getGitState('/workspace');
+    expect(result.ok).toBe(true);
+    if (!result.ok) throw new Error('Expected success');
+    expect(result.state.unpushedCommitCounts).toEqual({});
   });
 });
 

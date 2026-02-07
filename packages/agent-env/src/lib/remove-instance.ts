@@ -83,25 +83,34 @@ export function evaluateSafetyChecks(gitState: GitState): string[] {
   const blockers: string[] = [];
 
   if (gitState.hasStaged) {
-    blockers.push('staged changes detected');
+    const count = gitState.stagedCount;
+    blockers.push(`${count} staged ${count === 1 ? 'file' : 'files'} detected`);
   }
 
   if (gitState.hasUnstaged) {
-    blockers.push('unstaged changes detected');
+    const count = gitState.unstagedCount;
+    blockers.push(`${count} unstaged ${count === 1 ? 'change' : 'changes'} detected`);
   }
 
   if (gitState.hasUntracked) {
-    blockers.push('untracked files detected');
+    const count = gitState.untrackedCount;
+    blockers.push(`${count} untracked ${count === 1 ? 'file' : 'files'} detected`);
   }
 
   if (gitState.stashCount > 0) {
-    blockers.push(
-      `stashed changes detected (${gitState.stashCount} stash${gitState.stashCount === 1 ? '' : 'es'})`
-    );
+    const stashLabel = `${gitState.stashCount} stash${gitState.stashCount === 1 ? '' : 'es'}`;
+    const message = gitState.firstStashMessage ? ` — "${gitState.firstStashMessage}"` : '';
+    blockers.push(`stashed changes detected (${stashLabel}${message})`);
   }
 
   if (gitState.unpushedBranches.length > 0) {
-    blockers.push(`unpushed commits on branches: ${gitState.unpushedBranches.join(', ')}`);
+    const branchDetails = gitState.unpushedBranches
+      .map((b) => {
+        const count = gitState.unpushedCommitCounts[b];
+        return count ? `${b} (${count} ${count === 1 ? 'commit' : 'commits'})` : b;
+      })
+      .join(', ');
+    blockers.push(`unpushed commits on branches: ${branchDetails}`);
   }
 
   if (gitState.neverPushedBranches.length > 0) {

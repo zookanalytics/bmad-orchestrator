@@ -15,10 +15,15 @@ beforeAll(() => {
 function createCleanGitState(): GitState {
   return {
     hasStaged: false,
+    stagedCount: 0,
     hasUnstaged: false,
+    unstagedCount: 0,
     hasUntracked: false,
+    untrackedCount: 0,
     stashCount: 0,
+    firstStashMessage: '',
     unpushedBranches: [],
+    unpushedCommitCounts: {},
     neverPushedBranches: [],
     isDetachedHead: false,
     isClean: true,
@@ -88,7 +93,7 @@ describe('getSuggestions', () => {
 
 describe('formatSafetyReport', () => {
   it('includes instance name in header', () => {
-    const report = formatSafetyReport('auth', ['staged changes detected'], {
+    const report = formatSafetyReport('auth', ['1 staged file detected'], {
       ...createCleanGitState(),
       hasStaged: true,
     });
@@ -96,18 +101,18 @@ describe('formatSafetyReport', () => {
   });
 
   it('lists all blockers', () => {
-    const blockers = ['staged changes detected', 'unstaged changes detected'];
+    const blockers = ['1 staged file detected', '1 unstaged change detected'];
     const report = formatSafetyReport('auth', blockers, {
       ...createCleanGitState(),
       hasStaged: true,
       hasUnstaged: true,
     });
-    expect(report).toContain('staged changes detected');
-    expect(report).toContain('unstaged changes detected');
+    expect(report).toContain('1 staged file detected');
+    expect(report).toContain('1 unstaged change detected');
   });
 
   it('includes severity indicators for warnings', () => {
-    const report = formatSafetyReport('auth', ['staged changes detected'], {
+    const report = formatSafetyReport('auth', ['1 staged file detected'], {
       ...createCleanGitState(),
       hasStaged: true,
     });
@@ -158,7 +163,7 @@ describe('formatSafetyReport', () => {
   });
 
   it('includes actionable suggestions', () => {
-    const report = formatSafetyReport('auth', ['staged changes detected'], {
+    const report = formatSafetyReport('auth', ['1 staged file detected'], {
       ...createCleanGitState(),
       hasStaged: true,
     });
@@ -167,7 +172,7 @@ describe('formatSafetyReport', () => {
   });
 
   it('includes --force hint', () => {
-    const report = formatSafetyReport('auth', ['staged changes detected'], {
+    const report = formatSafetyReport('auth', ['1 staged file detected'], {
       ...createCleanGitState(),
       hasStaged: true,
     });
@@ -175,7 +180,7 @@ describe('formatSafetyReport', () => {
   });
 
   it('handles multiple blockers with mixed severity', () => {
-    const blockers = ['staged changes detected', 'branches never pushed: new-feature'];
+    const blockers = ['1 staged file detected', 'branches never pushed: new-feature'];
     const report = formatSafetyReport('auth', blockers, {
       ...createCleanGitState(),
       hasStaged: true,
@@ -191,7 +196,7 @@ describe('formatSafetyReport', () => {
     try {
       const report = formatSafetyReport(
         'auth',
-        ['staged changes detected', 'branches never pushed: new-feature'],
+        ['1 staged file detected', 'branches never pushed: new-feature'],
         {
           ...createCleanGitState(),
           hasStaged: true,

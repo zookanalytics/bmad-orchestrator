@@ -76,14 +76,24 @@ export type ContainerResult = ContainerSuccess | ContainerError;
 export interface GitState {
   /** Working tree has staged changes (git add'd but not committed) */
   hasStaged: boolean;
+  /** Number of staged files */
+  stagedCount: number;
   /** Working tree has unstaged modifications */
   hasUnstaged: boolean;
+  /** Number of unstaged files */
+  unstagedCount: number;
   /** Working tree has untracked files */
   hasUntracked: boolean;
+  /** Number of untracked files */
+  untrackedCount: number;
   /** Number of stash entries */
   stashCount: number;
+  /** First stash entry annotation, e.g. "WIP on main: abc1234 message" (empty string if no stashes) */
+  firstStashMessage: string;
   /** Branch names with unpushed commits (ahead of upstream) */
   unpushedBranches: string[];
+  /** Map of branch name to number of unpushed commits */
+  unpushedCommitCounts: Record<string, number>;
   /** Branch names that have never been pushed to any remote */
   neverPushedBranches: string[];
   /** HEAD is detached (not on any branch) */
