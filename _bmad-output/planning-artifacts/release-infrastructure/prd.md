@@ -2,8 +2,10 @@
 stepsCompleted: [step-01-init, step-02-discovery, step-03-success, step-04-journeys, step-05-domain, step-06-innovation, step-07-project-type, step-08-scoping, step-09-functional, step-10-nonfunctional, step-11-polish, step-12-complete, step-e-01-discovery, step-e-02-review, step-e-03-edit]
 workflowComplete: true
 completedAt: '2026-02-01'
-lastEdited: '2026-02-03'
+lastEdited: '2026-02-06'
 editHistory:
+  - date: '2026-02-06'
+    changes: 'Updated all NPM_TOKEN references to Trusted Publishing (OIDC) per implementation readiness report. Updated FR29, FR34, NFR1, NFR4, Journey 2, Configuration Surface, and hardening bullets to reflect no stored secrets.'
   - date: '2026-02-03'
     changes: 'Updated FR1 to manual changeset workflow, elevated FR32 (changeset bot) to core, and aligned Executive Summary and User Journeys with the developer-driven changeset model.'
   - date: '2026-02-04'
@@ -87,7 +89,7 @@ N/A — internal infrastructure. Success is measured by the absence of problems:
 - Commit scope validation against known packages
 - Changeset bot on PRs
 - Changesets config drift detection (non-private packages must be in config)
-- Token health monitoring beyond status badge
+- ~~Token health monitoring beyond status badge~~ *Not needed — Trusted Publishing (OIDC) has no stored token to expire*
 
 ### Post-MVP Features
 
@@ -131,9 +133,9 @@ On a different day, you merge a PR that only touches docs or CI config. You don'
 
 ### Journey 2: Maintainer — Something Breaks
 
-You notice the publish badge on the README is red. Click through to GitHub Actions — publish workflow failed because the NPM_TOKEN expired (403). Rotate the token in GitHub secrets, re-run the workflow. Badge goes green. The failed version publishes.
+You notice the publish badge on the README is red. Click through to GitHub Actions — publish workflow failed (npm registry outage, or OIDC configuration drift if the package was unlinked from the repo). Re-run the workflow. Badge goes green. The failed version publishes. If OIDC is misconfigured, the error message points to the Trusted Publishing settings on npmjs.com.
 
-**Reveals:** Failure visibility, status badge, clear error logs, re-runnable workflows, token management.
+**Reveals:** Failure visibility, status badge, clear error logs, re-runnable workflows, OIDC troubleshooting.
 
 ### Journey 3: Maintainer — Partial Publish Failure
 
@@ -164,7 +166,7 @@ You publish 0.3.0. A devcontainer build reports a runtime regression the integra
 | Journey | Key Capabilities Revealed |
 |---------|--------------------------|
 | **Normal development** | Core pipeline, integration test gate, badge tracks publish outcomes, silence on non-package merges |
-| **Something breaks** | Status badge, clear logs, re-runnable workflows, token management |
+| **Something breaks** | Status badge, clear logs, re-runnable workflows, OIDC troubleshooting |
 | **Partial publish failure** | Recovery procedure, idempotent workflow, state visibility |
 | **Onboarding new package** | Per-package config, pipeline flexibility, per-package integration tests |
 | **Cross-package change** | Manual changeset escape hatch, documentation of when to use it |
@@ -200,7 +202,7 @@ GitHub Actions — two separate workflows with explicit permissions:
 - Queue concurrency — never cancel a running publish
 - Safely re-runnable after any mid-sequence failure — checks if version bump already committed, checks if version already on npm. Re-run is the recovery strategy; no built-in retry logic needed at MVP.
 - GitHub releases use changesets-generated release notes
-- GitHub Actions masks secrets by default; workflow must not echo or log token values in custom steps
+- Trusted Publishing (OIDC) eliminates stored secrets; workflow must still not leak internal paths or credentials in custom steps
 
 **Compatibility:**
 - Changesets must coexist with existing commitlint/husky hooks without conflict — both operate on commits but at different stages (pre-commit validation vs post-merge version bumping)
@@ -209,7 +211,7 @@ GitHub Actions — two separate workflows with explicit permissions:
 
 - `.changeset/config.json` — changesets configuration, scope-to-package mapping
 - Per-package `package.json` — `files`, `bin` (must point to built output), `exports`, `private` fields
-- GitHub secrets — `NPM_TOKEN`: granular (fine-grained) token scoped to `@zookanalytics/*`, automation permissions, long expiry (1 year). Document token type, scope, and expiry for rotation.
+- Trusted Publishing (OIDC) — npm authentication tied to the specific GitHub repository and workflow. No stored secrets. Configuration managed on npmjs.com package settings.
 - `publish.yml` workflow file
 
 ### Conventional-Commit Plugin
@@ -287,7 +289,7 @@ Minimal, practical, located where you'll look:
 
 ### Authentication & Security
 
-- FR29: The system can authenticate to npm using a granular token scoped to `@zookanalytics/*`
+- FR29: The system can authenticate to npm using Trusted Publishing (OIDC) scoped to the specific repository and workflow — no stored secrets
 - FR30: The publish workflow can operate with explicit, minimal permissions (`contents: write`, `pull-requests: write`, `id-token: write`)
 
 ### Conditional Capabilities (include if trivial to implement)
@@ -295,16 +297,16 @@ Minimal, practical, located where you'll look:
 - FR31: The system can validate conventional commit scopes against the set of known package names and reject unrecognized scopes
 - FR32: The system can comment on PRs with a summary of pending version changes (changeset bot) to ensure coverage
 - FR33: The system can detect when a non-private package is missing from the changesets configuration
-- FR34: The system can monitor NPM_TOKEN health beyond the publish status badge
+- ~~FR34: The system can monitor NPM_TOKEN health beyond the publish status badge~~ *Superseded — Trusted Publishing (OIDC) eliminates stored tokens; no token to monitor*
 
 ## Non-Functional Requirements
 
 ### Security
 
-- NFR1: NPM_TOKEN must be stored as a GitHub Actions secret, never exposed in logs or workflow outputs
+- NFR1: npm authentication must use Trusted Publishing (OIDC) — no stored secrets; workflow logs must not leak sensitive information
 - NFR2: Publish workflow permissions must be explicitly scoped (`contents: write`, `pull-requests: write`, `id-token: write`) — no default broad permissions
 - NFR3: Packages marked `"private": true` must never be publishable, regardless of changesets configuration
-- NFR4: NPM token must be granular (fine-grained), scoped to `@zookanalytics/*` packages only, with automation-level permissions
+- NFR4: npm authentication must be scoped to the specific repository and workflow via Trusted Publishing (OIDC) configuration
 - NFR5: Workflow logs must not leak sensitive information (tokens, internal paths, credentials)
 
 ### Integration

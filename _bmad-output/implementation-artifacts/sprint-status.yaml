@@ -1,7 +1,7 @@
 # Unified Sprint Status - bmad-orchestrator Monorepo
 # Tracks all components: orchestrator CLI, agent-env, and release infrastructure
 #
-# generated: 2026-02-04
+# generated: 2026-02-06
 # project: BMAD Orchestrator
 # tracking_system: file-system
 # story_location: _bmad-output/implementation-artifacts
@@ -35,7 +35,7 @@
 # - SM typically creates next story after previous one is 'done' to incorporate learnings
 # - Dev moves story to 'review', then runs code-review (fresh context, different LLM recommended)
 
-generated: 2026-02-04
+generated: 2026-02-06
 project: BMAD Orchestrator
 tracking_system: file-system
 story_location: _bmad-output/implementation-artifacts
@@ -155,24 +155,22 @@ development_status:
   rel-epic-1-retrospective: done
 
   # ─── Release Epic 2: Automated Versioning & Release Staging ───
-  rel-epic-2: backlog
-  rel-2-1-initialize-changesets-in-the-monorepo: backlog
-  rel-2-2-configure-changeset-scope-mapping: backlog
-  rel-2-3-create-manual-changeset-workflow: backlog
-  rel-epic-2-retrospective: optional
+  rel-epic-2: done
+  rel-2-1-initialize-changesets-in-the-monorepo: done
+  rel-2-2-configure-changeset-scope-mapping: done
+  rel-2-3-create-manual-changeset-workflow: done
+  rel-2-4-perform-first-manual-publish-via-changesets: done
+  rel-epic-2-retrospective: done
 
   # ─── Release Epic 3: Automated Publishing & Distribution ───
   rel-epic-3: backlog
   rel-3-1-implement-automated-publish-workflow: backlog
   rel-3-2-configure-github-release-automation: backlog
   rel-3-3-add-publish-status-and-version-visibility: backlog
+  rel-3-4-document-recovery-and-trusted-publishing-procedures: backlog
   rel-epic-3-retrospective: optional
 
-  # ─── Release Epic 4: Pipeline Resilience & Observability ───
-  rel-epic-4: backlog
-  rel-4-1-implement-token-health-monitoring: backlog
-  rel-4-2-document-recovery-and-token-rotation-procedures: backlog
-  rel-epic-4-retrospective: optional
+
 
 # ══════════════════════════════════════════════════════════════════════════════
 # CROSS-COMPONENT DEPENDENCIES
@@ -223,7 +221,7 @@ cross_dependencies:
 # - Release infrastructure is independent of orchestrator/agent-env feature work
 # - rel-epic-1 and rel-epic-2 can be worked in parallel
 # - rel-epic-3 depends on both rel-epic-1 and rel-epic-2
-# - rel-epic-4 can start after rel-epic-3 (needs publish workflow to exist)
+# - rel-epic-4 dissolved (Story 4.1 superseded by OIDC, Story 4.2 merged into Epic 3 as Story 3.4)
 # - Update cross_dependencies as new blockers are discovered
 
 # ══════════════════════════════════════════════════════════════════════════════

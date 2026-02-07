@@ -16,6 +16,8 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -61,6 +63,17 @@ jobs:
 
       - name: Run all tests with coverage
         run: pnpm -r test:coverage
+
+      # Verify changeset configuration health (Story 2.3).
+      # Catches config drift and validates any pending changeset files are well-formed.
+      # Only runs on PRs — changeset status compares HEAD against baseBranch ("main").
+      # GitHub Actions PR checkout doesn't create a local "main" branch, so we
+      # create one from origin/main for changesets' merge-base detection.
+      - name: Validate changeset status
+        if: github.event_name == 'pull_request'
+        run: |
+          git branch main origin/main 2>/dev/null || true
+          pnpm changeset status
 
       # Pack agent-env tarball for integration testing (Story 1.4).
       # @zookanalytics/shared is bundled into dist via tsup noExternal config.

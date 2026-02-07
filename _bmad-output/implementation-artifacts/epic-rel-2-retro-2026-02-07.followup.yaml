@@ -1,0 +1,92 @@
+source: _bmad-output/implementation-artifacts/epic-rel-2-retro-2026-02-07.md
+generated: 2026-02-07
+
+items:
+  - id: 1
+    action_item: 1
+    workflow: bmad:bmm:workflows:quick-dev
+    status: pending
+    summary: |
+      Add ESM vs CJS mocking guidance to architecture or dev guidelines.
+      Specifically document that vi.spyOn(require('node:fs'), ...) doesn't
+      intercept ESM imports — mocks silently become no-ops. Discovered during
+      rel-2-3 when 5 tests were broken. Success criteria: guidelines include
+      ESM mocking patterns that work with Vitest and ESM modules.
+
+  - id: 2
+    action_item: 2
+    workflow: bmad:bmm:workflows:quick-dev
+    status: pending
+    summary: |
+      Add "false verification claims" as a known AI dev agent risk to code
+      review process documentation. Pattern: dev agent claims tests pass when
+      they haven't actually been executed or are broken (found in 2 of 4 rel-2
+      stories). Success criteria: review checklist includes explicit step to
+      verify test claims by running tests independently.
+
+  - id: 3
+    action_item: 3
+    workflow: bmad:bmm:workflows:quick-dev
+    status: pending
+    summary: |
+      Document out-of-scope changes as a known AI dev agent pattern in review
+      process. Pattern: dev agent makes changes beyond story scope such as
+      Node.js version downgrade, config field changes, adding unrelated bullets
+      to docs (found in 3 of 4 rel-2 stories). Success criteria: review process
+      flags out-of-scope changes as a specific watch item.
+
+  - id: 4
+    action_item: 4
+    workflow: bmad:bmm:workflows:quick-dev
+    status: pending
+    summary: |
+      Extract duplicate getChangesetFiles() function from
+      src/release/changeset-publish-workflow.test.ts:34 and
+      src/release/changeset-format.test.ts:24 into a shared test utility.
+      Priority: Low — cosmetic, no functional impact. Success criteria: single
+      source of truth for the helper, both test files import from shared location,
+      all 446 tests still pass.
+
+  - id: 5
+    action_item: 5
+    workflow: bmad:bmm:workflows:quick-dev
+    status: pending
+    summary: |
+      Improve shell escaping in src/release/changeset-publish-workflow.test.ts
+      lines 114-118. Current escapedContent only escapes double-quotes but not
+      backticks or $() subshells. Priority: Medium — security hardening for test
+      utilities. Success criteria: all shell-special characters properly escaped,
+      all tests still pass.
+
+  - id: 6
+    action_item: 6
+    workflow: human
+    status: pending
+    summary: |
+      Configure Trusted Publishing (OIDC) in npm registry settings for
+      @zookanalytics/agent-env. Link the package to GitHub repo
+      ZookAnalytics/bmad-orchestrator and the publish.yml workflow file.
+      Required before Epic rel-3 automated publishing can work. Action: go to
+      npm -> Package Settings -> Publishing Access and configure OIDC provider.
+
+  - id: 7
+    action_item: 7
+    workflow: bmad:bmm:workflows:quick-dev
+    status: pending
+    summary: |
+      Scan all packages/*/package.json for non-publishable packages missing
+      "private": true. Orchestrator was fixed during rel-2-4. Verify
+      bmm-retrospective-module (already has it) and any other packages. Run
+      pnpm changeset status to confirm only agent-env is reported as publishable.
+      Success criteria: no non-publishable packages can be accidentally published.
+
+  - id: 8
+    action_item: 8
+    workflow: bmad:bmm:workflows:research
+    status: pending
+    summary: |
+      Research how changesets/action@v1 creates and manages "Version Packages"
+      PRs for Epic rel-3 preparation. Understand: when it creates vs updates the
+      PR, how it detects publish vs version mode, what permissions it needs, how
+      concurrency groups interact with the action. Output: brief summary document
+      for the team before starting Epic rel-3 Story 3.1.

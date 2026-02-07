@@ -1,5 +1,6 @@
 {
   "name": "@zookanalytics/bmad-orchestrator",
+  "private": true,
   "version": "0.1.0",
   "description": "Unified command center for multi-DevPod development",
   "type": "module",
@@ -32,7 +33,6 @@
     "check": "pnpm type-check && pnpm lint && pnpm test:run"
   },
   "dependencies": {
-    "@zookanalytics/shared": "workspace:*",
     "@inkjs/ui": "^2.0.0",
     "clipboardy": "^5.0.2",
     "commander": "^14.0.2",
@@ -43,6 +43,7 @@
     "yaml": "^2.8.2"
   },
   "devDependencies": {
+    "@zookanalytics/shared": "workspace:*",
     "@types/node": "^25.0.8",
     "@types/react": "^19.2.8",
     "ink-testing-library": "^4.0.0",

@@ -4,9 +4,15 @@ workflowType: 'architecture'
 lastStep: 8
 status: 'complete'
 completedAt: '2026-02-02'
-lastValidated: '2026-02-06'
-lastUpdated: '2026-02-06'
+lastValidated: '2026-02-07'
+lastUpdated: '2026-02-07'
 updateHistory:
+  - date: '2026-02-07'
+    change: 'Post-rel-2 validation: CONFORMANT. Test count updated 417→446. bmm-retrospective-module marked private (resolved). Orchestrator shared dep moved to devDependencies (resolved). Full rel-2 post-implementation validation entry added.'
+  - date: '2026-02-06'
+    change: 'Mid-rel-2 validation: schema version updated to 3.1.2, bmm-retrospective-module noted as non-private risk, orchestrator shared-dep forward note added'
+  - date: '2026-02-06'
+    change: 'Pre-rel-2 validation: confirmed codebase conformant. Added local publishing auth note for Story 2.4. Marked ci.yml changes as DONE.'
   - date: '2026-02-06'
     change: 'Replaced NPM_TOKEN approach with Trusted Publishing (OIDC) per Epic rel-1 retrospective decision'
 validationFindings:
@@ -17,14 +23,34 @@ validationFindings:
   - severity: moderate
     summary: 'files field missing README.md and LICENSE per Story 1.1 ACs'
     status: 'resolved in rel-1-1'
+  - severity: moderate
+    summary: 'bmm-retrospective-module lacks "private": true — visible to changesets as publishable but has no build/publish config'
+    resolution: 'Added "private": true to bmm-retrospective-module/package.json (2026-02-07)'
+    status: 'resolved'
   - severity: low
     summary: 'bin wrapper pattern is correct but architecture description was imprecise'
     status: 'resolved in rel-1-1'
+  - severity: low
+    summary: 'Schema version mismatch: architecture had 3.1.1, actual is 3.1.2'
+    status: 'resolved — architecture updated'
 postImplementationValidation:
   - epic: 'rel-1'
     date: '2026-02-05'
     result: 'CONFORMANT'
     notes: 'All 4 stories implemented per architecture. tsup bundling, clean-room integration test, artifact pipeline all match documented decisions. Minor deviation: jq used for JSON validation instead of node -e (acceptable - jq pre-installed on GHA runners).'
+  - epic: 'rel-2 (stories 2.1-2.2)'
+    date: '2026-02-06'
+    result: 'CONFORMANT with findings'
+    notes: 'Changesets installed and configured per architecture. Config matches spec. 3 findings: (1) LOW schema version 3.1.2 vs 3.1.1 — updated. (2) MODERATE bmm-retrospective-module not private — must resolve before Epic 3. (3) LOW orchestrator shared-dep forward note added.'
+  - epic: 'rel-2 (complete — stories 2.1-2.4)'
+    date: '2026-02-07'
+    result: 'CONFORMANT'
+    notes: 'All 4 stories implemented per architecture. Changesets installed, configured, CI validation added, manual publish pipeline validated via 29 root-level tests. Two open findings resolved: (1) bmm-retrospective-module marked private. (2) orchestrator shared dep moved to devDependencies. Story 2.4 AC4 (actual npm publish) pending npm login — all automated validation passes. 446 total tests, zero regressions.'
+preImplementationValidation:
+  - epic: 'rel-2'
+    date: '2026-02-06'
+    result: 'READY'
+    notes: 'Codebase confirmed conformant with architecture. No drift found. One gap documented: local npm auth needed for Story 2.4 (Trusted Publishing only works in CI). Architecture updated with local auth guidance. Note: sprint-status.yaml is missing Story 2.4 entry.'
 inputDocuments:
   - '_bmad-output/planning-artifacts/release-infrastructure/product-brief.md'
   - '_bmad-output/planning-artifacts/release-infrastructure/prd.md'
@@ -74,13 +100,14 @@ Architecturally, most FRs map to configuration (changesets config, package.json 
 
 | Constraint | Description |
 |------------|-------------|
-| Existing pnpm monorepo | `packages/*` workspace structure already established (orchestrator, agent-env, shared) |
+| Existing pnpm monorepo | `packages/*` workspace structure: orchestrator, agent-env, shared, bmm-retrospective-module |
 | Existing CI | `.github/workflows/ci.yml` — publish workflow must complement, not duplicate |
 | Existing husky/lint-staged | Pre-commit hook runs `lint-staged` only. No commitlint installed. No `commit-msg` hook. Won't interfere with CI bot commits. |
 | Changesets as version engine | Decided in brief/PRD — handles workspace protocol rewriting, publish ordering |
 | npm public registry | `@zookanalytics` org scope, public packages |
 | agent-env as pilot | Prove pipeline with one TypeScript CLI package before scaling |
 | `shared` stays private | `"private": true` — never published regardless of changesets config |
+| `bmm-retrospective-module` not publishable | No build script, no dist output, no publish config. Marked `"private": true` (2026-02-07) — excluded from changesets. |
 
 ### Configuration Surface
 
@@ -289,6 +316,8 @@ The publish pipeline's reliability depends on two GitHub repository settings tha
 
 **Token health check:** Not required with Trusted Publishing. OIDC tokens are generated per-workflow-run and cannot expire between runs. The silent failure mode (expired token + no publishable merges) is eliminated.
 
+**Local publishing auth (Story 2.4):** Trusted Publishing (OIDC) only works in GitHub Actions. For the one-time local `pnpm changeset publish` in Story 2.4, the maintainer must authenticate to npm locally via `npm login` (web-based login to `@zookanalytics` org). This creates a local `.npmrc` auth token used only for the initial manual publish. After Story 2.4, all subsequent publishes go through the automated `publish.yml` workflow using OIDC — the local token is not needed again. No permanent `NPM_TOKEN` secret is stored in the repo.
+
 **Status badge:** Publish workflow badge on README. Reflects last publish outcome.
 
 > **Decision Record (2026-02-06):** During Epic rel-1 retrospective, npm recommended Trusted Publishing over granular tokens. Decision made to adopt OIDC approach. NPM_TOKEN references throughout this document are superseded by Trusted Publishing.
@@ -449,30 +478,29 @@ The existing `ci.yml` has a single `check` job. This project adds:
    - Downloads tarball artifact only (no checkout)
    - Runs 4 MVP assertions
 
-**Current ci.yml structure → Target structure:**
+**ci.yml structure (current — implemented in Epic rel-1):**
 
 ```
-Current:                          Target:
-jobs:                             jobs:
-  check:                            check:
-    - Checkout                        - Checkout
-    - Setup Node                      - Setup Node
-    - Setup pnpm                      - Setup pnpm
-    - Install                         - Install
-    - Build                           - Build
-    - Type check                      - Type check
-    - Lint                            - Lint
-    - Test                            - Test
-                                      - Pack agent-env tarball      ← NEW
-                                      - Upload tarball artifact     ← NEW
+jobs:
+  check:
+    - Checkout
+    - Setup Node
+    - Setup pnpm
+    - Install
+    - Build
+    - Type check
+    - Lint
+    - Test
+    - Pack agent-env tarball      ← DONE (rel-1-3)
+    - Upload tarball artifact     ← DONE (rel-1-3)
 
-                                    integration-test:               ← NEW JOB
-                                      needs: [check]
-                                      - Download tarball artifact
-                                      - Install tarball globally
-                                      - Assert --version works
-                                      - Assert --help works
-                                      - Assert list --json works
+  integration-test:               ← DONE (rel-1-4)
+    needs: [check]
+    - Download tarball artifact
+    - Install tarball globally
+    - Assert --version works
+    - Assert --help works
+    - Assert list --json works
 ```
 
 ### Files Created: publish.yml
@@ -529,7 +557,7 @@ jobs:
 
 ```json
 {
-  "$schema": "https://unpkg.com/@changesets/config@3.1.1/schema.json",
+  "$schema": "https://unpkg.com/@changesets/config@3.1.2/schema.json",
   "changelog": ["@changesets/changelog-github", { "repo": "ZookAnalytics/bmad-orchestrator" }],
   "commit": false,
   "fixed": [],
@@ -597,7 +625,7 @@ After analysis, `shared` is small (102 lines, 4 runtime functions) but `orchestr
 - Change build script from `tsc` to `tsup`
 - Move `@zookanalytics/shared` from `dependencies` to `devDependencies` (bundled at build time, consumers never need it)
 - `bin/agent-env.js` wrapper unchanged — it imports `../dist/cli.js` which tsup produces
-- `orchestrator` unchanged — not being published yet, continues using shared via workspace protocol
+- `orchestrator` — `@zookanalytics/shared` moved to devDependencies (2026-02-07). Not being published yet — continues using shared via workspace protocol at dev time. **⚠️ When orchestrator is published, it will need tsup bundling** (noExternal config, same pattern as agent-env).
 
 **Verification criteria:**
 - `dist/cli.js` contains no imports from `@zookanalytics/shared`
@@ -631,6 +659,45 @@ After analysis, `shared` is small (102 lines, 4 runtime functions) but `orchestr
 - Root `package.json` is `"private": true` with husky + lint-staged (no commitlint) ✅
 - No README.md exists at root (to be created with badges in Story 3.3) ✅
 - `agent-env` uses `"type": "module"` with ESM exports ✅
+
+### Pre-Epic rel-2 Validation (2026-02-06)
+
+Validated architecture against actual codebase before Epic rel-2 implementation. All Epic rel-1 changes are confirmed conformant.
+
+**Confirmed Conformant:**
+- `@zookanalytics/shared` moved to devDependencies ✅ (tsup bundles it at build time)
+- `tsup.config.ts` with `noExternal: ['@zookanalytics/shared']` ✅
+- Build script uses `tsup` (not `tsc`) ✅
+- `bin` entry is `bin/agent-env.js` (no `./` prefix — fixed post-rel-1) ✅
+- `files` includes `dist`, `bin`, `config`, `README.md`, `LICENSE` ✅
+- `packages/agent-env/README.md` and `LICENSE` exist ✅
+- CI has pack-tarball step, upload artifact step, and integration-test job ✅
+- Integration test uses `jq` for JSON validation (acceptable deviation noted in rel-1 retro) ✅
+- No `@changesets/cli` installed — correct, this is Story 2.1 ✅
+- No `changeset` script in root `package.json` — correct, this is Story 2.1 ✅
+
+**New Finding — Local Publishing Auth:**
+Story 2.4 requires `pnpm changeset publish` from local. Trusted Publishing (OIDC) only works in GitHub Actions. Maintainer must `npm login` locally for this one-time operation. Architecture updated to document this (see Authentication & Monitoring Architecture section).
+
+**No architecture changes required for Epic rel-2.** All decisions and patterns documented in this architecture are ready for implementation.
+
+### Mid-Epic rel-2 Validation (2026-02-06)
+
+Validated architecture against actual codebase after Stories 2.1 and 2.2 completed.
+
+**Confirmed Conformant:**
+- `@changesets/cli@^2.29.8` and `@changesets/changelog-github@^0.5.2` installed as workspace-root devDependencies ✅
+- `"changeset": "changeset"` script added to root `package.json` ✅
+- `.changeset/config.json` matches architecture spec: `access: "public"`, `baseBranch: "main"`, `updateInternalDependencies: "patch"`, `changelog: @changesets/changelog-github`, `ignore: []` ✅
+- `.changeset/README.md` extended with project-specific config rationale and private package exclusion docs ✅
+- `pnpm changeset status` runs clean with no configuration drift ✅
+- `shared` is correctly excluded by changesets via `"private": true` (no explicit `ignore` needed) ✅
+- All 446 tests pass, zero regressions ✅
+
+**Drift Found:**
+1. **(LOW) Schema version**: Architecture doc had `@changesets/config@3.1.1`, actual is `@changesets/config@3.1.2` (installed version). Architecture updated to match.
+2. **(MODERATE) `bmm-retrospective-module` not private**: This 4th workspace package lacks `"private": true` and is visible to changesets as publishable. It has no build script, no dist output, and is not intended for npm publish. **RESOLVED (2026-02-07):** Added `"private": true` to package.json.
+3. **(LOW) Orchestrator `shared` dependency**: `orchestrator` still has `@zookanalytics/shared` in runtime `dependencies` with `workspace:*`. **RESOLVED (2026-02-07):** Moved to devDependencies. Forward-looking note retained — tsup bundling needed when orchestrator publishes.
 
 ## Architecture Validation Results
 
@@ -713,7 +780,7 @@ Recommended implementation order based on dependency analysis:
 1. ~~**npm org setup** — Create `@zookanalytics` org, generate granular token, add as GitHub secret.~~ **COMPLETED (Epic rel-1):** Org exists, Trusted Publishing configured, package linked to repo.
 2. ~~**Manual dry-run publish** — `npm pack` + inspect tarball + `pnpm publish --dry-run` from local.~~ **COMPLETED (Epic rel-1):** De-risked auth, org, and package config.
 3. **Install changesets** — `pnpm add -Dw @changesets/cli @changesets/changelog-github && pnpm changeset init`. Configure `.changeset/config.json`.
-4. **First real publish via changesets** — Manual `pnpm changeset` → `pnpm changeset version` → `pnpm changeset publish` from local. Proves the full changesets flow works with Trusted Publishing.
+4. **First real publish via changesets** — Manual `pnpm changeset` → `pnpm changeset version` → `pnpm changeset publish` from local. Requires `npm login` for local auth (Trusted Publishing only works in CI). Proves the full changesets flow works.
 5. ~~**ci.yml: pack tarball step** — Add `npm pack` + artifact upload to existing `check` job.~~ **COMPLETED (Epic rel-1).**
 6. ~~**ci.yml: integration-test job** — New job with 4 MVP assertions.~~ **COMPLETED (Epic rel-1).**
 7. **publish.yml** — Create the workflow with changesets/action@v1. Uses `id-token: write` for Trusted Publishing. First automated publish.
