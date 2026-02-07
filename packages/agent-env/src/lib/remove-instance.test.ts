@@ -680,6 +680,21 @@ describe('removeInstance', () => {
     expect(result.error.code).toBe('CONTAINER_ERROR');
   });
 
+  it('returns WORKSPACE_DELETE_FAILED when workspace deletion throws', async () => {
+    const state = createTestState('repo-auth');
+    await createTestWorkspace('repo-auth', state);
+    const mockRm = vi.fn().mockRejectedValue(new Error('EACCES: permission denied'));
+    const deps = createTestDeps({ deleteFsDeps: { rm: mockRm as unknown as typeof rm } });
+
+    const result = await removeInstance('auth', deps);
+
+    expect(result.ok).toBe(false);
+    if (result.ok) throw new Error('Expected failure');
+    expect(result.error.code).toBe('WORKSPACE_DELETE_FAILED');
+    expect(result.error.message).toContain('EACCES');
+    expect(result.error.suggestion).toContain('Remove manually');
+  });
+
   it('finds workspace by exact name', async () => {
     const state = createTestState('repo-auth');
     await createTestWorkspace('repo-auth', state);

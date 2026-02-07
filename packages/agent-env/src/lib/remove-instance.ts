@@ -271,7 +271,18 @@ export async function removeInstance(
   }
 
   // Step 6: Delete workspace folder
-  await deleteWorkspace(wsPath, deps.deleteFsDeps);
+  try {
+    await deleteWorkspace(wsPath, deps.deleteFsDeps);
+  } catch (err) {
+    return {
+      ok: false,
+      error: {
+        code: 'WORKSPACE_DELETE_FAILED',
+        message: `Failed to delete workspace: ${err instanceof Error ? err.message : String(err)}`,
+        suggestion: `Container was removed but workspace remains at ${wsPath.root}. Remove manually with: rm -rf ${wsPath.root}`,
+      },
+    };
+  }
 
   if (force) {
     return {
