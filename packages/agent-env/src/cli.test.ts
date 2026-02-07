@@ -179,14 +179,14 @@ describe('agent-env CLI', () => {
       expect(result.stdout).toContain('--attach');
     });
 
-    // This test is problematic as it interacts with the actual git repo of the agent-env
-    // It should be removed or rethought for a fully mocked environment
+    // This test depends on a real git origin remote, which isn't available
+    // in all environments (e.g., devcontainers). Needs a mocked git setup.
     // it('create with --repo . resolves current directory git remote', async () => {
     //   const result = await runCli(['create', 'test-instance', '--repo', '.']);
     //   const output = stripAnsiCodes(result.stdout + result.stderr);
     //   expect(output).not.toContain('MISSING_OPTION');
     //   expect(output).toContain('Creating instance');
-    // });
+    // }, 15000);
   });
 
   describe('list command', () => {
