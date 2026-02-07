@@ -1,8 +1,10 @@
 import { readFileSync } from 'node:fs';
-import { join, resolve } from 'node:path';
+import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
-const PACKAGE_JSON_PATH = resolve(import.meta.dirname, '../../package.json');
+import { CHANGESET_DIR, PROJECT_ROOT } from './changeset-test-utils.js';
+
+const PACKAGE_JSON_PATH = join(PROJECT_ROOT, 'package.json');
 const PROJECT_REPO = (
   JSON.parse(readFileSync(PACKAGE_JSON_PATH, 'utf-8')) as { repository: string }
 ).repository.split(':')[1];
@@ -15,7 +17,7 @@ const PROJECT_REPO = (
  * Story: rel-2-3 (Create Manual Changeset Workflow)
  */
 
-const CONFIG_PATH = join(import.meta.dirname, '../../.changeset/config.json');
+const CONFIG_PATH = join(CHANGESET_DIR, 'config.json');
 
 function loadConfig(): Record<string, unknown> {
   const raw = readFileSync(CONFIG_PATH, 'utf-8');

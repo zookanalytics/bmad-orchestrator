@@ -3,7 +3,7 @@
 **Story ID:** rel-2-4
 **Epic:** Release Epic 2 - Automated Versioning & Release Staging
 **Sprint:** Release Infrastructure Sprint 2
-**Status:** review
+**Status:** done
 
 ---
 
@@ -145,10 +145,10 @@ So that I can prove the changesets flow works end-to-end before automating it in
 
 ## Review Follow-ups (AI)
 
-- [ ] [AI-Review][MEDIUM] Extract duplicate `getChangesetFiles()` helper from `changeset-publish-workflow.test.ts:34` and `changeset-format.test.ts:24` into shared test utility
-- [ ] [AI-Review][MEDIUM] Harden shell escaping in `changeset-publish-workflow.test.ts:114-118` — `escapedContent` only escapes double-quotes, not backticks or `$()` subshells
-- [ ] [AI-Review][LOW] Fix `restoreState()` edge case at `changeset-publish-workflow.test.ts:46` — if `beforeAll` fails between git checkout and capture, cleanup is skipped
-- [ ] [AI-Review][LOW] Clarify AC numbering in completion notes (was "AC 2-4", should be "AC 4" for npm publish)
+- [x] [AI-Review][MEDIUM] Extract duplicate `getChangesetFiles()` helper from `changeset-publish-workflow.test.ts:34` and `changeset-format.test.ts:24` into shared test utility
+- [x] [AI-Review][MEDIUM] Harden shell escaping in `changeset-publish-workflow.test.ts:114-118` — `escapedContent` only escapes double-quotes, not backticks or `$()` subshells
+- [x] [AI-Review][LOW] Fix `restoreState()` edge case at `changeset-publish-workflow.test.ts:46` — if `beforeAll` fails between git checkout and capture, cleanup is skipped
+- [x] [AI-Review][LOW] Clarify AC numbering in completion notes (was "AC 2-4", should be "AC 4" for npm publish) — already correct in current text
 
 ## Change Log
 
@@ -157,3 +157,4 @@ So that I can prove the changesets flow works end-to-end before automating it in
 | 2026-02-07 | Story created and implementation started | Dev Agent |
 | 2026-02-07 | All tasks completed, status set to review | Dev Agent |
 | 2026-02-07 | Code review: 1 HIGH fixed (status→review, AC4 pending), 2 MEDIUM as action items (test file constraints), 3 LOW noted | Code Review |
+| 2026-02-07 | Manual publish completed. All 4 review follow-ups addressed. Status → done | Dev Agent |

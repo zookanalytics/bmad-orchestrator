@@ -1,7 +1,9 @@
 import { execSync } from 'node:child_process';
-import { existsSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
-import { join, resolve } from 'node:path';
+import { existsSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+
+import { CHANGESET_DIR, getChangesetFiles, PROJECT_ROOT } from './changeset-test-utils.js';
 
 /**
  * Validates the full changeset → version → publish-readiness pipeline.
@@ -16,8 +18,6 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
  * Story: rel-2-4 (Perform First Manual Publish via Changesets)
  */
 
-const PROJECT_ROOT = resolve(import.meta.dirname, '../..');
-const CHANGESET_DIR = join(PROJECT_ROOT, '.changeset');
 const AGENT_ENV_DIR = join(PROJECT_ROOT, 'packages/agent-env');
 const AGENT_ENV_PKG = join(AGENT_ENV_DIR, 'package.json');
 const CHANGELOG_PATH = join(AGENT_ENV_DIR, 'CHANGELOG.md');
@@ -31,10 +31,6 @@ let bumpedVersion: string;
 let bumpedPkgContent: string;
 let tarballPath: string | null = null;
 
-function getChangesetFiles(): string[] {
-  return readdirSync(CHANGESET_DIR).filter((f) => f.endsWith('.md') && f !== 'README.md');
-}
-
 /** Ensure package.json has the bumped version (concurrent processes may modify it) */
 function ensureBumpedVersion(): void {
   if (bumpedPkgContent) {
@@ -46,6 +42,16 @@ function restoreState(): void {
   // Restore original package.json content (captured before any modifications)
   if (originalPkgContent) {
     writeFileSync(AGENT_ENV_PKG, originalPkgContent);
+  } else {
+    // Fallback: if beforeAll failed before capturing state, restore via git
+    try {
+      execSync('git checkout -- packages/agent-env/package.json', {
+        cwd: PROJECT_ROOT,
+        encoding: 'utf-8',
+      });
+    } catch {
+      // Best effort — file may already be clean
+    }
   }
 
   // Remove CHANGELOG (not committed, any copy is a test artifact)
@@ -111,7 +117,13 @@ describe('changeset publish workflow', () => {
       // This prevents concurrent processes from consuming the changeset file
       // between creation and version (observed with parallel CI agents).
       const changesetContent = `---\n"@zookanalytics/agent-env": patch\n---\n\n${CHANGESET_DESCRIPTION}\n`;
-      const escapedContent = changesetContent.replace(/"/g, '\\"');
+      // Escape all characters meaningful inside bash double-quoted strings.
+      // Backslash must be escaped first to avoid double-escaping the others.
+      const escapedContent = changesetContent
+        .replace(/\\/g, '\\\\')
+        .replace(/"/g, '\\"')
+        .replace(/\$/g, '\\$')
+        .replace(/`/g, '\\`');
 
       const output = execSync(
         `printf "%s" "${escapedContent}" > "${TEST_CHANGESET}" && pnpm changeset version`,
