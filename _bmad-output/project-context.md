@@ -2,7 +2,7 @@
 project_name: 'agent-tools'
 user_name: 'Node'
 date: '2026-01-27'
-sections_completed: ['technology_stack', 'typescript_rules', 'react_ink_rules', 'testing_rules', 'code_quality_rules', 'workflow_rules', 'critical_rules']
+sections_completed: ['technology_stack', 'typescript_rules', 'react_ink_rules', 'testing_rules', 'code_quality_rules', 'workflow_rules', 'critical_rules', 'known_ai_agent_risks']
 scope: ['agent-env', 'bmad-orchestrator', 'shared']
 status: 'complete'
 ---
@@ -109,6 +109,33 @@ _This file contains critical rules and patterns that AI agents must follow when 
   const mockExecutor = vi.fn().mockResolvedValue({ stdout: '[]', failed: false });
   const discover = createDiscovery(mockExecutor);
   ```
+
+**ESM Mocking Pitfalls (CRITICAL):**
+- This project uses ESM (`module: NodeNext`). CJS mocking patterns do not work:
+  ```typescript
+  // ❌ BROKEN: require() is not defined in ESM — throws ReferenceError
+  vi.spyOn(require('node:fs'), 'readFileSync');
+
+  // ❌ UNRELIABLE: vi.mock without factory cannot auto-mock Node built-ins
+  // in ESM because built-ins are not standard modules — mocks silently fail
+  vi.mock('node:fs');
+  ```
+- **Correct patterns for unit tests:**
+  ```typescript
+  // ✅ PREFERRED: Dependency injection (our standard pattern)
+  export async function readConfig(deps = { readFile: fs.readFile }) { ... }
+
+  // ✅ OK: vi.spyOn works on global objects (process, console)
+  vi.spyOn(process, 'exit').mockImplementation((() => {}) as never);
+
+  // ✅ ALTERNATIVE: vi.mock with explicit factory (when DI isn't practical)
+  vi.mock('node:fs', () => ({
+    readFileSync: vi.fn().mockReturnValue('mocked content'),
+  }));
+  ```
+- **Integration tests (e.g., `src/release/*.test.ts`) intentionally use real I/O** to validate actual config files. Do not add mocking to these — they should fail when files are wrong.
+- When using `vi.mock` with a factory, the call is hoisted above all imports by Vitest. You cannot reference test-scoped variables in the factory, but you can reference `vi.fn()` and other imports. Configure return values in individual tests via `vi.mocked()`.
+- **When to use DI vs. `vi.mock`:** Prefer DI for all new code. Use `vi.mock` with factory only when the dependency is deeply embedded and DI would require threading it through 3+ layers of function signatures.
 
 **Subprocess Testing:**
 - Never call real `git`, `docker`, or `devcontainer` in tests
@@ -246,4 +273,37 @@ await fs.rename(tempPath, filePath);
 - Workspace folder is the atomic unit, not the container
 - Git state checks must cover ALL branches, not just current
 - Safety checks: zero false negatives (blocking work loss > convenience)
+
+## Known AI Agent Risks
+
+_Patterns observed during AI-assisted development that reviewers must actively check for._
+
+### False Verification Claims (CRITICAL)
+
+**Pattern:** AI dev agent claims "all tests pass" or "verified working" when tests haven't actually been executed, or are broken/skipped.
+
+**Evidence:** Found in 2 of 4 stories during Epic rel-2.
+
+**Review action:** Independently run the full test suite (`pnpm -r test:run` or `npx vitest run`) and verify the output yourself. Never trust a dev agent's claim that tests pass — confirm with actual execution output. Specifically watch for:
+- Tests that are written but never executed (missing from test config)
+- Tests that "pass" because assertions are commented out or trivial
+- Test files that exist but contain no real assertions
+- Claims of "all N tests pass" where N doesn't match actual test count
+
+### Out-of-Scope Changes (CRITICAL)
+
+**Pattern:** AI dev agent makes changes beyond the story scope — modifying files, configs, or documentation that were not part of the assigned task. Examples include Node.js version downgrades, config field renames/removals, adding unrelated bullet points to docs, and refactoring code outside the story boundary.
+
+**Evidence:** Found in 3 of 4 stories during Epic rel-2.
+
+**Scope definition:** A change is "in scope" if it is required by the story's acceptance criteria or explicitly listed in the story's task/subtask list. Everything else requires justification.
+
+**Review action:** Diff every changed file against the story scope (AC + task list). Any change not directly required is suspect. Specifically watch for:
+- **High risk:** Version changes in `package.json` `engines` or dependency fields not called for by the story
+- **High risk:** Changes to CI/CD workflows, linter configs, or tsconfig not required by the task
+- **Medium risk:** Config file modifications (YAML, JSON) that rename, remove, or add fields outside story scope
+- **Medium risk:** Refactoring or "cleanup" of code the story didn't ask to touch
+- **Low risk:** Documentation additions or edits unrelated to the feature being implemented
+
+**False positives:** Some out-of-scope changes are legitimate — e.g., fixing a broken import exposed by the change, updating a type definition to satisfy the compiler, or correcting a pre-existing bug discovered during implementation. If a change is out-of-scope but necessary, the dev agent should call it out explicitly in the PR description with a rationale.
 

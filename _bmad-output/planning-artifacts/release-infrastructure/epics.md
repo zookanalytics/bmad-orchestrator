@@ -3,8 +3,10 @@ stepsCompleted: [1, 2, 3, 4]
 inputDocuments:
   - _bmad-output/planning-artifacts/release-infrastructure/prd.md
   - _bmad-output/planning-artifacts/release-infrastructure/architecture.md
-lastEdited: '2026-02-06'
+lastEdited: '2026-02-07'
 editHistory:
+  - date: '2026-02-07'
+    changes: 'Promoted FR32 (changeset bot) from Deferred to Epic 3 Story 3.3. Added ACs for PR changeset coverage comments and advisory CI warning. Triggered by readiness review finding that no automation ensures changesets are included on package-changing PRs — a silent failure risk.'
   - date: '2026-02-06'
     changes: 'Implementation readiness fixes: FR Coverage Map corrected (FR10/11/12/15 → Story 3.1, FR26 implicit, FR27/28 → Story 3.4). FR30 text fixed (added pull-requests: write). Story 2.4 prerequisite note added. Epic 4 dissolved — Story 4.2 merged into Epic 3 as Story 3.4.'
   - date: '2026-02-06'
@@ -125,7 +127,7 @@ NFR15: The status badge must accurately reflect publish health — a green badge
 - **FR29**: Epic 3 - Granular token authentication
 - **FR30**: Epic 3 - Explicit workflow permissions
 - **FR31**: Deferred - Scope validation (per Architecture cross-cutting #8)
-- **FR32**: Deferred - Changeset bot comments (per Architecture cross-cutting #8; PRD elevated to core but no architectural design exists yet)
+- **FR32**: Epic 3 (Story 3.3) - Changeset bot PR comments for coverage visibility
 - **FR33**: Deferred - Config drift detection (per Architecture cross-cutting #8)
 - **FR34**: ~~Epic 4 - Token health monitoring~~ *Superseded — Trusted Publishing eliminates token expiry concern*
 
@@ -304,8 +306,8 @@ So that I have a historical record of releases and changelogs within the reposit
 ### Story 3.3: Add Publish Status and Version Visibility
 
 As a maintainer,
-I want to see the pipeline status and the current npm version on the project's landing page,
-So that I can verify both the process health and the deployment outcome at a glance.
+I want to see the pipeline status, current npm version, and changeset coverage on PRs,
+So that I can verify process health, deployment outcomes, and whether PRs include required changesets at a glance.
 
 **Acceptance Criteria:**
 
@@ -314,6 +316,11 @@ So that I can verify both the process health and the deployment outcome at a gla
 **Then** the badge must correctly reflect the status (Success/Failure) of the last run on the `main` branch
 **And** I must add an npm version badge for `@zookanalytics/agent-env`
 **And** both badges must be positioned prominently near the top of the README
+
+**Given** a pull request opened against `main`
+**When** the PR modifies files in a publishable package
+**Then** the changeset bot must comment on the PR indicating which packages have changesets and which do not (FR32)
+**And** the CI changeset status step must warn (not fail) if no changesets are found, so infrastructure-only PRs are not blocked
 
 ### Story 3.4: Document Recovery and Trusted Publishing Procedures
 

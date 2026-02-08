@@ -163,12 +163,12 @@ development_status:
   rel-epic-2-retrospective: done
 
   # ─── Release Epic 3: Automated Publishing & Distribution ───
-  rel-epic-3: backlog
-  rel-3-1-implement-automated-publish-workflow: backlog
-  rel-3-2-configure-github-release-automation: backlog
-  rel-3-3-add-publish-status-and-version-visibility: backlog
-  rel-3-4-document-recovery-and-trusted-publishing-procedures: backlog
-  rel-epic-3-retrospective: optional
+  rel-epic-3: done
+  rel-3-1-implement-automated-publish-workflow: done
+  rel-3-2-configure-github-release-automation: done
+  rel-3-3-add-publish-status-and-version-visibility: done
+  rel-3-4-document-recovery-and-trusted-publishing-procedures: done
+  rel-epic-3-retrospective: done
 
 
 
