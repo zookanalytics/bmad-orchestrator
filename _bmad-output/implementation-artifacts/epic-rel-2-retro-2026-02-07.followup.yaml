@@ -5,7 +5,7 @@ items:
   - id: 1
     action_item: 1
     workflow: bmad:bmm:workflows:quick-dev
-    status: pending
+    status: done
     summary: |
       Add ESM vs CJS mocking guidance to architecture or dev guidelines.
       Specifically document that vi.spyOn(require('node:fs'), ...) doesn't
@@ -16,7 +16,7 @@ items:
   - id: 2
     action_item: 2
     workflow: bmad:bmm:workflows:quick-dev
-    status: pending
+    status: done
     summary: |
       Add "false verification claims" as a known AI dev agent risk to code
       review process documentation. Pattern: dev agent claims tests pass when
@@ -27,7 +27,7 @@ items:
   - id: 3
     action_item: 3
     workflow: bmad:bmm:workflows:quick-dev
-    status: pending
+    status: done
     summary: |
       Document out-of-scope changes as a known AI dev agent pattern in review
       process. Pattern: dev agent makes changes beyond story scope such as
@@ -38,7 +38,7 @@ items:
   - id: 4
     action_item: 4
     workflow: bmad:bmm:workflows:quick-dev
-    status: pending
+    status: done
     summary: |
       Extract duplicate getChangesetFiles() function from
       src/release/changeset-publish-workflow.test.ts:34 and
@@ -50,7 +50,7 @@ items:
   - id: 5
     action_item: 5
     workflow: bmad:bmm:workflows:quick-dev
-    status: pending
+    status: done
     summary: |
       Improve shell escaping in src/release/changeset-publish-workflow.test.ts
       lines 114-118. Current escapedContent only escapes double-quotes but not
@@ -61,7 +61,7 @@ items:
   - id: 6
     action_item: 6
     workflow: human
-    status: pending
+    status: done
     summary: |
       Configure Trusted Publishing (OIDC) in npm registry settings for
       @zookanalytics/agent-env. Link the package to GitHub repo
@@ -72,7 +72,7 @@ items:
   - id: 7
     action_item: 7
     workflow: bmad:bmm:workflows:quick-dev
-    status: pending
+    status: done
     summary: |
       Scan all packages/*/package.json for non-publishable packages missing
       "private": true. Orchestrator was fixed during rel-2-4. Verify
@@ -83,7 +83,7 @@ items:
   - id: 8
     action_item: 8
     workflow: bmad:bmm:workflows:research
-    status: pending
+    status: done
     summary: |
       Research how changesets/action@v1 creates and manages "Version Packages"
       PRs for Epic rel-3 preparation. Understand: when it creates vs updates the

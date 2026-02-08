@@ -38,7 +38,7 @@ jobs:
 
       - name: Get pnpm store directory
         shell: bash
-        run: echo "STORE_PATH=$(pnpm store path --silent)" >> $GITHUB_ENV
+        run: echo "STORE_PATH=$(pnpm store path --silent)" >> "$GITHUB_ENV"
 
       # Cache uses **/ glob to capture all workspace lockfiles consistently
       - name: Setup pnpm cache
@@ -65,15 +65,21 @@ jobs:
         run: pnpm -r test:coverage
 
       # Verify changeset configuration health (Story 2.3).
-      # Catches config drift and validates any pending changeset files are well-formed.
+      # Advisory: warns if no changesets found (e.g., infrastructure-only PRs).
+      # Config/tool failures still hard-fail to catch broken changeset installations.
       # Only runs on PRs — changeset status compares HEAD against baseBranch ("main").
-      # GitHub Actions PR checkout doesn't create a local "main" branch, so we
-      # create one from origin/main for changesets' merge-base detection.
       - name: Validate changeset status
         if: github.event_name == 'pull_request'
         run: |
           git branch main origin/main 2>/dev/null || true
-          pnpm changeset status
+          OUTPUT=$(pnpm changeset status 2>&1) && exit 0
+          if echo "$OUTPUT" | grep -q "No changesets present"; then
+            echo "::warning::No changesets found. If this PR changes publishable package behavior, run 'pnpm changeset' to add one."
+          else
+            echo "::error::Changeset status check failed unexpectedly:"
+            echo "$OUTPUT"
+            exit 1
+          fi
 
       # Pack agent-env tarball for integration testing (Story 1.4).
       # @zookanalytics/shared is bundled into dist via tsup noExternal config.

@@ -30,6 +30,51 @@ const AGENT_ENV_PKG = join(AGENT_ENV_DIR, 'package.json');
 let tarballPath: string | null = null;
 let currentVersion: string;
 
+/** Escape a string for safe use inside double-quoted shell arguments */
+function shellEscape(s: string): string {
+  return s.replace(/[\\"$`\n\r]/g, (ch) => {
+    if (ch === '\n') return '\\n';
+    if (ch === '\r') return '\\r';
+    return `\\${ch}`;
+  });
+}
+
+function getTarballPath(): string {
+  if (!tarballPath) throw new Error('tarballPath not set — did beforeAll fail?');
+  return tarballPath;
+}
+
+describe('shellEscape', () => {
+  it('returns plain strings unchanged', () => {
+    expect(shellEscape('/tmp/foo-bar.tgz')).toBe('/tmp/foo-bar.tgz');
+  });
+
+  it('escapes double quotes', () => {
+    expect(shellEscape('file"name')).toBe('file\\"name');
+  });
+
+  it('escapes dollar signs and subshells', () => {
+    expect(shellEscape('$(whoami)')).toBe('\\$(whoami)');
+  });
+
+  it('escapes backticks', () => {
+    expect(shellEscape('file`cmd`name')).toBe('file\\`cmd\\`name');
+  });
+
+  it('escapes backslashes', () => {
+    expect(shellEscape('path\\to\\file')).toBe('path\\\\to\\\\file');
+  });
+
+  it('escapes newlines and carriage returns', () => {
+    expect(shellEscape('line1\nline2')).toBe('line1\\nline2');
+    expect(shellEscape('line1\rline2')).toBe('line1\\rline2');
+  });
+
+  it('escapes multiple special characters together', () => {
+    expect(shellEscape('a"b$c`d\\e\nf')).toBe('a\\"b\\$c\\`d\\\\e\\nf');
+  });
+});
+
 describe('publish readiness', () => {
   beforeAll(() => {
     const pkg = JSON.parse(readFileSync(AGENT_ENV_PKG, 'utf-8')) as { version: string };
@@ -81,7 +126,7 @@ describe('publish readiness', () => {
     });
 
     it('contains expected files (dist, bin, config, README, LICENSE)', () => {
-      const output = execSync(`tar tzf "${tarballPath}"`, {
+      const output = execSync(`tar tzf "${shellEscape(getTarballPath())}"`, {
         encoding: 'utf-8',
         timeout: 10_000,
       });
@@ -97,7 +142,7 @@ describe('publish readiness', () => {
     });
 
     it('does not contain source files, tests, or dev config', () => {
-      const output = execSync(`tar tzf "${tarballPath}"`, {
+      const output = execSync(`tar tzf "${shellEscape(getTarballPath())}"`, {
         encoding: 'utf-8',
         timeout: 10_000,
       });
@@ -115,10 +160,13 @@ describe('publish readiness', () => {
 
   describe('tarball package.json', () => {
     it('has valid semver version', () => {
-      const pkgJson = execSync(`tar xzf "${tarballPath}" --to-stdout package/package.json`, {
-        encoding: 'utf-8',
-        timeout: 10_000,
-      });
+      const pkgJson = execSync(
+        `tar xzf "${shellEscape(getTarballPath())}" --to-stdout package/package.json`,
+        {
+          encoding: 'utf-8',
+          timeout: 10_000,
+        }
+      );
 
       const pkg = JSON.parse(pkgJson) as { version: string };
       expect(pkg.version).toMatch(/^\d+\.\d+\.\d+$/);
@@ -126,10 +174,13 @@ describe('publish readiness', () => {
     });
 
     it('has no workspace: references in runtime dependencies', () => {
-      const pkgJson = execSync(`tar xzf "${tarballPath}" --to-stdout package/package.json`, {
-        encoding: 'utf-8',
-        timeout: 10_000,
-      });
+      const pkgJson = execSync(
+        `tar xzf "${shellEscape(getTarballPath())}" --to-stdout package/package.json`,
+        {
+          encoding: 'utf-8',
+          timeout: 10_000,
+        }
+      );
 
       const pkg = JSON.parse(pkgJson) as {
         dependencies?: Record<string, string>;
