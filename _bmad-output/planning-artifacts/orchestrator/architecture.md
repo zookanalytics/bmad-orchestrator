@@ -21,16 +21,18 @@ workflowType: 'architecture'
 project_name: 'BMAD Orchestrator'
 user_name: 'Node'
 date: '2026-01-07'
-lastValidated: '2026-02-07'
+lastValidated: '2026-02-08'
 ---
 
 # Architecture Decision Document
 
 _This document builds collaboratively through step-by-step discovery. Sections are appended as we work through each architectural decision together._
 
-### Post-Epic-1 Validation Summary (2026-02-07)
+### Post-Epic-1 Validation Summary (2026-02-07, updated 2026-02-08)
 
-This architecture was validated against the actual codebase after Epic 1 completion. Key corrections applied:
+This architecture was validated against the actual codebase after Epic 1 completion. Key corrections applied.
+
+**Important:** Epic 1 was originally built against DevPod CLI. Story `orch-1-5-rework-agent-env-migration` (`ready-for-dev`) will migrate the code to agent-env CLI. This document describes the **target state after rework**. Until story 1.R is complete, the actual codebase still uses DevPod types, fixtures, and CLI calls. Items marked "(✓ implemented)" below reflect the pre-rework DevPod implementation — the code structure and patterns are established but the types/fixtures/CLI target will change during rework.
 
 | Area | Original Assumption | Actual Implementation |
 |------|--------------------|-----------------------|
@@ -251,8 +253,8 @@ Epic 1 established the project as a pnpm workspaces monorepo package (not standa
 | timeago.js | ^4.0.2 | Relative timestamp formatting |
 | execa | ^9.6.1 | Subprocess execution with `reject: false` pattern |
 | clipboardy | ^5.0.2 | Cross-platform clipboard access |
-| @zookanalytics/shared | workspace:* | Shared error utilities (`createError`, `formatError`, `AppError`) |
-| @zookanalytics/agent-env | workspace:* (CLI) | Instance discovery via `agent-env list --json` subprocess |
+| @zookanalytics/shared | workspace:* | Shared error utilities (`createError`, `formatError`, `AppError`). **Note:** Currently listed as devDependency in package.json; rework (story 1.R) should move to dependencies since `formatError`/`createError` are imported at runtime in list command. |
+| @zookanalytics/agent-env | workspace:* (CLI) | Instance discovery via `agent-env list --json` subprocess (CLI dependency, not library import) |
 
 ### Selected Approach: Monorepo with Full Tooling (As Implemented)
 
@@ -1264,18 +1266,20 @@ import '../dist/cli.js';
 
 ### Implementation Readiness
 
-**Epic 1 Complete (orch-epic-1: done):**
+**Epic 1 (orch-epic-1: done, rework pending):**
 - Project structure established as monorepo package
 - CI, tooling, quality gates all working
-- Instance discovery implemented with full DI pattern
-- `list` command with text + JSON output modes
+- Discovery module implemented with full DI pattern (currently targeting DevPod CLI)
+- `list` command with text + JSON output modes (currently DevPod terminology)
 - Comprehensive test coverage with fixtures
+- **Rework pending:** Story `orch-1-5-rework-agent-env-migration` (`ready-for-dev`) will migrate types, fixtures, discovery CLI target, and list command from DevPod to agent-env
 
-**Epic 2 (orch-epic-2: backlog) - Ready for Development:**
+**Epic 2 (orch-epic-2: backlog) - Blocked on Epic 1 rework:**
+- Requires: Epic 1 rework (story 1.R) complete first — Epic 2 builds on agent-env types
 - Requires: BMAD state fixtures (sprintStatus.yaml, story markdown files)
 - Requires: `state.ts` (YAML parsing) and `activity.ts` (mtime detection) modules
 - All patterns established in Epic 1 carry forward
-- Note: Cross-dependency on `env-epic-3` for integration testing with real agent-env instances
+- Note: Cross-dependency on `env-epic-3` for integration testing with real agent-env instances (env-epic-3 is done)
 
 **Epic Sequence:**
 

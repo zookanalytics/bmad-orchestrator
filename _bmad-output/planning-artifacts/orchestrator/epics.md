@@ -102,7 +102,7 @@ This document provides the complete epic and story breakdown for BMAD Orchestrat
 
 **From Architecture - Technical Constraints:**
 - AR1: Manual project setup with full tooling (ESLint, Prettier, Vitest, CI) - no scaffolding tool
-- AR2: Single TypeScript package structure (not a monorepo)
+- AR2: pnpm workspaces monorepo structure (`packages/orchestrator/`)
 - AR3: Zero container footprint in Phase 1 (no modifications to BMAD workflows or agent-env instances)
 - AR4: Read-only observer pattern - derives ALL state from existing BMAD artifacts
 - AR5: Git-native state using existing sprint-status.yaml and story files only
@@ -115,8 +115,8 @@ This document provides the complete epic and story breakdown for BMAD Orchestrat
 
 **From Architecture - Data Sources:**
 - AR12: Sprint status from `_bmad-output/implementation-artifacts/sprint-status.yaml`
-- AR13: Story files from `_bmad-output/implementation-artifacts/stories/*.md`
-- AR14: Epic files from `_bmad-output/implementation-artifacts/epics/*.md`
+- AR13: Story files from `_bmad-output/implementation-artifacts/*.md` (flat, no `stories/` subdirectory)
+- AR14: Epic files from `_bmad-output/planning-artifacts/{component}/epics.md` (single file per component)
 - AR15: Activity detection via file mtime with 1-hour default threshold
 
 **From Architecture - Module Structure:**
@@ -470,7 +470,7 @@ So that **I can develop and test state modules with realistic data**.
 
 **Technical Notes:**
 - Sprint status path: `_bmad-output/implementation-artifacts/sprint-status.yaml`
-- Story files path: `_bmad-output/implementation-artifacts/stories/*.md`
+- Story files path: `_bmad-output/implementation-artifacts/*.md` (flat, no `stories/` subdirectory)
 - Use `yaml` package for YAML parsing
 
 ---
@@ -530,7 +530,7 @@ So that **I can extract task progress within each story**.
 
 **Given** a story file path pattern
 **When** I call `getStoryFilePath(workspacePath, storyId)`
-**Then** it returns `{workspacePath}/_bmad-output/implementation-artifacts/stories/{storyId}.md`
+**Then** it returns `{workspacePath}/_bmad-output/implementation-artifacts/{storyId}.md`
 
 **Given** a story file does not exist
 **When** I call `parseStoryTasks(filePath)`
@@ -547,7 +547,7 @@ So that **I can extract task progress within each story**.
 **Technical Notes:**
 - Located at `src/lib/state.ts` (same module as sprint parser)
 - Task regex: `/- \[(x| )\]/gi`
-- Epic files path: `_bmad-output/implementation-artifacts/epics/*.md`
+- Epic files path: `_bmad-output/planning-artifacts/{component}/epics.md`
 
 ---
 
@@ -1209,6 +1209,6 @@ So that **users can install it globally with `pnpm add -g`**.
 
 **Technical Notes:**
 - Ensure `prepublishOnly` script runs build
-- Add `"engines": { "node": ">=22" }` for Node version requirement
+- Verify `"engines": { "node": ">=20" }` matches monorepo convention
 - Include LICENSE file
 - Test with `pnpm link` before publishing
