@@ -1,0 +1,57 @@
+{
+  "ok": true,
+  "data": [
+    {
+      "name": "bmad-orchestrator",
+      "status": "running",
+      "lastAttached": "2026-01-18T09:15:00.000Z",
+      "purpose": "BMAD orchestrator development",
+      "gitState": {
+        "ok": true,
+        "state": {
+          "hasStaged": false,
+          "stagedCount": 0,
+          "hasUnstaged": true,
+          "unstagedCount": 3,
+          "hasUntracked": false,
+          "untrackedCount": 0,
+          "stashCount": 0,
+          "unpushedBranches": [],
+          "neverPushedBranches": [],
+          "isDetachedHead": false,
+          "isClean": false
+        }
+      }
+    },
+    {
+      "name": "other-project",
+      "status": "stopped",
+      "lastAttached": "2026-01-16T16:45:00.000Z",
+      "purpose": null,
+      "gitState": {
+        "ok": true,
+        "state": {
+          "hasStaged": false,
+          "stagedCount": 0,
+          "hasUnstaged": false,
+          "unstagedCount": 0,
+          "hasUntracked": false,
+          "untrackedCount": 0,
+          "stashCount": 0,
+          "unpushedBranches": [],
+          "neverPushedBranches": [],
+          "isDetachedHead": false,
+          "isClean": true
+        }
+      }
+    },
+    {
+      "name": "experiment-repo",
+      "status": "not-found",
+      "lastAttached": null,
+      "purpose": "Testing new feature branch",
+      "gitState": null
+    }
+  ],
+  "error": null
+}

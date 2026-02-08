@@ -1,5 +1,0 @@
-{
-  "error": "devpod command not found",
-  "code": "ENOENT",
-  "stderr": "bash: devpod: command not found"
-}

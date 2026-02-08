@@ -2,211 +2,184 @@ import { describe, expect, it, vi } from 'vitest';
 
 import { listCommand } from './list.js';
 
-// Mock the discovery module
-vi.mock('../lib/discovery.js', () => ({
-  createDiscovery: vi.fn(),
-}));
-
-import { createDiscovery } from '../lib/discovery.js';
-
 describe('listCommand', () => {
   describe('plain text output', () => {
-    it('returns formatted table for multiple DevPods', async () => {
+    it('returns formatted table for multiple instances', async () => {
       const mockDiscover = vi.fn().mockResolvedValue({
-        devpods: [
+        instances: [
           {
-            id: 'pod-1',
-            source: { localFolder: '/path/1' },
-            provider: { name: 'docker' },
+            name: 'instance-1',
+            status: 'running',
+            lastAttached: '2026-01-18T09:00:00.000Z',
+            purpose: 'Development',
+            gitState: null,
           },
           {
-            id: 'pod-2',
-            source: { localFolder: '/path/2' },
-            provider: { name: 'kubernetes' },
+            name: 'a-very-long-instance-name-that-breaks-padding',
+            status: 'stopped',
+            lastAttached: null,
+            purpose: 'Testing long names',
+            gitState: null,
           },
         ],
         error: null,
       });
-      vi.mocked(createDiscovery).mockReturnValue(mockDiscover);
 
-      const output = await listCommand({});
+      const output = await listCommand({}, mockDiscover);
 
-      expect(output).toContain('NAME');
-      expect(output).toContain('WORKSPACE');
-      expect(output).toContain('PROVIDER');
-      expect(output).toContain('pod-1');
-      expect(output).toContain('pod-2');
-      expect(output).toContain('/path/1');
-      expect(output).toContain('/path/2');
-      expect(output).toContain('docker');
-      expect(output).toContain('kubernetes');
+      expect(output).toMatchSnapshot();
     });
 
-    it('returns "No DevPods discovered" for empty list', async () => {
+    it('returns "No instances discovered" for empty list', async () => {
       const mockDiscover = vi.fn().mockResolvedValue({
-        devpods: [],
+        instances: [],
         error: null,
       });
-      vi.mocked(createDiscovery).mockReturnValue(mockDiscover);
 
-      const output = await listCommand({});
+      const output = await listCommand({}, mockDiscover);
 
-      expect(output).toBe('No DevPods discovered');
+      expect(output).toBe('No instances discovered');
     });
 
     it('formats error with suggestion when discovery fails', async () => {
       const mockDiscover = vi.fn().mockResolvedValue({
-        devpods: [],
-        error: 'devpod: command not found',
+        instances: [],
+        error: 'DISCOVERY_FAILED: agent-env: command not found',
       });
-      vi.mocked(createDiscovery).mockReturnValue(mockDiscover);
 
-      const output = await listCommand({});
+      const output = await listCommand({}, mockDiscover);
 
-      // Uses @zookanalytics/shared formatError format
-      expect(output).toContain('DISCOVERY_FAILED');
-      expect(output).toContain('devpod: command not found');
-      expect(output).toContain('devpod version');
+      expect(output).toMatchSnapshot();
     });
 
-    it('handles DevPod with git repository source', async () => {
+    it('handles instance with null purpose', async () => {
       const mockDiscover = vi.fn().mockResolvedValue({
-        devpods: [
+        instances: [
           {
-            id: 'git-pod',
-            source: { gitRepository: 'https://github.com/example/repo' },
-            provider: { name: 'docker' },
+            name: 'no-purpose',
+            status: 'running',
+            lastAttached: null,
+            purpose: null,
+            gitState: null,
           },
         ],
         error: null,
       });
-      vi.mocked(createDiscovery).mockReturnValue(mockDiscover);
 
-      const output = await listCommand({});
+      const output = await listCommand({}, mockDiscover);
 
-      expect(output).toContain('https://github.com/example/repo');
-    });
-
-    it('handles DevPod with no source information', async () => {
-      const mockDiscover = vi.fn().mockResolvedValue({
-        devpods: [
-          {
-            id: 'no-source-pod',
-            provider: { name: 'docker' },
-          },
-        ],
-        error: null,
-      });
-      vi.mocked(createDiscovery).mockReturnValue(mockDiscover);
-
-      const output = await listCommand({});
-
-      expect(output).toContain('no-source-pod');
-      expect(output).toContain('-'); // No path available
+      expect(output).toMatchSnapshot();
     });
   });
 
   describe('JSON output', () => {
     it('returns valid JSON when --json flag is set', async () => {
       const mockDiscover = vi.fn().mockResolvedValue({
-        devpods: [
+        instances: [
           {
-            id: 'pod-1',
-            source: { localFolder: '/path/1' },
-            provider: { name: 'docker' },
+            name: 'instance-1',
+            status: 'running',
+            lastAttached: '2026-01-18T09:00:00.000Z',
+            purpose: 'Development',
+            gitState: null,
           },
         ],
         error: null,
       });
-      vi.mocked(createDiscovery).mockReturnValue(mockDiscover);
 
-      const output = await listCommand({ json: true });
+      const output = await listCommand({ json: true }, mockDiscover);
       const parsed = JSON.parse(output);
 
       expect(parsed.version).toBe('1');
-      expect(parsed.devpods).toHaveLength(1);
+      expect(parsed.instances).toHaveLength(1);
       expect(parsed.errors).toHaveLength(0);
     });
 
     it('JSON output has correct schema structure', async () => {
       const mockDiscover = vi.fn().mockResolvedValue({
-        devpods: [
+        instances: [
           {
-            id: 'pod-1',
-            source: { localFolder: '/path/1' },
-            provider: { name: 'docker' },
+            name: 'instance-1',
+            status: 'running',
+            lastAttached: null,
+            purpose: null,
+            gitState: null,
           },
         ],
         error: null,
       });
-      vi.mocked(createDiscovery).mockReturnValue(mockDiscover);
 
-      const output = await listCommand({ json: true });
+      const output = await listCommand({ json: true }, mockDiscover);
       const parsed = JSON.parse(output);
 
       expect(parsed).toHaveProperty('version');
-      expect(parsed).toHaveProperty('devpods');
+      expect(parsed).toHaveProperty('instances');
       expect(parsed).toHaveProperty('errors');
       expect(typeof parsed.version).toBe('string');
-      expect(Array.isArray(parsed.devpods)).toBe(true);
+      expect(Array.isArray(parsed.instances)).toBe(true);
       expect(Array.isArray(parsed.errors)).toBe(true);
     });
 
     it('includes discovery error in JSON errors array', async () => {
       const mockDiscover = vi.fn().mockResolvedValue({
-        devpods: [],
-        error: 'devpod: command not found',
+        instances: [],
+        error: 'DISCOVERY_FAILED: agent-env: command not found',
       });
-      vi.mocked(createDiscovery).mockReturnValue(mockDiscover);
 
-      const output = await listCommand({ json: true });
+      const output = await listCommand({ json: true }, mockDiscover);
       const parsed = JSON.parse(output);
 
-      expect(parsed.errors).toContain('devpod: command not found');
-      expect(parsed.devpods).toHaveLength(0);
+      expect(parsed.errors).toContain('DISCOVERY_FAILED: agent-env: command not found');
+      expect(parsed.instances).toHaveLength(0);
     });
 
-    it('returns empty arrays for no DevPods in JSON mode', async () => {
+    it('returns empty arrays for no instances in JSON mode', async () => {
       const mockDiscover = vi.fn().mockResolvedValue({
-        devpods: [],
+        instances: [],
         error: null,
       });
-      vi.mocked(createDiscovery).mockReturnValue(mockDiscover);
 
-      const output = await listCommand({ json: true });
+      const output = await listCommand({ json: true }, mockDiscover);
       const parsed = JSON.parse(output);
 
       expect(parsed.version).toBe('1');
-      expect(parsed.devpods).toHaveLength(0);
+      expect(parsed.instances).toHaveLength(0);
       expect(parsed.errors).toHaveLength(0);
     });
 
-    it('preserves full DevPod object in JSON output', async () => {
-      const devpod = {
-        id: 'full-pod',
-        uid: 'uid-123',
-        context: 'default',
-        source: {
-          localFolder: '/workspace/project',
-          gitRepository: undefined,
+    it('preserves full Instance object in JSON output', async () => {
+      const instance = {
+        name: 'full-instance',
+        status: 'running',
+        lastAttached: '2026-01-18T14:30:00.000Z',
+        purpose: 'Full test',
+        gitState: {
+          ok: true,
+          state: {
+            hasStaged: false,
+            stagedCount: 0,
+            hasUnstaged: true,
+            unstagedCount: 2,
+            hasUntracked: false,
+            untrackedCount: 0,
+            stashCount: 0,
+            unpushedBranches: [],
+            neverPushedBranches: [],
+            isDetachedHead: false,
+            isClean: false,
+          },
         },
-        provider: { name: 'docker', options: { cpus: '4' } },
-        ide: { name: 'vscode' },
-        machine: { id: 'local', autoDelete: false },
-        creationTimestamp: { Time: '2024-01-15T10:00:00Z' },
-        lastUsedTimestamp: { Time: '2024-01-18T14:30:00Z' },
       };
 
       const mockDiscover = vi.fn().mockResolvedValue({
-        devpods: [devpod],
+        instances: [instance],
         error: null,
       });
-      vi.mocked(createDiscovery).mockReturnValue(mockDiscover);
 
-      const output = await listCommand({ json: true });
+      const output = await listCommand({ json: true }, mockDiscover);
       const parsed = JSON.parse(output);
 
-      expect(parsed.devpods[0]).toEqual(devpod);
+      expect(parsed.instances[0]).toEqual(instance);
     });
   });
 });

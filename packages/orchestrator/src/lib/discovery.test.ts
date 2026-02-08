@@ -1,26 +1,26 @@
 /**
- * Tests for DevPod discovery module
+ * Tests for instance discovery module
  *
  * These tests use mock command executors to test all discovery scenarios
- * without requiring actual DevPod CLI installation.
+ * without requiring actual agent-env CLI installation.
  */
 import type { execa as execaType } from 'execa';
 
 import { describe, expect, it, vi } from 'vitest';
 
-import devPodList from './__fixtures__/devPodList.json' with { type: 'json' };
-import devPodListEmpty from './__fixtures__/devPodListEmpty.json' with { type: 'json' };
-import { createDiscovery, discoverDevPods } from './discovery.js';
+import instanceList from './__fixtures__/instanceList.json' with { type: 'json' };
+import instanceListEmpty from './__fixtures__/instanceListEmpty.json' with { type: 'json' };
+import instanceListError from './__fixtures__/instanceListError.json' with { type: 'json' };
+import { createDiscovery, discoverInstances } from './discovery.js';
 
-// Type for our mock executor
 type MockExecutor = ReturnType<typeof vi.fn>;
 
 describe('discovery', () => {
   describe('createDiscovery', () => {
-    describe('successful discovery (AC1)', () => {
-      it('returns parsed DevPods on successful execution', async () => {
+    describe('successful discovery', () => {
+      it('returns parsed instances on successful execution', async () => {
         const mockExecutor: MockExecutor = vi.fn().mockResolvedValue({
-          stdout: JSON.stringify(devPodList),
+          stdout: JSON.stringify(instanceList),
           stderr: '',
           failed: false,
         });
@@ -29,17 +29,17 @@ describe('discovery', () => {
         const result = await discover();
 
         expect(result.error).toBeNull();
-        expect(result.devpods).toHaveLength(3);
+        expect(result.instances).toHaveLength(3);
         expect(mockExecutor).toHaveBeenCalledWith(
-          'devpod',
-          ['list', '--output', 'json'],
+          'agent-env',
+          ['list', '--json'],
           expect.objectContaining({ reject: false, timeout: 10000 })
         );
       });
 
-      it('correctly maps DevPod fields from CLI output', async () => {
+      it('correctly returns instance fields from CLI output', async () => {
         const mockExecutor: MockExecutor = vi.fn().mockResolvedValue({
-          stdout: JSON.stringify(devPodList),
+          stdout: JSON.stringify(instanceList),
           stderr: '',
           failed: false,
         });
@@ -47,24 +47,19 @@ describe('discovery', () => {
 
         const result = await discover();
 
-        expect(result.devpods[0]).toMatchObject({
-          id: 'bmad-orchestrator',
-          uid: 'a1b2c3d4-e5f6-7890-abcd-ef1234567890',
-          source: {
-            gitRepository: 'https://github.com/zookanalytics/bmad-orchestrator',
-            gitBranch: 'main',
-          },
-          provider: { name: 'docker' },
-          ide: { name: 'vscode' },
-          machine: { id: 'docker', autoDelete: false },
-          context: 'default',
-          imported: false,
+        expect(result.instances[0]).toMatchObject({
+          name: 'bmad-orchestrator',
+          status: 'running',
+          lastAttached: '2026-01-18T09:15:00.000Z',
+          purpose: 'BMAD orchestrator development',
         });
+        expect(result.instances[0].gitState).toBeDefined();
+        expect(result.instances[0].gitState?.ok).toBe(true);
       });
 
-      it('maps multiple DevPods with different configurations', async () => {
+      it('returns instances with mixed statuses and nullable fields', async () => {
         const mockExecutor: MockExecutor = vi.fn().mockResolvedValue({
-          stdout: JSON.stringify(devPodList),
+          stdout: JSON.stringify(instanceList),
           stderr: '',
           failed: false,
         });
@@ -72,23 +67,23 @@ describe('discovery', () => {
 
         const result = await discover();
 
-        // Second DevPod has local folder source
-        expect(result.devpods[1].source?.localFolder).toBe(
-          '/Users/developer/projects/other-project'
-        );
-        expect(result.devpods[1].ide).toBeUndefined();
+        // Second instance has null purpose
+        expect(result.instances[1].name).toBe('other-project');
+        expect(result.instances[1].status).toBe('stopped');
+        expect(result.instances[1].purpose).toBeNull();
 
-        // Third DevPod has kubernetes provider
-        expect(result.devpods[2].provider?.name).toBe('kubernetes');
-        expect(result.devpods[2].ide?.name).toBe('cursor');
-        expect(result.devpods[2].machine?.autoDelete).toBe(true);
+        // Third instance has null gitState and lastAttached
+        expect(result.instances[2].name).toBe('experiment-repo');
+        expect(result.instances[2].status).toBe('not-found');
+        expect(result.instances[2].gitState).toBeNull();
+        expect(result.instances[2].lastAttached).toBeNull();
       });
     });
 
-    describe('empty list handling (AC2)', () => {
-      it('returns empty array when no DevPods exist', async () => {
+    describe('empty list handling', () => {
+      it('returns empty array when no instances exist', async () => {
         const mockExecutor: MockExecutor = vi.fn().mockResolvedValue({
-          stdout: JSON.stringify(devPodListEmpty),
+          stdout: JSON.stringify(instanceListEmpty),
           stderr: '',
           failed: false,
         });
@@ -97,13 +92,15 @@ describe('discovery', () => {
         const result = await discover();
 
         expect(result.error).toBeNull();
-        expect(result.devpods).toHaveLength(0);
-        expect(result.devpods).toEqual([]);
+        expect(result.instances).toHaveLength(0);
+        expect(result.instances).toEqual([]);
       });
+    });
 
-      it('returns empty array for empty JSON array string', async () => {
+    describe('agent-env error envelope handling', () => {
+      it('returns error from agent-env error envelope', async () => {
         const mockExecutor: MockExecutor = vi.fn().mockResolvedValue({
-          stdout: '[]',
+          stdout: JSON.stringify(instanceListError),
           stderr: '',
           failed: false,
         });
@@ -111,16 +108,30 @@ describe('discovery', () => {
 
         const result = await discover();
 
-        expect(result.error).toBeNull();
-        expect(result.devpods).toHaveLength(0);
+        expect(result.instances).toHaveLength(0);
+        expect(result.error).toBe('DISCOVERY_FAILED: Failed to query container runtime');
+      });
+
+      it('handles error envelope with no message', async () => {
+        const mockExecutor: MockExecutor = vi.fn().mockResolvedValue({
+          stdout: JSON.stringify({ ok: false, data: null, error: null }),
+          stderr: '',
+          failed: false,
+        });
+        const discover = createDiscovery(mockExecutor as unknown as typeof execaType);
+
+        const result = await discover();
+
+        expect(result.instances).toHaveLength(0);
+        expect(result.error).toBe('DISCOVERY_FAILED: Unknown error');
       });
     });
 
-    describe('CLI failure handling (AC3)', () => {
+    describe('CLI failure handling', () => {
       it('returns error result when CLI not found', async () => {
         const mockExecutor: MockExecutor = vi.fn().mockResolvedValue({
           stdout: '',
-          stderr: 'command not found: devpod',
+          stderr: 'command not found: agent-env',
           failed: true,
           shortMessage: 'Command failed',
         });
@@ -128,7 +139,7 @@ describe('discovery', () => {
 
         const result = await discover();
 
-        expect(result.devpods).toHaveLength(0);
+        expect(result.instances).toHaveLength(0);
         expect(result.error).toContain('DISCOVERY_FAILED');
         expect(result.error).toContain('command not found');
       });
@@ -136,15 +147,15 @@ describe('discovery', () => {
       it('returns error result with stderr message on CLI error', async () => {
         const mockExecutor: MockExecutor = vi.fn().mockResolvedValue({
           stdout: '',
-          stderr: 'provider not configured',
+          stderr: 'runtime not available',
           failed: true,
         });
         const discover = createDiscovery(mockExecutor as unknown as typeof execaType);
 
         const result = await discover();
 
-        expect(result.devpods).toHaveLength(0);
-        expect(result.error).toBe('DISCOVERY_FAILED: provider not configured');
+        expect(result.instances).toHaveLength(0);
+        expect(result.error).toBe('DISCOVERY_FAILED: runtime not available');
       });
 
       it('returns error result with shortMessage when no stderr', async () => {
@@ -158,7 +169,7 @@ describe('discovery', () => {
 
         const result = await discover();
 
-        expect(result.devpods).toHaveLength(0);
+        expect(result.instances).toHaveLength(0);
         expect(result.error).toBe('DISCOVERY_FAILED: Command exited with code 1');
       });
 
@@ -172,7 +183,7 @@ describe('discovery', () => {
 
         const result = await discover();
 
-        expect(result.devpods).toHaveLength(0);
+        expect(result.instances).toHaveLength(0);
         expect(result.error).toBe('DISCOVERY_FAILED: Unknown error');
       });
 
@@ -184,15 +195,14 @@ describe('discovery', () => {
         });
         const discover = createDiscovery(mockExecutor as unknown as typeof execaType);
 
-        // Should not throw
         await expect(discover()).resolves.toBeDefined();
       });
     });
 
-    describe('dependency injection for testing (AC4)', () => {
+    describe('dependency injection for testing', () => {
       it('accepts custom executor via factory', async () => {
         const customExecutor: MockExecutor = vi.fn().mockResolvedValue({
-          stdout: '[]',
+          stdout: JSON.stringify(instanceListEmpty),
           stderr: '',
           failed: false,
         });
@@ -207,7 +217,7 @@ describe('discovery', () => {
         const mockExecutor: MockExecutor = vi
           .fn()
           .mockResolvedValueOnce({
-            stdout: JSON.stringify(devPodList),
+            stdout: JSON.stringify(instanceList),
             stderr: '',
             failed: false,
           })
@@ -219,17 +229,17 @@ describe('discovery', () => {
         const discover = createDiscovery(mockExecutor as unknown as typeof execaType);
 
         const result1 = await discover();
-        expect(result1.devpods).toHaveLength(3);
+        expect(result1.instances).toHaveLength(3);
 
         const result2 = await discover();
         expect(result2.error).toContain('DISCOVERY_FAILED');
       });
     });
 
-    describe('timeout handling (AC5)', () => {
+    describe('timeout handling', () => {
       it('configures 10-second timeout', async () => {
         const mockExecutor: MockExecutor = vi.fn().mockResolvedValue({
-          stdout: '[]',
+          stdout: JSON.stringify(instanceListEmpty),
           stderr: '',
           failed: false,
         });
@@ -238,8 +248,8 @@ describe('discovery', () => {
         await discover();
 
         expect(mockExecutor).toHaveBeenCalledWith(
-          'devpod',
-          ['list', '--output', 'json'],
+          'agent-env',
+          ['list', '--json'],
           expect.objectContaining({ timeout: 10000 })
         );
       });
@@ -256,7 +266,7 @@ describe('discovery', () => {
 
         const result = await discover();
 
-        expect(result.devpods).toHaveLength(0);
+        expect(result.instances).toHaveLength(0);
         expect(result.error).toContain('DISCOVERY_FAILED');
         expect(result.error).toContain('timed out');
       });
@@ -271,7 +281,6 @@ describe('discovery', () => {
         });
         const discover = createDiscovery(mockExecutor as unknown as typeof execaType);
 
-        // Should not throw
         await expect(discover()).resolves.toBeDefined();
       });
     });
@@ -287,13 +296,13 @@ describe('discovery', () => {
 
         const result = await discover();
 
-        expect(result.devpods).toHaveLength(0);
+        expect(result.instances).toHaveLength(0);
         expect(result.error).toBe('DISCOVERY_FAILED: Invalid JSON response');
       });
 
       it('returns error result for truncated JSON', async () => {
         const mockExecutor: MockExecutor = vi.fn().mockResolvedValue({
-          stdout: '[{"id": "test"',
+          stdout: '{"ok": true, "data": [{"name": "test"',
           stderr: '',
           failed: false,
         });
@@ -301,115 +310,21 @@ describe('discovery', () => {
 
         const result = await discover();
 
-        expect(result.devpods).toHaveLength(0);
+        expect(result.instances).toHaveLength(0);
         expect(result.error).toBe('DISCOVERY_FAILED: Invalid JSON response');
-      });
-
-      it('handles wrapper object format with workspaces array', async () => {
-        const mockExecutor: MockExecutor = vi.fn().mockResolvedValue({
-          stdout: JSON.stringify({ workspaces: devPodList }),
-          stderr: '',
-          failed: false,
-        });
-        const discover = createDiscovery(mockExecutor as unknown as typeof execaType);
-
-        const result = await discover();
-
-        expect(result.error).toBeNull();
-        expect(result.devpods).toHaveLength(3);
-      });
-
-      it('returns empty array for non-array non-object response', async () => {
-        const mockExecutor: MockExecutor = vi.fn().mockResolvedValue({
-          stdout: '"just a string"',
-          stderr: '',
-          failed: false,
-        });
-        const discover = createDiscovery(mockExecutor as unknown as typeof execaType);
-
-        const result = await discover();
-
-        expect(result.error).toBeNull();
-        expect(result.devpods).toHaveLength(0);
-      });
-
-      it('returns empty array for object without workspaces property', async () => {
-        const mockExecutor: MockExecutor = vi.fn().mockResolvedValue({
-          stdout: JSON.stringify({ foo: 'bar' }),
-          stderr: '',
-          failed: false,
-        });
-        const discover = createDiscovery(mockExecutor as unknown as typeof execaType);
-
-        const result = await discover();
-
-        expect(result.error).toBeNull();
-        expect(result.devpods).toHaveLength(0);
-      });
-    });
-
-    describe('edge cases', () => {
-      it('handles DevPod with minimal fields', async () => {
-        const minimalDevPod = [{ id: 'minimal' }];
-        const mockExecutor: MockExecutor = vi.fn().mockResolvedValue({
-          stdout: JSON.stringify(minimalDevPod),
-          stderr: '',
-          failed: false,
-        });
-        const discover = createDiscovery(mockExecutor as unknown as typeof execaType);
-
-        const result = await discover();
-
-        expect(result.error).toBeNull();
-        expect(result.devpods).toHaveLength(1);
-        expect(result.devpods[0].id).toBe('minimal');
-        expect(result.devpods[0].source).toBeUndefined();
-        expect(result.devpods[0].provider).toBeUndefined();
-      });
-
-      it('handles DevPod with null values', async () => {
-        const devPodWithNulls = [{ id: 'test', source: null, provider: null, ide: null }];
-        const mockExecutor: MockExecutor = vi.fn().mockResolvedValue({
-          stdout: JSON.stringify(devPodWithNulls),
-          stderr: '',
-          failed: false,
-        });
-        const discover = createDiscovery(mockExecutor as unknown as typeof execaType);
-
-        const result = await discover();
-
-        expect(result.error).toBeNull();
-        expect(result.devpods).toHaveLength(1);
-        expect(result.devpods[0].source).toBeUndefined();
-      });
-
-      it('handles empty string id', async () => {
-        const devPodEmptyId = [{ id: '' }];
-        const mockExecutor: MockExecutor = vi.fn().mockResolvedValue({
-          stdout: JSON.stringify(devPodEmptyId),
-          stderr: '',
-          failed: false,
-        });
-        const discover = createDiscovery(mockExecutor as unknown as typeof execaType);
-
-        const result = await discover();
-
-        expect(result.error).toBeNull();
-        expect(result.devpods[0].id).toBe('');
       });
     });
   });
 
-  describe('discoverDevPods (default export)', () => {
+  describe('discoverInstances (default export)', () => {
     it('is a function', () => {
-      expect(typeof discoverDevPods).toBe('function');
+      expect(typeof discoverInstances).toBe('function');
     });
 
-    it('returns a Promise', () => {
-      // Note: This will actually try to execute devpod CLI
-      // In real environments without devpod, it should return an error result
-      const result = discoverDevPods();
-      expect(result).toBeInstanceOf(Promise);
+    it('returns a DiscoveryResult when awaited', async () => {
+      const result = await discoverInstances();
+      expect(result).toHaveProperty('instances');
+      expect(result).toHaveProperty('error');
     });
   });
 });

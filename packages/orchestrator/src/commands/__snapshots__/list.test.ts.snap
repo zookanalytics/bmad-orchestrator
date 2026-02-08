@@ -1,0 +1,19 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`listCommand > plain text output > formats error with suggestion when discovery fails 1`] = `
+"[31m❌ [DISCOVERY_FAILED][0m agent-env: command not found
+   [36m💡 Check if agent-env CLI is available with \`agent-env --version\`[0m"
+`;
+
+exports[`listCommand > plain text output > handles instance with null purpose 1`] = `
+"NAME         STATUS    PURPOSE
+------------------------------
+no-purpose   running   -"
+`;
+
+exports[`listCommand > plain text output > returns formatted table for multiple instances 1`] = `
+"NAME                                            STATUS    PURPOSE
+-----------------------------------------------------------------
+instance-1                                      running   Development
+a-very-long-instance-name-that-breaks-padding   stopped   Testing long names"
+`;

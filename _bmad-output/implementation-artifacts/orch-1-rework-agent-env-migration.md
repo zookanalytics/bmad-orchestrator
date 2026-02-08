@@ -1,6 +1,54 @@
 # Story 1.R: Epic 1 Rework — DevPod-to-agent-env Migration
 
-Status: ready-for-dev
+Status: done
+
+## Reviewer Record
+
+### Review 1: Gemini Code Assist
+
+#### Review Summary
+
+The dev agent successfully completed the migration from DevPod to agent-env, meeting all acceptance criteria. The implementation is clean and significantly simplifies the codebase by removing legacy mapping functions. The review identified two medium-severity and two low-severity issues. The medium-severity issues were auto-fixed.
+
+#### Findings & Fixes
+
+- **[MEDIUM] FIXED: Fragile table formatting in `list` command**
+  - **Finding:** The text table in `list.ts` used hardcoded padding (`padEnd(20)`), which would break the layout if an instance name was too long.
+  - **Fix:** Refactored the table formatting logic to dynamically calculate column widths based on the content, ensuring a robust layout.
+
+- **[MEDIUM] FIXED: Weak tests for `list` command UI**
+  - **Finding:** Tests for the table output in `list.test.ts` used vague `toContain` assertions, which wouldn't catch formatting regressions.
+  - **Fix:** Replaced the weak assertions with snapshot testing (`toMatchSnapshot()`) to lock in the correct table layout and prevent future regressions.
+
+- **[LOW] Unhandled parsing error in `discovery.ts`**
+  - **Finding:** The `try...catch` block around `JSON.parse` in the discovery module returns a generic error message, swallowing the specific parsing error. This was left as-is.
+
+- **[LOW] Hardcoded timeout in `discovery.ts`**
+  - **Finding:** The 10-second timeout for the `agent-env` command is hardcoded. This could be made configurable for more flexibility. This was left as-is.
+
+### Review 2: Claude Opus 4.6 (Adversarial Code Review)
+
+#### Review Summary
+
+All 6 acceptance criteria verified as implemented. All tasks marked [x] confirmed done. Zero DevPod references in src/. 45 tests pass, type-check clean. Found 3 medium and 3 low issues. All medium issues auto-fixed.
+
+#### Findings & Fixes
+
+- **[MEDIUM] FIXED: `listCommand` creates its own discovery — untestable without module mocking**
+  - **Finding:** `listCommand()` called `createDiscovery()` internally, requiring `vi.mock()` to test. Inconsistent with the DI pattern used in `discovery.ts`.
+  - **Fix:** Added `discover` parameter to `listCommand()` with default `createDiscovery()`. Removed module mock from `list.test.ts`, tests now pass discovery function directly via DI.
+
+- **[MEDIUM] FIXED: Snapshot file not documented in story File List**
+  - **Finding:** `packages/orchestrator/src/commands/__snapshots__/list.test.ts.snap` created by Review 1 but not tracked in story File List.
+  - **Fix:** Added snapshot file to File List under "New files".
+
+- **[MEDIUM] FIXED: `discoverInstances` default export test creates dangling promise**
+  - **Finding:** `discovery.test.ts:324` called `discoverInstances()` (real execa) without awaiting, creating unhandled promise rejection in CI where agent-env is not installed.
+  - **Fix:** Changed test to `await discoverInstances()` and assert on the DiscoveryResult shape instead of just checking `instanceof Promise`.
+
+- **[LOW] Hardcoded `DEFAULT_TIMEOUT` in `discovery.ts`** — Left as-is (acknowledged by Review 1).
+- **[LOW] Generic JSON parse error message in `discovery.ts`** — Left as-is (acknowledged by Review 1).
+- **[LOW] `InstanceDisplayStatus` catch-all `'unknown'` could mask new statuses** — Design tradeoff, left as-is.
 
 ## Story
 
@@ -86,42 +134,42 @@ Epic 1 was originally built against DevPod CLI. DevPod has been fully replaced b
 
 ## Tasks / Subtasks
 
-- [ ] Task 1: Replace fixture files (AC: #1)
-  - [ ] Delete `devPodList.json`, `devPodListEmpty.json`, `devPodListError.json`
-  - [ ] Create `instanceList.json` with 3 instances matching agent-env JSON output shape
-  - [ ] Create `instanceListEmpty.json` with `{ ok: true, data: [], error: null }`
-  - [ ] Create `instanceListError.json` with `{ ok: false, data: null, error: {...} }`
-- [ ] Task 2: Rewrite types.ts (AC: #2)
-  - [ ] Remove all DevPod types (DevPod, DevPodStatus, DevPodSource, etc.)
-  - [ ] Add `InstanceDisplayStatus` type
-  - [ ] Add `Instance` interface matching agent-env JSON output
-  - [ ] Add `GitState` interface (nested in Instance)
-  - [ ] Add `AgentEnvJsonOutput` interface for CLI envelope parsing
-  - [ ] Update `DiscoveryResult` to use `instances: Instance[]` (not `devpods: DevPod[]`)
-  - [ ] Keep `RawObject` if still used, otherwise remove
-  - [ ] Update `types.test.ts` for new types
-- [ ] Task 3: Rewrite discovery.ts (AC: #3)
-  - [ ] Change CLI command from `devpod list --output json` to `agent-env list --json`
-  - [ ] Remove all mapping functions (mapSource, mapProvider, mapIde, mapMachine, mapTimestamp, mapWorkspaces, mapDevPodOutput) — agent-env returns structured data directly
-  - [ ] Parse `{ ok, data, error }` envelope: on `ok: true`, return `data` as `instances`; on `ok: false`, return error
-  - [ ] Rename function: `discoverDevPods` → `discoverInstances`
-  - [ ] Rename factory export: `discoverDevPods` → `discoverInstances`
-  - [ ] Update `discovery.test.ts` with agent-env envelope fixtures and updated assertions
-- [ ] Task 4: Update list.ts command (AC: #4)
-  - [ ] Update `ListJsonOutput` interface: `devpods` → `instances` field
-  - [ ] Update table columns: NAME, STATUS, PURPOSE (not NAME, WORKSPACE, PROVIDER)
-  - [ ] Update empty state: "No instances discovered"
-  - [ ] Update error suggestion: reference `agent-env --version`
-  - [ ] Remove `getWorkspacePath()` helper (no longer needed — no DevPod source object)
-  - [ ] Add status and purpose display from Instance fields
-  - [ ] Update `list.test.ts` with new output expectations
-- [ ] Task 5: Update cli.ts (AC: #5, #6)
-  - [ ] Update command description if it references DevPod
-  - [ ] Update `cli.test.ts` if needed
-- [ ] Task 6: Verify clean (AC: #5, #6)
-  - [ ] Run `pnpm --filter @zookanalytics/bmad-orchestrator test:run`
-  - [ ] Run `pnpm --filter @zookanalytics/bmad-orchestrator type-check`
-  - [ ] Grep for "devpod" (case-insensitive) in `packages/orchestrator/src/` — must be zero
+- [x] Task 1: Replace fixture files (AC: #1)
+  - [x] Delete `devPodList.json`, `devPodListEmpty.json`, `devPodListError.json`
+  - [x] Create `instanceList.json` with 3 instances matching agent-env JSON output shape
+  - [x] Create `instanceListEmpty.json` with `{ ok: true, data: [], error: null }`
+  - [x] Create `instanceListError.json` with `{ ok: false, data: null, error: {...} }`
+- [x] Task 2: Rewrite types.ts (AC: #2)
+  - [x] Remove all DevPod types (DevPod, DevPodStatus, DevPodSource, etc.)
+  - [x] Add `InstanceDisplayStatus` type
+  - [x] Add `Instance` interface matching agent-env JSON output
+  - [x] Add `GitState` interface (nested in Instance)
+  - [x] Add `AgentEnvJsonOutput` interface for CLI envelope parsing
+  - [x] Update `DiscoveryResult` to use `instances: Instance[]` (not `devpods: DevPod[]`)
+  - [x] Remove `RawObject` (no longer used — agent-env returns structured data)
+  - [x] Update `types.test.ts` for new types
+- [x] Task 3: Rewrite discovery.ts (AC: #3)
+  - [x] Change CLI command from `devpod list --output json` to `agent-env list --json`
+  - [x] Remove all mapping functions (mapSource, mapProvider, mapIde, mapMachine, mapTimestamp, mapWorkspaces, mapDevPodOutput) — agent-env returns structured data directly
+  - [x] Parse `{ ok, data, error }` envelope: on `ok: true`, return `data` as `instances`; on `ok: false`, return error
+  - [x] Rename function: `discoverDevPods` → `discoverInstances`
+  - [x] Rename factory export: `discoverDevPods` → `discoverInstances`
+  - [x] Update `discovery.test.ts` with agent-env envelope fixtures and updated assertions
+- [x] Task 4: Update list.ts command (AC: #4)
+  - [x] Update `ListJsonOutput` interface: `devpods` → `instances` field
+  - [x] Update table columns: NAME, STATUS, PURPOSE (not NAME, WORKSPACE, PROVIDER)
+  - [x] Update empty state: "No instances discovered"
+  - [x] Update error suggestion: reference `agent-env --version`
+  - [x] Remove `getWorkspacePath()` helper (no longer needed — no DevPod source object)
+  - [x] Add status and purpose display from Instance fields
+  - [x] Update `list.test.ts` with new output expectations
+- [x] Task 5: Update cli.ts (AC: #5, #6)
+  - [x] Update command description if it references DevPod
+  - [x] Update `cli.test.ts` if needed
+- [x] Task 6: Verify clean (AC: #5, #6)
+  - [x] Run `pnpm --filter @zookanalytics/bmad-orchestrator test:run` — 45 tests pass
+  - [x] Run `pnpm --filter @zookanalytics/bmad-orchestrator type-check` — clean
+  - [x] Grep for "devpod" (case-insensitive) in `packages/orchestrator/src/` — zero matches
 
 ## Dev Notes
 
@@ -262,10 +310,45 @@ New table: `NAME | STATUS | PURPOSE`
 
 ### Agent Model Used
 
-
+Claude Opus 4.6
 
 ### Debug Log References
 
+No issues encountered. All tasks completed cleanly on first pass.
+
 ### Completion Notes List
 
+- **Task 1**: Deleted 3 old DevPod fixture files, created 3 new agent-env envelope fixtures (instanceList.json with 3 instances showing mixed statuses/gitState/purpose, instanceListEmpty.json, instanceListError.json)
+- **Task 2**: Rewrote types.ts from ~137 lines of DevPod types to ~65 lines of agent-env types. Removed 8 DevPod-specific types/interfaces (DevPod, DevPodStatus, DevPodSource, DevPodMachineConfig, DevPodProviderConfig, DevPodIDEConfig, DevPodTimestamp, RawObject). Added InstanceDisplayStatus, Instance, GitState, GitStateResult, AgentEnvJsonOutput, updated DiscoveryResult. Tests: 10 pass.
+- **Task 3**: Rewrote discovery.ts from ~199 lines to ~75 lines. Deleted 7 mapping functions (mapSource, mapProvider, mapIde, mapMachine, mapTimestamp, mapWorkspaces, mapDevPodOutput) and toOptionalString helper. New module directly parses `{ ok, data, error }` envelope. Renamed discoverDevPods→discoverInstances, CLI command from `devpod list --output json` to `agent-env list --json`. Tests: 20 pass.
+- **Task 4**: Rewrote list.ts — table columns from NAME/WORKSPACE/PROVIDER to NAME/STATUS/PURPOSE, removed getWorkspacePath() and formatDevPodRow(), added formatInstanceRow(), JSON output uses `instances` field (not `devpods`), empty state "No instances discovered", error suggestion references `agent-env --version`. Tests: 9 pass.
+- **Task 5**: Updated cli.ts descriptions: program description from "multi-DevPod" to "multi-instance", list command from "List discovered DevPods" to "List discovered instances". Updated cli.test.ts mock and assertions. Tests: 6 pass.
+- **Task 6**: Full verification — 45 orchestrator tests pass, type-check clean, zero "devpod" references in src/. Full monorepo regression: 500 tests pass (455 agent-env + 45 orchestrator).
+
+### Change Log
+
+- 2026-02-08: Complete DevPod-to-agent-env migration — rewrote fixtures, types, discovery module, list command, and CLI descriptions. Net code reduction ~130 lines due to agent-env's structured JSON eliminating all mapping functions.
+- 2026-02-08: Code review fixes — added DI parameter to `listCommand()`, removed module mock from list tests, fixed dangling promise in discovery default export test, documented snapshot file in File List.
+
 ### File List
+
+New files:
+- packages/orchestrator/src/lib/__fixtures__/instanceList.json
+- packages/orchestrator/src/lib/__fixtures__/instanceListEmpty.json
+- packages/orchestrator/src/lib/__fixtures__/instanceListError.json
+- packages/orchestrator/src/commands/__snapshots__/list.test.ts.snap
+
+Modified files:
+- packages/orchestrator/src/lib/types.ts
+- packages/orchestrator/src/lib/types.test.ts
+- packages/orchestrator/src/lib/discovery.ts
+- packages/orchestrator/src/lib/discovery.test.ts
+- packages/orchestrator/src/commands/list.ts
+- packages/orchestrator/src/commands/list.test.ts
+- packages/orchestrator/src/cli.ts
+- packages/orchestrator/src/cli.test.ts
+
+Deleted files:
+- packages/orchestrator/src/lib/__fixtures__/devPodList.json
+- packages/orchestrator/src/lib/__fixtures__/devPodListEmpty.json
+- packages/orchestrator/src/lib/__fixtures__/devPodListError.json

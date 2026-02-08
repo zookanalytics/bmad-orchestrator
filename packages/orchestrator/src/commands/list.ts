@@ -1,13 +1,16 @@
 /**
- * List command handler for displaying discovered DevPods
+ * List command handler for displaying discovered instances
  *
  * @module commands/list
  */
 import { createError, formatError } from '@zookanalytics/shared';
 
-import type { DevPod, DiscoveryResult } from '../lib/types.js';
+import type { Instance, DiscoveryResult } from '../lib/types.js';
 
 import { createDiscovery } from '../lib/discovery.js';
+
+/** Discovery function type */
+type DiscoveryFn = () => Promise<DiscoveryResult>;
 
 /** Options for the list command */
 export interface ListOptions {
@@ -17,51 +20,37 @@ export interface ListOptions {
 /** JSON output format for the list command */
 export interface ListJsonOutput {
   version: '1';
-  devpods: DevPod[];
+  instances: Instance[];
   errors: string[];
 }
 
 /**
- * Get workspace path from DevPod source
+ * Format a single instance as a table row
  *
- * @param pod - DevPod to extract workspace path from
- * @returns Workspace path string or '-' if not available
- */
-function getWorkspacePath(pod: DevPod): string {
-  if (pod.source?.localFolder) {
-    return pod.source.localFolder;
-  }
-  if (pod.source?.gitRepository) {
-    return pod.source.gitRepository;
-  }
-  return '-';
-}
-
-/**
- * Format a single DevPod as a table row
- *
- * @param pod - DevPod to format
+ * @param instance - Instance to format
+ * @param columnWidths - Calculated widths for table columns
  * @returns Formatted table row string
  */
-function formatDevPodRow(pod: DevPod): string {
-  const name = pod.id.padEnd(20);
-  const workspace = getWorkspacePath(pod).padEnd(40);
-  const provider = pod.provider?.name || 'unknown';
-  // Note: devpod list doesn't return status - would need separate devpod status call
-  // For MVP, we show provider name as the "status" column since it's what we have
-  return `${name} ${workspace} ${provider}`;
+function formatInstanceRow(
+  instance: Instance,
+  columnWidths: { name: number; status: number }
+): string {
+  const name = instance.name.padEnd(columnWidths.name);
+  const status = instance.status.padEnd(columnWidths.status);
+  const purpose = instance.purpose ?? '-';
+  return `${name} ${status} ${purpose}`;
 }
 
 /**
  * Format discovery result as JSON output
  *
  * @param result - Discovery result to format
- * @returns JSON string with version, devpods, and errors
+ * @returns JSON string with version, instances, and errors
  */
 function formatJsonOutput(result: DiscoveryResult): string {
   const output: ListJsonOutput = {
     version: '1',
-    devpods: result.devpods,
+    instances: result.instances,
     errors: result.error ? [result.error] : [],
   };
   return JSON.stringify(output, null, 2);
@@ -79,19 +68,33 @@ function formatTextOutput(result: DiscoveryResult): string {
       createError(
         'DISCOVERY_FAILED',
         result.error.replace('DISCOVERY_FAILED: ', ''),
-        'Check if DevPod CLI is installed with `devpod version`'
+        'Check if agent-env CLI is available with `agent-env --version`'
       )
     );
   }
 
-  if (result.devpods.length === 0) {
-    return 'No DevPods discovered';
+  if (result.instances.length === 0) {
+    return 'No instances discovered';
   }
 
-  // Format as table
-  const header = 'NAME                 WORKSPACE                                PROVIDER';
+  const nameHeader = 'NAME';
+  const statusHeader = 'STATUS';
+  const purposeHeader = 'PURPOSE';
+
+  const nameWidth = Math.max(nameHeader.length, ...result.instances.map((i) => i.name.length));
+  const statusWidth = Math.max(
+    statusHeader.length,
+    ...result.instances.map((i) => i.status.length)
+  );
+
+  const columnWidths = {
+    name: nameWidth + 2,
+    status: statusWidth + 2,
+  };
+
+  const header = `${nameHeader.padEnd(columnWidths.name)} ${statusHeader.padEnd(columnWidths.status)} ${purposeHeader}`;
   const separator = '-'.repeat(header.length);
-  const rows = result.devpods.map(formatDevPodRow);
+  const rows = result.instances.map((instance) => formatInstanceRow(instance, columnWidths));
 
   return [header, separator, ...rows].join('\n');
 }
@@ -100,21 +103,13 @@ function formatTextOutput(result: DiscoveryResult): string {
  * Execute the list command
  *
  * @param options - Command options (json flag)
+ * @param discover - Optional discovery function for dependency injection (defaults to createDiscovery())
  * @returns Formatted output string (table or JSON)
- *
- * @example
- * ```typescript
- * // Plain text output
- * const output = await listCommand({});
- * console.log(output);
- *
- * // JSON output
- * const jsonOutput = await listCommand({ json: true });
- * console.log(jsonOutput);
- * ```
  */
-export async function listCommand(options: ListOptions = {}): Promise<string> {
-  const discover = createDiscovery();
+export async function listCommand(
+  options: ListOptions = {},
+  discover: DiscoveryFn = createDiscovery()
+): Promise<string> {
   const result = await discover();
 
   if (options.json) {
