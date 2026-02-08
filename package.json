@@ -17,6 +17,8 @@
     "type-check": "pnpm -r type-check",
     "dev:orchestrator": "pnpm --filter @zookanalytics/bmad-orchestrator dev",
     "dev:agent-env": "pnpm --filter @zookanalytics/agent-env dev",
+    "bootstrap": "pnpm install && pnpm build",
+    "setup:agent-env": "pnpm run bootstrap && cd packages/agent-env && pnpm link --global",
     "test:install:retro": "node packages/bmm-retrospective-module/test-install.cjs",
     "changeset": "changeset",
     "prepare": "husky"

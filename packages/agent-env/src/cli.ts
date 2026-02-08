@@ -3,6 +3,9 @@
 import { formatError, createError } from '@zookanalytics/shared';
 import { program } from 'commander';
 import { render } from 'ink';
+import { existsSync } from 'node:fs';
+import { dirname, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import React from 'react';
 
 import packageJson from '../package.json' with { type: 'json' };
@@ -17,8 +20,10 @@ import { attachInstance, createAttachDefaultDeps } from './lib/attach-instance.j
 import { launchInteractiveMenu } from './lib/interactive-menu.js';
 import { listInstances } from './lib/list-instances.js';
 
-// Package version from package.json
-const version = packageJson.version;
+// Detect local link: when linked from monorepo, workspace root is 3 levels up from dist/
+const __dirname = dirname(fileURLToPath(import.meta.url));
+const isLinked = existsSync(resolve(__dirname, '..', '..', '..', 'pnpm-workspace.yaml'));
+const version = packageJson.version + (isLinked ? '+local' : '');
 
 program
   .name('agent-env')
