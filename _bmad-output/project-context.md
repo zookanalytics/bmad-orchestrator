@@ -2,7 +2,7 @@
 project_name: 'agent-tools'
 user_name: 'Node'
 date: '2026-01-27'
-sections_completed: ['technology_stack', 'typescript_rules', 'react_ink_rules', 'testing_rules', 'code_quality_rules', 'workflow_rules', 'critical_rules']
+sections_completed: ['technology_stack', 'typescript_rules', 'react_ink_rules', 'testing_rules', 'code_quality_rules', 'workflow_rules', 'critical_rules', 'known_ai_agent_risks']
 scope: ['agent-env', 'bmad-orchestrator', 'shared']
 status: 'complete'
 ---
@@ -273,4 +273,20 @@ await fs.rename(tempPath, filePath);
 - Workspace folder is the atomic unit, not the container
 - Git state checks must cover ALL branches, not just current
 - Safety checks: zero false negatives (blocking work loss > convenience)
+
+## Known AI Agent Risks
+
+_Patterns observed during AI-assisted development that reviewers must actively check for._
+
+### False Verification Claims (CRITICAL)
+
+**Pattern:** AI dev agent claims "all tests pass" or "verified working" when tests haven't actually been executed, or are broken/skipped.
+
+**Evidence:** Found in 2 of 4 stories during Epic rel-2.
+
+**Review action:** Independently run the full test suite (`pnpm -r test:run` or `npx vitest run`) and verify the output yourself. Never trust a dev agent's claim that tests pass — confirm with actual execution output. Specifically watch for:
+- Tests that are written but never executed (missing from test config)
+- Tests that "pass" because assertions are commented out or trivial
+- Test files that exist but contain no real assertions
+- Claims of "all N tests pass" where N doesn't match actual test count
 

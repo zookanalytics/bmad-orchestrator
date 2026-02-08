@@ -16,7 +16,7 @@ items:
   - id: 2
     action_item: 2
     workflow: bmad:bmm:workflows:quick-dev
-    status: pending
+    status: done
     summary: |
       Add "false verification claims" as a known AI dev agent risk to code
       review process documentation. Pattern: dev agent claims tests pass when
