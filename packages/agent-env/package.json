@@ -12,6 +12,11 @@
       "import": "./dist/cli.js"
     }
   },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/zookanalytics/bmad-orchestrator",
+    "directory": "packages/agent-env"
+  },
   "engines": {
     "node": ">=20"
   },
