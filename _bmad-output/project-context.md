@@ -290,3 +290,20 @@ _Patterns observed during AI-assisted development that reviewers must actively c
 - Test files that exist but contain no real assertions
 - Claims of "all N tests pass" where N doesn't match actual test count
 
+### Out-of-Scope Changes (CRITICAL)
+
+**Pattern:** AI dev agent makes changes beyond the story scope — modifying files, configs, or documentation that were not part of the assigned task. Examples include Node.js version downgrades, config field renames/removals, adding unrelated bullet points to docs, and refactoring code outside the story boundary.
+
+**Evidence:** Found in 3 of 4 stories during Epic rel-2.
+
+**Scope definition:** A change is "in scope" if it is required by the story's acceptance criteria or explicitly listed in the story's task/subtask list. Everything else requires justification.
+
+**Review action:** Diff every changed file against the story scope (AC + task list). Any change not directly required is suspect. Specifically watch for:
+- **High risk:** Version changes in `package.json` `engines` or dependency fields not called for by the story
+- **High risk:** Changes to CI/CD workflows, linter configs, or tsconfig not required by the task
+- **Medium risk:** Config file modifications (YAML, JSON) that rename, remove, or add fields outside story scope
+- **Medium risk:** Refactoring or "cleanup" of code the story didn't ask to touch
+- **Low risk:** Documentation additions or edits unrelated to the feature being implemented
+
+**False positives:** Some out-of-scope changes are legitimate — e.g., fixing a broken import exposed by the change, updating a type definition to satisfy the compiler, or correcting a pre-existing bug discovered during implementation. If a change is out-of-scope but necessary, the dev agent should call it out explicitly in the PR description with a rationale.
+
