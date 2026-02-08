@@ -22,7 +22,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '22'
+          node-version: '24'
 
       - name: Verify Node.js Version
         run: |
@@ -122,7 +122,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '22'
+          node-version: '24'
 
       # Install the tarball globally to simulate end-user installation.
       # The glob pattern matches the versioned tarball name.
