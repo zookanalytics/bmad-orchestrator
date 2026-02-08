@@ -253,8 +253,8 @@ Epic 1 established the project as a pnpm workspaces monorepo package (not standa
 | timeago.js | ^4.0.2 | Relative timestamp formatting |
 | execa | ^9.6.1 | Subprocess execution with `reject: false` pattern |
 | clipboardy | ^5.0.2 | Cross-platform clipboard access |
-| @zookanalytics/shared | workspace:* | Shared error utilities (`createError`, `formatError`, `AppError`). **Note:** Currently listed as devDependency in package.json; rework (story 1.R) should move to dependencies since `formatError`/`createError` are imported at runtime in list command. |
-| @zookanalytics/agent-env | workspace:* (CLI) | Instance discovery via `agent-env list --json` subprocess (CLI dependency, not library import) |
+| @zookanalytics/shared | workspace:* (devDependency) | Shared error utilities (`createError`, `formatError`, `AppError`). **Intentionally a devDependency** — shared code is compiled in at build time. Orchestrator has no runtime package dependency on shared; the compiled output is self-contained. |
+| @zookanalytics/agent-env | workspace:* (CLI only) | Instance discovery via `agent-env list --json` subprocess. **No library import** — orchestrator interacts with agent-env exclusively through CLI subprocess, avoiding code-level coupling. The only shared code is common framework components (via `@zookanalytics/shared` at build time). |
 
 ### Selected Approach: Monorepo with Full Tooling (As Implemented)
 

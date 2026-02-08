@@ -2,7 +2,7 @@
   "name": "@zookanalytics/bmad-orchestrator",
   "private": true,
   "version": "0.1.0",
-  "description": "Unified command center for multi-DevPod development",
+  "description": "Unified command center for multi-instance development",
   "type": "module",
   "bin": {
     "bmad-orchestrator": "./bin/bmad-orchestrator.js"
