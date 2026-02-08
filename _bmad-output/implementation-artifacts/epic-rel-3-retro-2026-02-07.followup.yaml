@@ -1,0 +1,66 @@
+source: _bmad-output/implementation-artifacts/epic-rel-3-retro-2026-02-07.md
+generated: 2026-02-07
+
+items:
+  - id: 1
+    action_item: "Process Improvement #1"
+    workflow: "bmad:bmm:workflows:quick-dev"
+    status: pending
+    summary: |
+      Create a reusable custom prompt for post-epic test consolidation. The prompt should
+      instruct an agent to review all test files across an epic's scope, identify duplicates,
+      upgrade keyword-only assertions (toContain) to structural/semantic validation, and
+      consolidate overlapping test files — without reducing actual coverage. This addresses
+      the pattern where ATDD policy prevents test quality improvements during code review,
+      so a separate step is needed. Deliverable: a prompt file that can be triggered via
+      quick-dev or similar after epic completion. Custom prompt approach for now; potential
+      BMAD workflow formalization later.
+
+  - id: 2
+    action_item: "Process Improvement #2"
+    workflow: "bmad:bmm:workflows:quick-dev"
+    status: pending
+    summary: |
+      Pilot the test consolidation prompt on src/release/ test files (7 files, 194 tests).
+      Consolidate duplicates between recovery-docs.test.ts and publish-workflow.test.ts
+      (9 overlapping assertions). Upgrade toContain() keyword-only assertions to structural
+      YAML validation where possible. Remove tests with zero signal. Test count may decrease
+      but coverage quality must increase. Zero coverage loss is the success criterion.
+      Depends on item #1 completing first. Also resolves Technical Debt #2 (ATDD-protected
+      low-quality tests in recovery-docs.test.ts).
+
+  - id: 3
+    action_item: "Process Improvement #3"
+    workflow: "bmad:bmm:workflows:quick-dev"
+    status: pending
+    summary: |
+      Evaluate 5 unaddressed action items from the rel-2 retrospective (epic-rel-2-retro-2026-02-07.md):
+      (1) Document ESM mocking gotchas in dev guidelines — vi.spyOn(require(...)) silently
+      fails with ESM imports. (2) Document "false verification" as known risk — add explicit
+      step to code review checklist to verify test claims independently. (3) Document scope
+      creep pattern for dev agents — review process should flag out-of-scope changes.
+      (4) Extract duplicate getChangesetFiles() helper across test files. (5) Harden shell
+      escaping in publish workflow tests. For each: determine if still relevant given rel-3
+      completion, execute if valuable, or explicitly close with rationale.
+
+  - id: 4
+    action_item: "Technical Debt #1"
+    workflow: "bmad:bmm:workflows:quick-dev"
+    status: pending
+    summary: |
+      Resolve 31 pre-existing test failures in cli.test.ts caused by a chalk module issue.
+      These failures have been carried across all 3 release infrastructure epics (rel-1,
+      rel-2, rel-3) and are unrelated to release work. The failures are in the agent-env
+      package. Investigate the chalk module incompatibility, fix the root cause, and verify
+      all 31 tests pass. Priority: Medium.
+
+  - id: 5
+    action_item: "Technical Debt #2"
+    workflow: "bmad:bmm:workflows:quick-dev"
+    status: pending
+    summary: |
+      Low-quality tests in src/release/recovery-docs.test.ts — 23 tests using toContain()
+      keyword matching with no structural validation, 9 assertions duplicating
+      publish-workflow.test.ts. This item is addressed by item #2 (test consolidation pilot
+      on release test suite). No separate execution needed — will be resolved when item #2
+      is executed. Mark as done when item #2 completes.
