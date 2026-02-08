@@ -32,7 +32,7 @@ items:
   - id: 3
     action_item: "Process Improvement #3"
     workflow: "bmad:bmm:workflows:quick-dev"
-    status: pending
+    status: done
     summary: |
       Evaluate 5 unaddressed action items from the rel-2 retrospective (epic-rel-2-retro-2026-02-07.md):
       (1) Document ESM mocking gotchas in dev guidelines — vi.spyOn(require(...)) silently
@@ -42,6 +42,8 @@ items:
       (4) Extract duplicate getChangesetFiles() helper across test files. (5) Harden shell
       escaping in publish workflow tests. For each: determine if still relevant given rel-3
       completion, execute if valuable, or explicitly close with rationale.
+      NOTE: All 5 items were addressed in this same branch (commits e463140, 093f5f2,
+      d58e537) and the corresponding rel-2 followup items are marked done.
 
   - id: 4
     action_item: "Technical Debt #1"
