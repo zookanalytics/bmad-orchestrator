@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 // Mock the list command
 vi.mock('./commands/list.js', () => ({
-  listCommand: vi.fn().mockResolvedValue('No DevPods discovered'),
+  listCommand: vi.fn().mockResolvedValue('No instances discovered'),
 }));
 
 // Spy on Command.prototype.parse to prevent actual CLI execution
@@ -38,18 +38,18 @@ describe('cli', () => {
       const program = new Command();
       program
         .name('bmad-orchestrator')
-        .description('Unified command center for multi-DevPod development')
+        .description('Unified command center for multi-instance development')
         .version('0.1.0');
 
       program
         .command('list')
-        .description('List discovered DevPods')
+        .description('List discovered instances')
         .option('--json', 'Output as JSON')
         .action(async () => {});
 
       const listCmd = program.commands.find((cmd) => cmd.name() === 'list');
       expect(listCmd).toBeDefined();
-      expect(listCmd?.description()).toBe('List discovered DevPods');
+      expect(listCmd?.description()).toBe('List discovered instances');
     });
 
     it('should have --json option on list command', async () => {
@@ -58,7 +58,7 @@ describe('cli', () => {
 
       program
         .command('list')
-        .description('List discovered DevPods')
+        .description('List discovered instances')
         .option('--json', 'Output as JSON')
         .action(async () => {});
 

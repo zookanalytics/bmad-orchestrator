@@ -16,7 +16,7 @@ inputDocuments:
 
 ### Project Vision
 
-BMAD Orchestrator is a unified command center for multi-DevPod development. The core UX goal is **confidence through clarity** - eliminating decision paralysis by making the next action obvious at a glance.
+BMAD Orchestrator is a unified command center for multi-instance development. The core UX goal is **confidence through clarity** - eliminating decision paralysis by making the next action obvious at a glance.
 
 Users stop asking "where are we?" and start executing.
 
@@ -24,7 +24,7 @@ Users stop asking "where are we?" and start executing.
 
 **Primary Persona: The Solo Orchestrator**
 
-- Single developer managing 1-6 parallel DevPods (up to 10 supported)
+- Single developer managing 1-6 parallel instances (up to 10 supported)
 - Uses BMAD methodology for structured AI-assisted development
 - Intermediate technical skill, comfortable with terminal workflows
 - Needs quick situational awareness (especially morning check-ins)
@@ -37,8 +37,8 @@ Users stop asking "where are we?" and start executing.
 
 ### Key Design Challenges
 
-1. **Information Density** - Display multiple DevPods with status, story assignment, and timing in a scannable format without overwhelming the user
-2. **Instant Pattern Recognition** - Problems (stale, needs-input) must visually "pop" without requiring line-by-line reading
+1. **Information Density** - Display multiple instances with status, story assignment, and timing in a scannable format without overwhelming the user
+2. **Instant Pattern Recognition** - Problems (inactive, needs-input) must visually "pop" without requiring line-by-line reading
 3. **Two-Level Navigation** - Clear mental model for main grid view vs. detail drill-down, with obvious entry/exit points
 4. **Command Accessibility** - Copy-paste commands must be immediately visible and ready to use
 5. **Progressive Disclosure** - Show summary by default, details on demand
@@ -48,7 +48,7 @@ Users stop asking "where are we?" and start executing.
 1. **Visual Status Language** - Unicode indicators (✓ ● ○ ✗ ⚠) combined with color coding create instant scanability
 2. **"Next Action" Intelligence** - Surface the single most important thing to do, reducing cognitive load
 3. **Keyboard-First UX** - vim-style navigation (j/k, Enter, q) for power-user efficiency
-4. **Contextual Commands** - Selected DevPod shows its relevant command, eliminating search
+4. **Contextual Commands** - Selected instance shows its relevant command, eliminating search
 5. **Color Hierarchy** - Green (good) / Yellow (attention) / Red (problem) with terminal color support
 
 ## Core User Experience
@@ -81,12 +81,12 @@ This loop should complete in seconds, not minutes. The dashboard exists to elimi
 1. **Knowing what's next** - The dashboard surfaces the recommended action; user doesn't have to figure it out
 2. **Finding problems** - Status indicators make issues visually obvious instantly
 3. **Getting commands** - Copy-paste ready, no manual assembly or editing
-4. **Switching context** - Selected DevPod shows its details; navigation is instant
+4. **Switching context** - Selected instance shows its details; navigation is instant
 
 **What the dashboard handles automatically:**
 
-- Detecting stale/stuck workers
-- Identifying idle DevPods ready for new work
+- Detecting inactive/stuck workers
+- Identifying idle instances ready for new work
 - Surfacing needs-input situations with the actual question
 - Suggesting which story to assign next
 
@@ -96,7 +96,7 @@ This loop should complete in seconds, not minutes. The dashboard exists to elimi
 |--------|------------------------|
 | **Morning check-in** | Open dashboard → immediately know state of all work → act within 30 seconds |
 | **Needs-input detection** | See the question, provide answer, resume - without opening VS Code |
-| **Idle worker dispatch** | Spot idle DevPod, see suggested story, copy command, execute |
+| **Idle worker dispatch** | Spot idle instance, see suggested story, copy command, execute |
 | **Long-running confidence** | Dashboard shows healthy heartbeats; user trusts work is progressing |
 
 **The Vision Moment:** Autonomous workers run for hours. Human reviews completed artifacts, tweaks if needed, dispatches next work. Git provides the safety net - everything is recorded, nothing is lost.
@@ -145,7 +145,7 @@ The BMAD Orchestrator should evoke a sense of calm control. Users should feel li
 | Emotion | How to Achieve |
 |---------|----------------|
 | **Confidence** | Always-current data, clear status indicators |
-| **Trust** | Reliable stale detection, no false negatives |
+| **Trust** | Reliable inactive detection, no false negatives |
 | **Calm** | Information density without overwhelm |
 | **Control** | Keyboard-driven, responsive, predictable |
 
@@ -153,7 +153,7 @@ The BMAD Orchestrator should evoke a sense of calm control. Users should feel li
 
 | Emotion | How to Avoid |
 |---------|--------------|
-| **Confusion** | Never wonder "is this stale?" - timestamps visible |
+| **Confusion** | Never wonder "is this inactive?" - timestamps visible |
 | **Anxiety** | Problems surfaced clearly, not hidden |
 | **Frustration** | Commands ready to use, no manual editing |
 | **Doubt** | Heartbeat indicators confirm workers are alive |
@@ -269,7 +269,7 @@ Rather than building custom components, we leverage the mature Ink ecosystem:
 |---------|---------|-----------|
 | **@inkjs/ui** | Core UI components (Badge, ProgressBar, Spinner, Alert) | Official |
 | **ink-chart** | Sparkline visualizations matching desired aesthetic | Community |
-| **ink-table** | Table/row layouts for DevPod grid | 251k+ |
+| **ink-table** | Table/row layouts for instance grid | 251k+ |
 | **timeago.js** | Relative timestamp formatting | 10M+ |
 
 ### Rationale for Selection
@@ -288,7 +288,7 @@ Rather than building custom components, we leverage the mature Ink ecosystem:
 | Story/task progress | `ProgressBar` + `Sparkline` | @inkjs/ui + ink-chart |
 | Worker activity | `Spinner` | @inkjs/ui |
 | Needs-input alerts | `Alert`, `StatusMessage` | @inkjs/ui |
-| DevPod grid | `Table` | ink-table |
+| Instance grid | `Table` | ink-table |
 | Relative timestamps | `timeago.js` + `<Text>` | Custom wrapper (5 lines) |
 | Keybinding footer | `Box` + `Text` + `Spacer` | Custom composition (10 lines) |
 
@@ -328,7 +328,7 @@ export { KeyHints } from './KeyHints'
 
 - Extend @inkjs/ui default theme
 - Define color palette matching status hierarchy (green/yellow/red)
-- Configure Badge variants for DevPod states
+- Configure Badge variants for instance states
 - Ensure visual cohesion across all library components
 
 ### Custom Wrappers (Minimal)
@@ -364,7 +364,7 @@ export function KeyHints({ hints }: { hints: Array<{ key: string; action: string
 **What We Customize:**
 
 - Theme colors to match status hierarchy
-- Badge variants for DevPod states (done, running, needs-input, stale, idle)
+- Badge variants for instance states (done, running, needs-input, inactive, idle)
 - Table cell renderers for custom row composition
 
 **What We Use As-Is:**
@@ -384,14 +384,14 @@ export function KeyHints({ hints }: { hints: Array<{ key: string; action: string
 **"Open → See what needs attention → Know exactly what to do"**
 
 The BMAD Orchestrator defining experience in one sentence:
-> "It's a dashboard that shows me all my DevPods and tells me what to do next."
+> "It's a dashboard that shows me all my instances and tells me what to do next."
 
 This is what users will describe to others. If we nail this, everything else follows.
 
 ### User Mental Model
 
 **Current workflow (without dashboard):**
-- Open VS Code for each DevPod
+- Open VS Code for each instance
 - Run `/workflow-status` in each
 - Mentally aggregate state across windows
 - Decide which needs attention first
@@ -405,13 +405,13 @@ This is what users will describe to others. If we nail this, everything else fol
 
 ### Spatial Consistency Principle
 
-A key differentiator: DevPods maintain stable positions in the grid.
+A key differentiator: Instances maintain stable positions in the grid.
 
 | Pattern | Benefit |
 |---------|---------|
-| **Stable positioning** | DevPods stay in same row/order across refreshes |
+| **Stable positioning** | Instances stay in same row/order across refreshes |
 | **Visual identity** | Name + purpose visible = instant recognition |
-| **Muscle memory** | "j j Enter" always gets to the same DevPod |
+| **Muscle memory** | "j j Enter" always gets to the same instance |
 | **Recognition over recall** | Brain remembers location, not labels |
 
 **Implementation rules:**
@@ -448,16 +448,16 @@ A key differentiator: DevPods maintain stable positions in the grid.
 
 **1. Initiation**
 - Run `bmad-orchestrator` from any terminal
-- Brief discovery phase: "Scanning DevPods..." with spinner
+- Brief discovery phase: "Scanning instances..." with spinner
 - Grid renders once discovery completes (target: < 2 seconds)
 - Auto-refresh maintains freshness from then on
 - No cached state needed - persistent dashboard means one-time startup cost
 
 **2. Scanning (Core Moment)**
-- Eyes scan familiar positions (DevPods in stable locations)
+- Eyes scan familiar positions (instances in stable locations)
 - Status indicators draw attention (green fades, yellow/red pops)
 - Pattern matching: "middle one is yellow - that's the API work"
-- Recognition without reading for familiar DevPods
+- Recognition without reading for familiar instances
 
 **3. Selection & Detail**
 - j/k moves selection highlight through grid
@@ -470,14 +470,14 @@ A key differentiator: DevPods maintain stable positions in the grid.
 - Session ID for resume commands
 - Task progress (e.g., "3/7 tasks completed")
 - Last completed task name
-- Copy-paste command for SSH/resume
+- Copy-paste command for attach/resume
 
 **Detail View (Phase 2 - deferred):**
 - Answer input field for quick responses
 - Interactive Mode button (tmux attach)
 
 **4. Action**
-- Copy command shown for selected DevPod
+- Copy command shown for selected instance
 - Paste into separate terminal
 - Return to dashboard - observe status update
 - Confidence: "I handled it"
@@ -497,7 +497,7 @@ A key differentiator: DevPods maintain stable positions in the grid.
 | **Success/Done** | Green | Completed, healthy |
 | **Active/Running** | Blue or Cyan | In progress, working |
 | **Warning/Attention** | Yellow | Needs input, idle |
-| **Error/Stale** | Red | Problem, action required |
+| **Error/Inactive** | Red | Problem, action required |
 | **Neutral/Info** | Default/White | Normal text |
 | **Dimmed** | Gray/Dim | Secondary info, timestamps |
 
@@ -510,7 +510,7 @@ A key differentiator: DevPods maintain stable positions in the grid.
 | ○ | Idle/Pending | Gray |
 | ⏸ | Needs Input | Yellow |
 | ✗ | Error/Failed | Red |
-| ⚠ | Stale/Warning | Yellow |
+| ⚠ | Inactive/Warning | Yellow |
 
 **Principle:** Symbols + color together. Never rely on color alone for meaning.
 
@@ -548,7 +548,7 @@ Terminal constraints define typography - no font choice, only text styling:
 ┌─────────────────────────────────────────────────┐
 │  Header: Project name, refresh indicator        │
 ├─────────────────────────────────────────────────┤
-│  Main Grid: DevPod panes (bulk of screen)       │
+│  Main Grid: Instance panes (bulk of screen)     │
 │    [selected pane highlighted]                  │
 │                                                 │
 ├─────────────────────────────────────────────────┤
@@ -565,8 +565,8 @@ Terminal constraints define typography - no font choice, only text styling:
 | Zone | Content | Behavior |
 |------|---------|----------|
 | **Header** | Project name, last refresh time | Static, always visible |
-| **Main Grid** | DevPod panes with status | Scrollable if > screen height |
-| **Command Bar** | Command for selected DevPod | Updates on selection change |
+| **Main Grid** | Instance panes with status | Scrollable if > screen height |
+| **Command Bar** | Command for selected instance | Updates on selection change |
 | **Backlog Bar** | Story count + summary | Static; `b` opens full overlay |
 | **Footer** | Available keybindings | Static, always visible |
 
@@ -617,13 +617,13 @@ Three layout directions were evaluated:
 
 | Direction | Concept | Tradeoffs |
 |-----------|---------|-----------|
-| **A: Minimal Table** | Dense rows, maximum DevPods visible | Less context, no room for questions |
+| **A: Minimal Table** | Dense rows, maximum instances visible | Less context, no room for questions |
 | **B: Card-Style Rows** | More context per row, progress visible | Vertical space, still cramped for questions |
-| **C: Terminal Panes** | 2x2 grid, each DevPod as mini-terminal | Requires wide terminal, but generous space |
+| **C: Terminal Panes** | 2x2 grid, each instance as mini-terminal | Requires wide terminal, but generous space |
 
 ### Chosen Direction: Terminal Panes (C)
 
-**Concept:** Each DevPod is a self-contained pane within a grid layout, like tmux panes or dashboard cards. Not a compact table - a purpose-built terminal for each workstream.
+**Concept:** Each instance is a self-contained pane within a grid layout, like tmux panes or dashboard cards. Not a compact table - a purpose-built terminal for each workstream.
 
 **Layout:**
 
@@ -631,7 +631,7 @@ Three layout directions were evaluated:
 ┌─ BMAD Orchestrator ──────────────────────────────────────────── ↻ 5s ago ─┐
 │                                                                            │
 │  ┌─ api-service ─────────────────────┐  ┌─ web-frontend ─────────────────┐ │
-│  │  ● RUNNING                 2m ago │  │  ✓ DONE               15m ago │ │
+│  │  ● running                 2m ago │  │  ✓ done                15m ago │ │
 │  │                                   │  │                                │ │
 │  │  Epic 2: Authentication           │  │  Epic 1: Core UI               │ │
 │  │  ▓▓▓▓▓▓▓▓▓▓▓▓░░░░░░░░ 60%        │  │  ▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓ 100%     │ │
@@ -642,7 +642,7 @@ Three layout directions were evaluated:
 │  └───────────────────────────────────┘  └────────────────────────────────┘ │
 │                                                                            │
 │  ╔═ data-pipeline ═══════════════════╗  ┌─ ml-service ───────────────────┐ │
-│  ║  ⏸ NEEDS INPUT             8m ago ║  │  ○ IDLE                 1h ago │ │
+│  ║  ⏸ needs-input              8m ago ║  │  ○ idle                 1h ago │ │
 │  ║                                   ║  │                                │ │
 │  ║  Epic 3: Data Layer               ║  │  Epic 4: ML Pipeline           │ │
 │  ║  ▓▓▓▓▓▓▓▓▓▓░░░░░░░░░░ 50%        ║  │  ░░░░░░░░░░░░░░░░░░░░ 0%       │ │
@@ -660,7 +660,7 @@ Three layout directions were evaluated:
 │                                                                            │
 ├────────────────────────────────────────────────────────────────────────────┤
 │  ▸ data-pipeline selected                                                  │
-│  devpod ssh data-pipeline                                                  │
+│  agent-env attach data-pipeline                                            │
 ├────────────────────────────────────────────────────────────────────────────┤
 │  j/k: select   Enter: terminal   r: respond   c: copy   q: quit           │
 └────────────────────────────────────────────────────────────────────────────┘
@@ -672,8 +672,8 @@ Three layout directions were evaluated:
 
 | Decision | Rationale |
 |----------|-----------|
-| **2x2 pane grid** | 6-8 DevPods max; vertical space available |
-| **Generous card sizing** | Each DevPod is a "purpose-built terminal" |
+| **2x2 pane grid** | 6-8 instances max; vertical space available |
+| **Generous card sizing** | Each instance is a "purpose-built terminal" |
 | **Epic + Story progress** | Epic progress is valuable context |
 | **Inline Claude questions** | Full multi-line questions need real space |
 | **Heavy box borders** | Clear visual structure and separation |
@@ -687,7 +687,7 @@ Problems should scream. Healthy states should whisper.
 | Status | Visual Treatment | Attention Level |
 |--------|------------------|-----------------|
 | **Needs Input** | Double-line border (═), yellow/orange color | LOUD - demands attention |
-| **Stale/Error** | Red border or background tint | LOUD - problem state |
+| **Inactive/Error** | Red border or background tint | LOUD - problem state |
 | **Running** | Normal border, blue status indicator | Medium - active but fine |
 | **Done** | Dimmed/muted appearance | Quiet - no action needed |
 | **Idle** | Dimmed, shows suggestion | Quiet - optional action |
@@ -701,7 +701,7 @@ Selected pane must be instantly recognizable:
 | **Border** | Highlighted/inverted or thicker weight |
 | **Header bar** | Inverted colors (dark bg, light text) |
 | **Background** | Subtle tint if terminal supports |
-| **Command bar** | Updates to show selected DevPod's command |
+| **Command bar** | Updates to show selected instance's command |
 
 ### Grid Navigation
 
@@ -730,14 +730,14 @@ Use Ink's `useStdoutDimensions()` to detect and adapt.
 
 ```
 <Dashboard>
-  <Header />                    // Title + refresh indicator
-  <PaneGrid>                    // Dumb grid layout
-    <DevPodPane pod={pod1} />   // Owns all pane complexity
-    <DevPodPane pod={pod2} />
+  <Header />                          // Title + refresh indicator
+  <PaneGrid>                          // Dumb grid layout
+    <InstancePane instance={inst1} /> // Owns all pane complexity
+    <InstancePane instance={inst2} />
     ...
   </PaneGrid>
-  <CommandBar />                // Selected DevPod's command
-  <KeyHints />                  // Footer keybindings
+  <CommandBar />                      // Selected instance's command
+  <KeyHints />                        // Footer keybindings
 </Dashboard>
 ```
 
@@ -747,7 +747,7 @@ Use Ink's `useStdoutDimensions()` to detect and adapt.
 - Internal scroll if content overflows
 
 **Pane Contents:**
-- Header: DevPod name + status badge + timestamp
+- Header: Instance name + status badge + timestamp
 - Epic row: Name + progress bar + percentage
 - Story row: Name + progress bar (indented)
 - Content area: Question (if needs-input), suggestion (if idle), or empty
@@ -767,10 +767,10 @@ Use Ink's `useStdoutDimensions()` to detect and adapt.
 **Flow:**
 
 1. User runs `bmad-orchestrator`
-2. "Scanning DevPods..." spinner (1-2 sec)
-3. DevPods found? → Grid renders / No → Empty state
+2. "Scanning instances..." spinner (1-2 sec)
+3. Instances found? → Grid renders / No → Empty state
 4. Eyes scan familiar positions
-5. Attention drawn to problem panes (needs-input, stale)
+5. Attention drawn to problem panes (needs-input, inactive)
 6. Navigate with j/k, act with Enter/r/c
 
 **Success Criteria:**
@@ -791,7 +791,7 @@ Use Ink's `useStdoutDimensions()` to detect and adapt.
 3. Navigate to pane with j/k
 4. Press 'r' to respond
 5. Command copied to clipboard
-6. User opens separate terminal, pastes SSH command
+6. User opens separate terminal, pastes attach command
 7. Find Claude session, provide response
 8. Dashboard auto-refreshes, pane updates to RUNNING
 
@@ -804,7 +804,7 @@ Use Ink's `useStdoutDimensions()` to detect and adapt.
 
 ### Journey 3: Idle Worker Dispatch
 
-**Goal:** Assign next story to idle DevPod
+**Goal:** Assign next story to idle instance
 
 **Flow:**
 
@@ -820,43 +820,43 @@ Use Ink's `useStdoutDimensions()` to detect and adapt.
 - Clear path to accept or choose different story
 - Dashboard reflects new assignment via auto-refresh
 
-### Journey 4: Stale Worker Recovery
+### Journey 4: Inactive Worker Recovery
 
 **Goal:** Detect and recover stuck/dead workers
 
 **Flow:**
 
-1. Dashboard shows STALE pane (red border, ⚠ indicator)
+1. Dashboard shows INACTIVE pane (red border, ⚠ indicator)
 2. "No heartbeat for X minutes" visible
 3. Navigate to pane with j/k
-4. Press Enter - SSH command copied
+4. Press Enter - attach command copied
 5. Open terminal, paste, investigate
 6. Restart session / fix issue / update state
 7. Dashboard auto-updates
 
 **Success Criteria:**
-- Stale state clearly distinguished from needs-input
+- Inactive state clearly distinguished from needs-input
 - Time since last heartbeat visible
-- Recovery path is SSH into DevPod
+- Recovery path is attach into instance
 
 ### Journey 5: Empty State (First Time)
 
-**Goal:** Guide new users when no DevPods exist
+**Goal:** Guide new users when no instances exist
 
 **Display:**
 
 ```
 ┌─ BMAD Orchestrator ──────────────────────────────────────────┐
 │                                                               │
-│                    No DevPods detected.                       │
+│                    No instances detected.                     │
 │                                                               │
 │              To get started with BMAD Orchestrator:           │
 │                                                               │
-│              1. Create a DevPod:                              │
-│                 devpod up <repository-url>                    │
+│              1. Create an instance:                           │
+│                 agent-env create <workspace>                  │
 │                                                               │
 │              2. Dashboard will auto-refresh                   │
-│                 when DevPods are available                    │
+│                 when instances are available                  │
 │                                                               │
 ├───────────────────────────────────────────────────────────────┤
 │  q: quit   R: manual refresh                                  │
@@ -866,7 +866,7 @@ Use Ink's `useStdoutDimensions()` to detect and adapt.
 **Success Criteria:**
 - Clear guidance for new users
 - No confusing empty grid
-- Auto-refresh detects new DevPods
+- Auto-refresh detects new instances
 
 ### Keyboard Mapping
 
@@ -875,8 +875,8 @@ Contextual keys avoid conflicts:
 | Key | Context | Action |
 |-----|---------|--------|
 | j/k | Always | Navigate between panes |
-| Enter | Any pane | Copy SSH command to clipboard |
-| r | Needs-input pane | Copy SSH command (semantic alias for respond) |
+| Enter | Any pane | Copy attach command to clipboard |
+| r | Needs-input pane | Copy attach command (semantic alias for respond) |
 | c | Any pane | Copy command to clipboard |
 | b | Always | Open backlog overlay |
 | R | Always | Manual refresh (Shift+R) |
@@ -891,8 +891,8 @@ Contextual keys avoid conflicts:
 |-----------|----------|
 | **Multiple needs-input** | All show double border; user chooses which to address first |
 | **Wrong story suggestion** | Enter opens terminal; user runs different command |
-| **SSH/network failure** | Dashboard shows connection error in pane |
-| **DevPod offline** | Pane shows "Unreachable" status with last known state |
+| **Connection failure** | Dashboard shows connection error in pane |
+| **Instance offline** | Pane shows "Unreachable" status with last known state |
 
 ### Journey Patterns
 
@@ -907,7 +907,7 @@ All journeys follow this pattern:
 
 Visual hierarchy ensures problems are noticed first:
 - Needs Input: Double border, yellow
-- Stale/Error: Red indicators
+- Inactive/Error: Red indicators
 - Running: Normal, blue
 - Done/Idle: Dimmed, muted
 
@@ -943,15 +943,15 @@ This is simpler, cross-platform, and keeps dashboard persistent.
 
 **Idle Worker Dispatch:**
 - [ ] Suggested story visible in idle pane
-- [ ] Enter copies SSH command for that DevPod
+- [ ] Enter copies attach command for that instance
 
-**Stale Recovery:**
-- [ ] Stale panes show red border and time since heartbeat
-- [ ] Enter copies SSH command to investigate
+**Inactive Recovery:**
+- [ ] Inactive panes show red border and time since heartbeat
+- [ ] Enter copies attach command to investigate
 
 **Empty State:**
-- [ ] Helpful message when no DevPods exist
-- [ ] Auto-refresh detects new DevPods
+- [ ] Helpful message when no instances exist
+- [ ] Auto-refresh detects new instances
 
 ## Component Strategy
 
@@ -984,19 +984,19 @@ This is simpler, cross-platform, and keeps dashboard persistent.
 
 **Only ONE custom component needed:**
 
-#### DevPodPane
+#### InstancePane
 
-**Purpose:** Pure display component rendering a single DevPod as a self-contained pane. No internal logic - receives all data via props.
+**Purpose:** Pure display component rendering a single instance as a self-contained pane. No internal logic - receives all data via props.
 
 **Props:**
 
 | Prop | Type | Description |
 |------|------|-------------|
-| `pod` | DevPod | DevPod data object |
+| `instance` | Instance | Instance data object |
 | `selected` | boolean | Whether this pane is currently selected |
 | `width` | number | Pane width (for responsive layout) |
 
-**Design Principle:** DevPodPane is pure display. All keyboard handling and actions live in Orchestrator. This keeps the component simple and testable.
+**Design Principle:** InstancePane is pure display. All keyboard handling and actions live in Orchestrator. This keeps the component simple and testable.
 
 **States:**
 
@@ -1005,19 +1005,19 @@ This is simpler, cross-platform, and keeps dashboard persistent.
 | Running | Single | Blue | Progress only |
 | Done | Single (dimmed) | Green | "Complete" |
 | Needs Input | Double | Yellow | Question box |
-| Stale | Single | Red | "No heartbeat" |
+| Inactive | Single | Red | "No heartbeat" |
 | Idle | Single (dimmed) | Gray | Suggested story |
 | Selected | Highlighted | - | Any above + highlight |
 
 ### Custom Hook
 
-#### useDevPods
+#### useOrchestrator
 
-**Purpose:** Encapsulates all DevPod state management and keyboard navigation.
+**Purpose:** Encapsulates all instance state management and keyboard navigation.
 
 ```tsx
 const {
-  devPods,           // DevPod[]
+  instances,         // Instance[]
   selectedIndex,     // number
   isLoading,         // boolean
   lastRefresh,       // Date
@@ -1025,7 +1025,7 @@ const {
   selectPrev,        // () => void
   refresh,           // () => Promise<void>
   copyCommand,       // () => void
-} = useDevPods()
+} = useOrchestrator()
 ```
 
 **Benefits:**
@@ -1038,11 +1038,11 @@ const {
 Extract testable pure functions:
 
 ```tsx
-// src/utils/status.ts
-function deriveStatus(pod: DevPod): PodStatus { ... }
-function isStale(lastHeartbeat: Date, thresholdMs: number): boolean { ... }
+// src/lib/status.ts
+function deriveStatus(instance: Instance): InstanceStatus { ... }
+function isInactive(lastHeartbeat: Date, thresholdMs: number): boolean { ... }
 
-// src/utils/format.ts
+// src/lib/format.ts
 function formatTimeAgo(date: Date): string { ... }
 function formatProgress(completed: number, total: number): number { ... }
 ```
@@ -1051,18 +1051,21 @@ function formatProgress(completed: number, total: number): number { ... }
 
 ```
 src/
+  lib/
+    types.ts            # All shared types
+    discovery.ts        # Instance scanning logic (agent-env CLI subprocess)
+    state.ts            # YAML + story file parsing
+    activity.ts         # mtime detection, inactive threshold
+    commands.ts         # Command string generation
+    __fixtures__/       # Test fixtures
+  hooks/
+    useOrchestrator.ts  # State management + keyboard
   components/
     Dashboard.tsx       # Main screen, inline patterns
-    DevPodPane.tsx      # The ONE custom component
-  hooks/
-    useDevPods.ts       # State management + keyboard
-  services/
-    discovery.ts        # DevPod scanning logic
-  utils/
-    status.ts           # Status derivation
-    format.ts           # Formatting helpers
-  types/
-    devpod.ts           # Type definitions
+    InstancePane.tsx     # The ONE custom component
+  commands/
+    list.ts             # CLI list command
+    status.ts           # CLI status command
 ```
 
 ### Inline Patterns (Not Components)
@@ -1075,28 +1078,28 @@ Everything else is inline JSX in `<Dashboard>`:
 | **PaneGrid** | `<Box flexDirection="row" flexWrap="wrap">{panes}</Box>` |
 | **CommandBar** | `<Box borderStyle="single"><Text>{command}</Text></Box>` |
 | **KeyHints** | `<Box><Text>j/k: select</Text><Spacer/>...</Box>` |
-| **EmptyState** | Conditional render when `devPods.length === 0` |
+| **EmptyState** | Conditional render when `instances.length === 0` |
 
 ### Testing Strategy
 
-**DevPodPane Snapshots:**
+**InstancePane Snapshots:**
 
 | Test | What It Captures |
 |------|------------------|
 | `running.snap` | Running state appearance |
 | `done.snap` | Completed state (dimmed) |
 | `needs-input.snap` | Double border + question |
-| `stale.snap` | Red border + warning |
+| `inactive.snap` | Red border + warning |
 | `idle.snap` | Dimmed + suggestion |
 | `selected.snap` | Highlight treatment |
 
 **Pure Function Unit Tests:**
 - `deriveStatus()` - all status conditions
-- `isStale()` - threshold edge cases
+- `isInactive()` - threshold edge cases
 - `formatTimeAgo()` - various time ranges
 
 **Integration Tests:**
-- Dashboard with mock devPods
+- Dashboard with mock instances
 - Simulate j/k/Enter keys
 - Assert selection changes, clipboard calls
 
@@ -1104,8 +1107,8 @@ Everything else is inline JSX in `<Dashboard>`:
 
 **Phase 1: MVP (Core Experience)**
 - [ ] Dashboard shell with layout and keyboard handling
-- [ ] DevPodPane component (all 5 states)
-- [ ] useDevPods hook with discovery integration
+- [ ] InstancePane component (all 5 states)
+- [ ] useOrchestrator hook with discovery integration
 - [ ] Auto-refresh (core, not polish)
 - [ ] Clipboard integration via `clipboardy`
 
@@ -1167,13 +1170,13 @@ Everything else is inline JSX in `<Dashboard>`:
 **Error Feedback:**
 - Duration: Persistent until dismissed or resolved
 - Symbol: `✗` in red
-- Example: "✗ DevPod unreachable: api-service"
+- Example: "✗ Instance unreachable: api-service"
 - Position: Inline in affected pane OR status bar
 
 **Warning Feedback:**
 - Duration: Persistent, attention-seeking
 - Symbol: `⚠` in yellow
-- Example: Stale indicator `⚠ 15m` in pane header
+- Example: Inactive indicator `⚠ 15m` in pane header
 - Position: Inline where relevant
 
 **Info Feedback:**
@@ -1184,7 +1187,7 @@ Everything else is inline JSX in `<Dashboard>`:
 
 **Feedback Priority (highest to lowest):**
 1. Errors in active pane
-2. Warnings (stale, needs-input)
+2. Warnings (inactive, needs-input)
 3. Success confirmations
 4. Informational messages
 
@@ -1194,10 +1197,10 @@ When actions fail, users need clear recovery paths - not just error display.
 
 | Error Scenario | Display | Recovery Pattern |
 |----------------|---------|------------------|
-| **Clipboard fail** | "✗ Clipboard unavailable" | Show command inline: "Copy manually: `devpod ssh ...`" |
-| **DevPod unreachable** | "✗ Unreachable" in pane | Mark stale, show "R to retry" hint |
-| **Discovery timeout** | "⚠ Partial results" | Show found DevPods + "R to retry discovery" |
-| **SSH command fails** | N/A (external) | Dashboard shows last known state until next refresh |
+| **Clipboard fail** | "✗ Clipboard unavailable" | Show command inline: "Copy manually: `agent-env attach ...`" |
+| **Instance unreachable** | "✗ Unreachable" in pane | Mark inactive, show "R to retry" hint |
+| **Discovery timeout** | "⚠ Partial results" | Show found instances + "R to retry discovery" |
+| **Attach command fails** | N/A (external) | Dashboard shows last known state until next refresh |
 
 **Recovery Principle:** Every error state has a visible next action. Users never hit a dead end.
 
@@ -1206,8 +1209,8 @@ When actions fail, users need clear recovery paths - not just error display.
 **Selection Model:**
 - Single selection only (one pane at a time)
 - Wrap-around: bottom → top, right → left
-- Selection persists across refreshes (by DevPod name, not index)
-- **Graceful fallback:** If selected DevPod disappears, auto-select first needs-input if exists, else first pane
+- Selection persists across refreshes (by instance name, not index)
+- **Graceful fallback:** If selected instance disappears, auto-select first needs-input if exists, else first pane
 - Initial selection: first needs-input if exists, else first pane
 
 **Visual Selection Indicators:**
@@ -1225,7 +1228,7 @@ Selected:    ╔═ name ═══════╗     (double line, bright)
 ```
 
 **Scroll Behavior:**
-- If more than 4 DevPods: vertical scroll within grid
+- If more than 4 instances: vertical scroll within grid
 - Selected pane always visible
 - Scroll indicator: `▲ 2 more` / `▼ 1 more`
 
@@ -1235,12 +1238,12 @@ Selected:    ╔═ name ═══════╗     (double line, bright)
 
 **Single Source of Truth - STATE_CONFIG:**
 ```typescript
-// src/patterns/state-config.ts
+// src/lib/types.ts
 export const STATE_CONFIG = {
   running: { symbol: '●', color: 'cyan', border: 'single', intensity: 'normal' },
   done: { symbol: '✓', color: 'green', border: 'single', intensity: 'dim' },
   needsInput: { symbol: '⏸', color: 'yellow', border: 'double', intensity: 'bright' },
-  stale: { symbol: '⚠', color: 'yellow', border: 'single', intensity: 'warning' },
+  inactive: { symbol: '⚠', color: 'yellow', border: 'single', intensity: 'warning' },
   idle: { symbol: '○', color: 'dim', border: 'single', intensity: 'subtle' },
   error: { symbol: '✗', color: 'red', border: 'double', intensity: 'attention' },
 } as const;
@@ -1251,7 +1254,7 @@ export const STATE_CONFIG = {
 | Running | `●` | cyan | single | normal |
 | Done | `✓` | green | single | dim |
 | Needs Input | `⏸` | yellow | double | bright |
-| Stale | `⚠` | yellow | single | warning |
+| Inactive | `⚠` | yellow | single | warning |
 | Idle | `○` | dim | single | subtle |
 | Error | `✗` | red | double | attention |
 
@@ -1262,7 +1265,7 @@ export const STATE_CONFIG = {
 **State Priority for Attention:**
 1. Needs Input (action required)
 2. Error (problem to address)
-3. Stale (may need refresh)
+3. Inactive (may need investigation)
 4. Running (in progress)
 5. Done (completed)
 6. Idle (awaiting assignment)
@@ -1278,12 +1281,12 @@ export const STATE_CONFIG = {
 ```
 ┌─ BMAD Orchestrator ──────────────────────────────┐
 │                                                  │
-│              ⠋ Discovering DevPods...            │
+│              ⠋ Discovering instances...           │
 │                                                  │
 └──────────────────────────────────────────────────┘
 ```
 - Spinner: Braille dots animation (⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏)
-- Message: "Discovering DevPods..."
+- Message: "Discovering instances..."
 - Duration: Until first discovery completes
 - **Note:** Validate @inkjs/ui Spinner supports Braille type; implement custom if needed
 
@@ -1300,15 +1303,15 @@ export const STATE_CONFIG = {
 
 ### Empty State Patterns
 
-**No DevPods Found (BMAD-aware guidance):**
+**No Instances Found (BMAD-aware guidance):**
 ```
 ┌─ BMAD Orchestrator ──────────────────────────────┐
 │                                                  │
-│           No DevPods discovered                  │
+│           No instances discovered                │
 │                                                  │
 │     Get started:                                 │
-│     • Run /dev-story in a DevPod session         │
-│     • Or: devpod up <workspace>                  │
+│     • Run /dev-story in an instance session      │
+│     • Or: agent-env create <workspace>           │
 │                                                  │
 │     Press R to refresh, q to quit                │
 │                                                  │
@@ -1323,32 +1326,31 @@ export const STATE_CONFIG = {
 - Implemented as reusable inline pattern, not conditional blob
 
 **Partial Empty States:**
-- If grid has fewer than 4 DevPods, empty slots show nothing (no placeholder boxes)
-- Grid adjusts: 1 pod = full width, 2 pods = side by side, 3+ = 2x2 grid
+- If grid has fewer than 4 instances, empty slots show nothing (no placeholder boxes)
+- Grid adjusts: 1 instance = full width, 2 instances = side by side, 3+ = 2x2 grid
 
 **Testing Edge Cases:**
-- 0 pods (empty state)
-- 1 pod (full width)
-- 4 pods (full grid)
-- 5+ pods (scroll behavior)
+- 0 instances (empty state)
+- 1 instance (full width)
+- 4 instances (full grid)
+- 5+ instances (scroll behavior)
 
 ### Pattern Architecture
 
 **Directory Structure:**
 ```
 src/
-  patterns/
-    state-config.ts     # STATE_CONFIG - single source of truth
-    feedback.ts         # Feedback timing, colors, positions
-    keyboard.ts         # Key bindings and action mappings
-    layout.ts           # Grid calculations, responsive rules
+  lib/
+    types.ts            # STATE_CONFIG + all shared types - single source of truth
+    activity.ts         # Inactive detection, threshold logic
+    commands.ts         # Command string generation
   components/
-    DevPodPane.tsx      # Consumes patterns, never defines
+    InstancePane.tsx     # Consumes types, never defines state config
   hooks/
-    useDevPods.ts       # Uses keyboard patterns
+    useOrchestrator.ts  # Uses keyboard patterns
 ```
 
-**Consumption Rule:** Components import from `patterns/`, never duplicate values.
+**Consumption Rule:** Components import from `lib/types.ts`, never duplicate values.
 
 ### Design System Integration
 
@@ -1374,8 +1376,8 @@ src/
 | Structured data | `<Table>` | Help overlay, debug info |
 
 **Custom Pattern Implementation:**
-- All patterns implemented within DevPodPane component
-- Patterns directory exports constants, components consume
+- All patterns implemented within InstancePane component
+- Types module exports constants, components consume
 - State-to-visual mapping via STATE_CONFIG
 
 ## Responsive Design & Accessibility
@@ -1424,12 +1426,12 @@ const layout = columns >= 120 ? 'grid' : columns >= 80 ? 'stack' : 'compact'
 
 | Status | Color | Symbol | Text | Color-blind safe? |
 |--------|-------|--------|------|-------------------|
-| Running | Cyan | ● | "RUNNING" | ✓ Symbol + text |
-| Done | Green | ✓ | "DONE" | ✓ Symbol + text |
-| Needs Input | Yellow | ⏸ | "NEEDS INPUT" | ✓ Symbol + text |
-| Stale | Yellow | ⚠ | "STALE" | ✓ Symbol + text |
-| Idle | Gray | ○ | "IDLE" | ✓ Symbol + text |
-| Error | Red | ✗ | "ERROR" | ✓ Symbol + text |
+| Running | Cyan | ● | "running" | ✓ Symbol + text |
+| Done | Green | ✓ | "done" | ✓ Symbol + text |
+| Needs Input | Yellow | ⏸ | "needs-input" | ✓ Symbol + text |
+| Inactive | Yellow | ⚠ | "inactive" | ✓ Symbol + text |
+| Idle | Gray | ○ | "idle" | ✓ Symbol + text |
+| Error | Red | ✗ | "error" | ✓ Symbol + text |
 
 **Keyboard-Only Operation:**
 
@@ -1506,7 +1508,7 @@ const paneWidth = columns >= 120
   : columns - 2                      // 1-column
 
 // Pass width to panes for internal layout
-<DevPodPane width={paneWidth} />
+<InstancePane width={paneWidth} />
 ```
 
 **Accessibility Development:**

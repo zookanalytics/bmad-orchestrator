@@ -18,20 +18,20 @@ This document provides the complete epic and story breakdown for BMAD Orchestrat
 
 ### Functional Requirements
 
-**DevPod Discovery & Status (FR1-4):**
-- FR1: User can view all active DevPods in a single unified display
-- FR2: System can auto-discover DevPods via naming convention without manual configuration
+**Instance Discovery & Status (FR1-4):**
+- FR1: User can view all active instances in a single unified display
+- FR2: System can auto-discover instances via naming convention without manual configuration
 - FR3: User can optionally override auto-discovery with explicit configuration
-- FR4: User can see which project/workspace each DevPod is working on
+- FR4: User can see which project/workspace each instance is working on
 
 **Story & Progress Visibility (FR5-10):**
-- FR5: User can see current story assignment for each DevPod
-- FR6: User can see story status (done, running, needs-input, stale)
-- FR7: User can see time since last activity/heartbeat per DevPod
+- FR5: User can see current story assignment for each instance
+- FR6: User can see story status (done, running, needs-input, inactive)
+- FR7: User can see time since last activity/heartbeat per instance
 - FR8: User can see task progress within a story (e.g., "3/7 tasks completed")
 - FR8a: User can see epic progress (overall completion percentage) for the epic containing the current story
 - FR9: User can see the backlog of unassigned stories
-- FR10: System can detect idle DevPods (completed story, no current assignment)
+- FR10: System can detect idle instances (completed story, no current assignment)
 
 **Needs-Input Handling (FR11-15) - DEFERRED TO PHASE 2:**
 - FR11: System can detect when Claude is waiting for user input
@@ -43,10 +43,10 @@ This document provides the complete epic and story breakdown for BMAD Orchestrat
 **Inactive Detection & Alerts (FR16-18):**
 - FR16: System can detect inactive workers (no activity within threshold via file mtime)
 - FR17: User can see visual indication of inactive status
-- FR18: User can see SSH command to investigate inactive DevPods
+- FR18: User can see attach command to investigate inactive instances
 
 **Command Generation (FR19-23):**
-- FR19: User can see copy-paste ready dispatch commands for idle DevPods
+- FR19: User can see copy-paste ready dispatch commands for idle instances
 - FR20: User can see suggested next story to assign
 - FR21: User can see copy-paste ready resume commands
 - FR22: User can see command to attach to interactive tmux session
@@ -56,19 +56,19 @@ This document provides the complete epic and story breakdown for BMAD Orchestrat
 - FR24: User can launch a persistent TUI dashboard
 - FR25: User can quit the dashboard gracefully
 - FR26: User can refresh dashboard state manually
-- FR27: User can drill into detail view for specific DevPod
+- FR27: User can drill into detail view for specific instance
 - FR28: User can navigate back from detail view to main view
 
 **CLI Commands - Scriptable (FR29-32):**
 - FR29: User can get one-shot status dump via CLI command
-- FR30: User can list discovered DevPods via CLI command
+- FR30: User can list discovered instances via CLI command
 - FR31: User can get output in JSON format for any CLI command
-- FR32: User can use shell completion for DevPod names and commands
+- FR32: User can use shell completion for instance names and commands
 
 **Installation & Configuration (FR33-35):**
 - FR33: User can install via pnpm
 - FR34: User can run dashboard from any directory on host machine
-- FR35: System can read BMAD state files from DevPod workspaces on host filesystem
+- FR35: System can read BMAD state files from instance workspaces on host filesystem
 
 ### NonFunctional Requirements
 
@@ -76,18 +76,18 @@ This document provides the complete epic and story breakdown for BMAD Orchestrat
 - NFR1: Dashboard initial render completes within 2 seconds of launch
 - NFR2: Status refresh completes within 1 second
 - NFR3: CLI commands return within 500ms for status queries
-- NFR4: DevPod discovery completes within 3 seconds for up to 10 DevPods
+- NFR4: Instance discovery completes within 3 seconds for up to 10 instances
 
 **Reliability:**
-- NFR5: Inactive detection has zero false negatives (never misses an inactive DevPod)
-- NFR6: False positive rate for inactive detection is acceptable (may flag active DevPod briefly)
-- NFR7: Dashboard gracefully handles unreachable DevPods without crashing
-- NFR8: Partial failures (one DevPod unreachable) do not block display of other DevPods
+- NFR5: Inactive detection has zero false negatives (never misses an inactive instance)
+- NFR6: False positive rate for inactive detection is acceptable (may flag active instance briefly)
+- NFR7: Dashboard gracefully handles unreachable instances without crashing
+- NFR8: Partial failures (one instance unreachable) do not block display of other instances
 
 **Integration & Compatibility:**
 - NFR9: Runs on macOS (Intel and Apple Silicon)
 - NFR10: Runs on Linux (Ubuntu 22.04+, Debian-based)
-- NFR11: Works with DevPod CLI for container discovery
+- NFR11: Works with agent-env CLI for instance discovery
 - NFR12: Correctly parses BMAD state files (sprint-status.yaml, story files)
 - NFR13: Works with Claude CLI `--output-format json` responses
 - NFR14: Compatible with existing claude-instance tmux session naming
@@ -102,21 +102,21 @@ This document provides the complete epic and story breakdown for BMAD Orchestrat
 
 **From Architecture - Technical Constraints:**
 - AR1: Manual project setup with full tooling (ESLint, Prettier, Vitest, CI) - no scaffolding tool
-- AR2: Single TypeScript package structure (not a monorepo)
-- AR3: Zero container footprint in Phase 1 (no modifications to BMAD workflows or DevPod containers)
+- AR2: pnpm workspaces monorepo structure (`packages/orchestrator/`)
+- AR3: Zero container footprint in Phase 1 (no modifications to BMAD workflows or agent-env instances)
 - AR4: Read-only observer pattern - derives ALL state from existing BMAD artifacts
 - AR5: Git-native state using existing sprint-status.yaml and story files only
-- AR6: DevPod CLI dependency for container discovery (devpod list --output json)
-- AR7: Promise.allSettled pattern for error isolation per DevPod
+- AR6: agent-env CLI dependency for instance discovery (agent-env list --json)
+- AR7: Promise.allSettled pattern for error isolation per instance
 - AR8: execa 9.x with reject: false pattern for subprocess handling
 - AR9: Dependency injection pattern enabling testability without global mocks
-- AR10: Test fixtures required from day 1 (devPodList.json, sprintStatus.yaml, story files)
+- AR10: Test fixtures required from day 1 (instanceList.json, sprintStatus.yaml, story files)
 - AR11: Scoped package: @zookanalytics/bmad-orchestrator
 
 **From Architecture - Data Sources:**
 - AR12: Sprint status from `_bmad-output/implementation-artifacts/sprint-status.yaml`
-- AR13: Story files from `_bmad-output/implementation-artifacts/stories/*.md`
-- AR14: Epic files from `_bmad-output/implementation-artifacts/epics/*.md`
+- AR13: Story files from `_bmad-output/implementation-artifacts/*.md` (flat, no `stories/` subdirectory)
+- AR14: Epic files from `_bmad-output/planning-artifacts/{component}/epics.md` (single file per component)
 - AR15: Activity detection via file mtime with 1-hour default threshold
 
 **From Architecture - Module Structure:**
@@ -141,7 +141,7 @@ This document provides the complete epic and story breakdown for BMAD Orchestrat
 - UX9: Backlog overlay triggered by 'b' key
 - UX10: Empty state with BMAD-contextual guidance for new users
 - UX11: No animations - instant state change for simplicity
-- UX12: Selection persists across refreshes (by DevPod name, not index)
+- UX12: Selection persists across refreshes (by instance name, not index)
 - UX13: Double-line border for needs-input panes to visually "scream" for attention
 
 **From UX Design - Error Handling:**
@@ -151,7 +151,7 @@ This document provides the complete epic and story breakdown for BMAD Orchestrat
 
 **From UX Design - Visual Standards:**
 - UX17: STATE_CONFIG as single source of truth for status visuals
-- UX18: Status symbols: ● (running), ✓ (done), ○ (idle), ⏸ (needs-input), ⚠ (stale), ✗ (error)
+- UX18: Status symbols: ● (running), ✓ (done), ○ (idle), ⏸ (needs-input), ⚠ (inactive), ✗ (error)
 - UX19: Success feedback: 3 seconds duration, green ✓
 - UX20: Error feedback: persistent until resolved, red ✗
 
@@ -164,9 +164,9 @@ This document provides the complete epic and story breakdown for BMAD Orchestrat
 - TD6: CI workflow: type-check, lint, test on every commit
 
 **From Test Design - Required Test Fixtures:**
-- TD7: devPodList.json - Normal DevPod list (3 DevPods, mixed states)
-- TD8: devPodListEmpty.json - Empty array (no DevPods)
-- TD9: devPodListError.json - CLI error (stderr output)
+- TD7: instanceList.json - Normal instance list (3 instances, mixed states)
+- TD8: instanceListEmpty.json - Empty array (no instances)
+- TD9: instanceListError.json - CLI error (stderr output)
 - TD10: sprintStatus.yaml - Normal sprint (multiple stories, various statuses)
 - TD11: sprintStatusMinimal.yaml - Minimal valid (one story)
 - TD12: sprintStatusMalformed.yaml - Invalid YAML (error handling)
@@ -183,21 +183,21 @@ This document provides the complete epic and story breakdown for BMAD Orchestrat
 
 | FR | Epic | Description |
 |----|------|-------------|
-| FR1 | Epic 1 | View all active DevPods in unified display |
-| FR2 | Epic 1 | Auto-discover DevPods via naming convention |
+| FR1 | Epic 1 | View all active instances in unified display |
+| FR2 | Epic 1 | Auto-discover instances via naming convention |
 | FR3 | Epic 1 | Optional override with explicit configuration |
-| FR4 | Epic 1 | See project/workspace per DevPod |
+| FR4 | Epic 1 | See project/workspace per instance |
 | FR5 | Epic 2 | See current story assignment |
 | FR6 | Epic 2 | See story status (done, running, etc.) |
 | FR7 | Epic 2 | See time since last activity |
 | FR8 | Epic 2 | See task progress within story |
 | FR8a | Epic 2 | See epic progress percentage |
 | FR9 | Epic 2 | See backlog of unassigned stories |
-| FR10 | Epic 2 | Detect idle DevPods |
+| FR10 | Epic 2 | Detect idle instances |
 | FR11-15 | **Deferred** | Needs-Input Handling (Phase 2) |
 | FR16 | Epic 2 | Detect inactive workers via mtime |
 | FR17 | Epic 2 | Visual indication of inactive status |
-| FR18 | Epic 2 | SSH command to investigate |
+| FR18 | Epic 2 | Attach command to investigate |
 | FR19 | Epic 4 | Copy-paste dispatch commands |
 | FR20 | Epic 4 | Suggested next story |
 | FR21 | Epic 4 | Copy-paste resume commands |
@@ -209,7 +209,7 @@ This document provides the complete epic and story breakdown for BMAD Orchestrat
 | FR27 | Epic 3 | Drill into detail view |
 | FR28 | Epic 3 | Navigate back from detail |
 | FR29 | Epic 5 | One-shot status dump CLI |
-| FR30 | Epic 1 | List DevPods CLI (validates Epic 1 delivery) |
+| FR30 | Epic 1 | List instances CLI (validates Epic 1 delivery) |
 | FR31 | Epic 5 | JSON output for CLI |
 | FR32 | Epic 5 | Shell completion |
 | FR33 | Epic 1 | Install via pnpm |
@@ -218,10 +218,10 @@ This document provides the complete epic and story breakdown for BMAD Orchestrat
 
 ## Epic List
 
-### Epic 1: Project Foundation & DevPod Discovery
-**User Outcome:** I can install the tool and it discovers my DevPods
+### Epic 1: Project Foundation & Instance Discovery
+**User Outcome:** I can install the tool and it discovers my instances
 
-This epic establishes the project with full quality gates (CI, testing, linting) and implements the core discovery mechanism. After this epic, users can run `bmad-orchestrator list` and see their DevPods.
+This epic establishes the project with full quality gates (CI, testing, linting) and implements the core discovery mechanism. After this epic, users can run `bmad-orchestrator list` and see their instances.
 
 **FRs covered:** FR1, FR2, FR3, FR4, FR30, FR33, FR34, FR35
 **ARs covered:** AR1-AR11 (tooling, package structure, execa, testing)
@@ -230,9 +230,9 @@ This epic establishes the project with full quality gates (CI, testing, linting)
 ---
 
 ### Epic 2: BMAD State Parsing & Activity Detection
-**User Outcome:** I can see what each DevPod is working on and whether it's active
+**User Outcome:** I can see what each instance is working on and whether it's active
 
-This epic adds meaning to discovered DevPods by parsing BMAD state files (sprint-status.yaml, story files) and detecting activity via file mtime. After this epic, the `list` command shows story assignments, task progress, epic progress, and inactive status.
+This epic adds meaning to discovered instances by parsing BMAD state files (sprint-status.yaml, story files) and detecting activity via file mtime. After this epic, the `list` command shows story assignments, task progress, epic progress, and inactive status.
 
 **FRs covered:** FR5, FR6, FR7, FR8, FR8a, FR9, FR10, FR16, FR17, FR18
 **ARs covered:** AR12-AR15 (data sources, mtime detection)
@@ -241,7 +241,7 @@ This epic adds meaning to discovered DevPods by parsing BMAD state files (sprint
 ---
 
 ### Epic 3: Dashboard Experience
-**User Outcome:** I have a visual dashboard showing all DevPods at a glance with keyboard navigation
+**User Outcome:** I have a visual dashboard showing all instances at a glance with keyboard navigation
 
 This epic creates the persistent TUI using Ink, implementing the pane-based grid layout, keyboard navigation (j/k/h/l), selection highlighting, responsive breakpoints, and all UX patterns.
 
@@ -253,9 +253,9 @@ This epic creates the persistent TUI using Ink, implementing the pane-based grid
 ---
 
 ### Epic 4: Command Generation & Clipboard Actions
-**User Outcome:** I can see and copy actionable commands for any DevPod
+**User Outcome:** I can see and copy actionable commands for any instance
 
-This epic adds command generation (dispatch, SSH, tmux attach) and clipboard integration. The dashboard shows contextual commands and users can copy them with a single keypress.
+This epic adds command generation (dispatch, attach, tmux attach) and clipboard integration. The dashboard shows contextual commands and users can copy them with a single keypress.
 
 **FRs covered:** FR19, FR20, FR21, FR22, FR23
 **UX covered:** UX7, UX14, UX15, UX16 (clipboard handoff, error recovery)
@@ -275,9 +275,9 @@ This epic adds the `status` CLI command with JSON output, shell completion, and 
 
 ---
 
-## Epic 1: Project Foundation & DevPod Discovery
+## Epic 1: Project Foundation & Instance Discovery
 
-**Goal:** Establish the project with full quality gates and implement core DevPod discovery, delivering a working `bmad-orchestrator list` command.
+**Goal:** Establish the project with full quality gates and implement core instance discovery, delivering a working `bmad-orchestrator list` command.
 
 ### Story 1.1: Project Initialization with Quality Gates
 
@@ -322,7 +322,7 @@ So that **code quality is enforced from the first commit**.
 ### Story 1.2: Test Fixtures and Discovery Types
 
 As a **developer**,
-I want **test fixtures and type definitions for DevPod discovery**,
+I want **test fixtures and type definitions for instance discovery**,
 So that **I can develop and test the discovery module with realistic data**.
 
 **Acceptance Criteria:**
@@ -330,61 +330,67 @@ So that **I can develop and test the discovery module with realistic data**.
 **Given** the project structure
 **When** I look in `src/lib/__fixtures__/`
 **Then** I find these fixture files:
-- `devPodList.json` - Normal response with 3 DevPods
-- `devPodListEmpty.json` - Empty array response
-- `devPodListError.json` - CLI error response
+- `instanceList.json` - Normal response with 3 instances (mixed statuses, git state, purpose)
+- `instanceListEmpty.json` - Empty array response (ok: true, data: [])
+- `instanceListError.json` - CLI error response (ok: false, error object)
 
 **Given** the type definitions in `src/lib/types.ts`
-**When** I import DevPod-related types
+**When** I import instance-related types
 **Then** I can use:
-- `DevPod` interface (name, workspace path, status)
-- `DiscoveryResult` interface (devpods array, error)
-- `DevPodStatus` type (running, stopped, etc.)
+- `Instance` interface (name, status, lastAttached, purpose, gitState — matching agent-env JSON output)
+- `DiscoveryResult` interface (instances array, error)
+- `InstanceDisplayStatus` type ('running' | 'stopped' | 'not-found' | 'orphaned' | 'unknown')
 
 **Given** fixture files exist
 **When** tests import them
 **Then** they load correctly and match type definitions
 
 **Technical Notes:**
-- Fixtures based on actual `devpod list --output json` format
-- Types should align with DevPod CLI output structure
+- Fixtures based on actual `agent-env list --json` format (ok/data/error envelope)
+- Types should align with agent-env CLI output structure
 
 ---
 
-### Story 1.3: DevPod Discovery Module
+### Story 1.3: Instance Discovery Module
 
 As a **developer**,
-I want **a discovery module that queries DevPod CLI for active containers**,
-So that **the application can find all DevPods on the host machine**.
+I want **a discovery module that queries agent-env CLI for active instances**,
+So that **the application can find all agent-env instances on the host machine**.
 
 **Acceptance Criteria:**
 
-**Given** DevPod CLI is installed
-**When** I call `discoverDevPods()`
-**Then** it executes `devpod list --output json`
-**And** returns parsed DevPod array with name, workspace, status
+**Given** agent-env CLI is installed
+**When** I call `discoverInstances()`
+**Then** it executes `agent-env list --json`
+**And** returns parsed Instance array with name, status, lastAttached, purpose, gitState
 
-**Given** DevPod CLI returns an empty list
-**When** I call `discoverDevPods()`
-**Then** it returns `{ devpods: [], error: null }`
+**Given** agent-env CLI returns an empty list
+**When** I call `discoverInstances()`
+**Then** it returns `{ instances: [], error: null }`
 
-**Given** DevPod CLI is not installed or fails
-**When** I call `discoverDevPods()`
-**Then** it returns `{ devpods: [], error: "DISCOVERY_FAILED: ..." }`
+**Given** agent-env CLI is not installed or fails
+**When** I call `discoverInstances()`
+**Then** it returns `{ instances: [], error: "DISCOVERY_FAILED: ..." }`
 **And** does not throw an exception
+
+**Given** agent-env CLI returns an error envelope (`{ ok: false, error: {...} }`)
+**When** I call `discoverInstances()`
+**Then** it returns `{ instances: [], error: "DISCOVERY_FAILED: {message}" }`
 
 **Given** the discovery module
 **When** I want to test it
 **Then** I can inject a mock executor via `createDiscovery(mockExecutor)`
 
 **Given** a 10-second timeout
-**When** DevPod CLI hangs
+**When** agent-env CLI hangs
 **Then** the function returns an error result (not throws)
 
 **Technical Notes:**
 - Use execa 9.x with `reject: false` pattern
-- Factory function pattern: `createDiscovery(executor)`
+- Factory function pattern: `createDiscovery(executor)` — same DI pattern as agent-env itself
 - Located at `src/lib/discovery.ts`
+- Parses agent-env JSON envelope: `{ ok, data, error }` — extract `data` on success
+- agent-env provides richer data than DevPod ever did (git state, purpose, typed status come free)
 - 90%+ test coverage required
 
 ---
@@ -392,33 +398,33 @@ So that **the application can find all DevPods on the host machine**.
 ### Story 1.4: List Command Implementation
 
 As a **user**,
-I want **to run `bmad-orchestrator list` and see my DevPods**,
-So that **I can verify the tool discovers my development containers**.
+I want **to run `bmad-orchestrator list` and see my instances**,
+So that **I can verify the tool discovers my development instances**.
 
 **Acceptance Criteria:**
 
-**Given** I have DevPods running
+**Given** I have instances running
 **When** I run `bmad-orchestrator list`
-**Then** I see a list of DevPod names and their workspace paths
+**Then** I see a list of instance names and their statuses
 
-**Given** no DevPods are running
+**Given** no instances are running
 **When** I run `bmad-orchestrator list`
-**Then** I see "No DevPods discovered"
+**Then** I see "No instances discovered"
 
 **Given** I run the command with `--json` flag
 **When** output is generated
 **Then** it returns valid JSON matching the output schema:
 ```json
-{ "version": "1", "devpods": [...], "errors": [...] }
+{ "version": "1", "instances": [...], "errors": [...] }
 ```
 
 **Given** the package is installed globally
 **When** I run `bmad-orchestrator list` from any directory
 **Then** it executes successfully (FR34)
 
-**Given** DevPod CLI fails
+**Given** agent-env CLI fails
 **When** I run `bmad-orchestrator list`
-**Then** I see an error message with suggestion to check DevPod installation
+**Then** I see an error message with suggestion to check agent-env installation
 
 **Technical Notes:**
 - Use Commander 14.x for CLI parsing
@@ -430,7 +436,7 @@ So that **I can verify the tool discovers my development containers**.
 
 ## Epic 2: BMAD State Parsing & Activity Detection
 
-**Goal:** Add meaning to discovered DevPods by parsing BMAD state files and detecting activity, delivering enhanced `list` output with story assignments, progress, and inactive status.
+**Goal:** Add meaning to discovered instances by parsing BMAD state files and detecting activity, delivering enhanced `list` output with story assignments, progress, and inactive status.
 
 ### Story 2.1: BMAD State Fixtures and Types
 
@@ -456,7 +462,7 @@ So that **I can develop and test state modules with realistic data**.
 - `StoryStatus` type ('backlog' | 'ready-for-dev' | 'in-progress' | 'done')
 - `StoryState` interface (id, status, epic, title)
 - `TaskProgress` interface (completed, total)
-- `BmadState` interface (aggregated state per DevPod)
+- `BmadState` interface (aggregated state per instance)
 
 **Given** fixture files exist
 **When** tests import them
@@ -464,7 +470,7 @@ So that **I can develop and test state modules with realistic data**.
 
 **Technical Notes:**
 - Sprint status path: `_bmad-output/implementation-artifacts/sprint-status.yaml`
-- Story files path: `_bmad-output/implementation-artifacts/stories/*.md`
+- Story files path: `_bmad-output/implementation-artifacts/*.md` (flat, no `stories/` subdirectory)
 - Use `yaml` package for YAML parsing
 
 ---
@@ -473,7 +479,7 @@ So that **I can develop and test state modules with realistic data**.
 
 As a **developer**,
 I want **a module that parses sprint-status.yaml files**,
-So that **I can extract story assignments and statuses for each DevPod**.
+So that **I can extract story assignments and statuses for each instance**.
 
 **Acceptance Criteria:**
 
@@ -484,7 +490,7 @@ So that **I can extract story assignments and statuses for each DevPod**.
 - List of stories per status category
 - Current epic information
 
-**Given** a DevPod workspace path
+**Given** an instance workspace path
 **When** I call `getSprintStatusPath(workspacePath)`
 **Then** it returns `{workspacePath}/_bmad-output/implementation-artifacts/sprint-status.yaml`
 
@@ -524,7 +530,7 @@ So that **I can extract task progress within each story**.
 
 **Given** a story file path pattern
 **When** I call `getStoryFilePath(workspacePath, storyId)`
-**Then** it returns `{workspacePath}/_bmad-output/implementation-artifacts/stories/{storyId}.md`
+**Then** it returns `{workspacePath}/_bmad-output/implementation-artifacts/{storyId}.md`
 
 **Given** a story file does not exist
 **When** I call `parseStoryTasks(filePath)`
@@ -541,19 +547,19 @@ So that **I can extract task progress within each story**.
 **Technical Notes:**
 - Located at `src/lib/state.ts` (same module as sprint parser)
 - Task regex: `/- \[(x| )\]/gi`
-- Epic files path: `_bmad-output/implementation-artifacts/epics/*.md`
+- Epic files path: `_bmad-output/planning-artifacts/{component}/epics.md`
 
 ---
 
 ### Story 2.4: Activity Detection Module
 
 As a **developer**,
-I want **a module that detects inactive DevPods via file modification time**,
-So that **users can identify DevPods that may need attention**.
+I want **a module that detects inactive instances via file modification time**,
+So that **users can identify instances that may need attention**.
 
 **Acceptance Criteria:**
 
-**Given** a DevPod workspace path
+**Given** an instance workspace path
 **When** I call `checkActivity(workspacePath)`
 **Then** it returns the last modification time of BMAD state files
 
@@ -588,27 +594,27 @@ So that **users can identify DevPods that may need attention**.
 
 As a **user**,
 I want **to see BMAD state information when I run `bmad-orchestrator list`**,
-So that **I know what each DevPod is working on and whether it needs attention**.
+So that **I know what each instance is working on and whether it needs attention**.
 
 **Acceptance Criteria:**
 
-**Given** DevPods with BMAD state files
+**Given** instances with BMAD state files
 **When** I run `bmad-orchestrator list`
-**Then** I see for each DevPod:
+**Then** I see for each instance:
 - Current story assignment (FR5)
 - Story status (done, running, idle) (FR6)
 - Time since last activity (FR7)
 - Task progress (e.g., "3/7 tasks") (FR8)
 
-**Given** a DevPod with an in-progress story
+**Given** an instance with an in-progress story
 **When** the list displays
 **Then** I see the epic name and progress percentage (FR8a)
 
-**Given** a DevPod with no in-progress story
+**Given** an instance with no in-progress story
 **When** the list displays
 **Then** it shows as "Idle" with suggested next story (FR10, FR20)
 
-**Given** a DevPod inactive for more than 1 hour
+**Given** an instance inactive for more than 1 hour
 **When** the list displays
 **Then** I see a warning indicator "⚠ Inactive (2h)" (FR17)
 
@@ -616,7 +622,7 @@ So that **I know what each DevPod is working on and whether it needs attention**
 **When** I run `bmad-orchestrator list`
 **Then** I see a summary line: "Backlog: 3 stories ready" (FR9)
 
-**Given** a DevPod without BMAD initialized
+**Given** an instance without BMAD initialized
 **When** the list displays
 **Then** it shows "Not BMAD-initialized" instead of state
 
@@ -633,7 +639,7 @@ So that **I know what each DevPod is working on and whether it needs attention**
 
 ## Epic 3: Dashboard Experience
 
-**Goal:** Create a persistent TUI dashboard using Ink that displays all DevPods at a glance with keyboard navigation, responsive layout, and auto-refresh.
+**Goal:** Create a persistent TUI dashboard using Ink that displays all instances at a glance with keyboard navigation, responsive layout, and auto-refresh.
 
 ### Story 3.1: Orchestrator State Hook
 
@@ -646,7 +652,7 @@ So that **state logic is centralized, testable, and separate from UI components*
 **Given** the useOrchestrator hook
 **When** I call it in a component
 **Then** it returns:
-- `devpods: DevPod[]` - list of discovered DevPods with state
+- `instances: Instance[]` - list of discovered instances with state
 - `selected: number` - index of currently selected pane
 - `loading: boolean` - whether refresh is in progress
 - `lastRefresh: Date | null` - timestamp of last successful refresh
@@ -668,7 +674,7 @@ So that **state logic is centralized, testable, and separate from UI components*
 **When** actions are dispatched
 **Then** state transitions follow this pattern:
 - `REFRESH_START` → `{ loading: true }`
-- `REFRESH_COMPLETE` → `{ loading: false, devpods: [...], lastRefresh: Date }`
+- `REFRESH_COMPLETE` → `{ loading: false, instances: [...], lastRefresh: Date }`
 - `REFRESH_ERROR` → `{ loading: false, error: "..." }`
 - `SELECT_NEXT` / `SELECT_PREV` → `{ selected: newIndex }`
 
@@ -680,16 +686,16 @@ So that **state logic is centralized, testable, and separate from UI components*
 
 ---
 
-### Story 3.2: DevPodPane Component
+### Story 3.2: InstancePane Component
 
 As a **developer**,
-I want **a pure display component that renders a single DevPod pane**,
+I want **a pure display component that renders a single instance pane**,
 So that **pane rendering is consistent and testable via snapshots**.
 
 **Acceptance Criteria:**
 
-**Given** a DevPodPane component
-**When** I pass a DevPod with status "running"
+**Given** an InstancePane component
+**When** I pass an instance with status "running"
 **Then** it displays:
 - Single-line border
 - Cyan ● indicator with "RUNNING"
@@ -697,19 +703,19 @@ So that **pane rendering is consistent and testable via snapshots**.
 - Story name and task progress
 - Time since last activity
 
-**Given** a DevPod with status "done"
+**Given** an instance with status "done"
 **When** rendered
 **Then** it displays dimmed styling with green ✓ indicator
 
-**Given** a DevPod with status "needs-input"
+**Given** an instance with status "needs-input"
 **When** rendered
 **Then** it displays double-line border (═) with yellow ⏸ indicator (UX13)
 
-**Given** a DevPod with status "inactive"
+**Given** an instance with status "inactive"
 **When** rendered
 **Then** it displays yellow ⚠ indicator with duration (e.g., "⚠ Inactive (2h)")
 
-**Given** a DevPod with status "idle"
+**Given** an instance with status "idle"
 **When** rendered
 **Then** it displays dim ○ indicator with suggested next story
 
@@ -722,8 +728,8 @@ So that **pane rendering is consistent and testable via snapshots**.
 **Then** symbols convey meaning without relying on color alone (UX3)
 
 **Technical Notes:**
-- Located at `src/components/DevPodPane.tsx`
-- Props: `{ pod: DevPod, selected: boolean, width: number }`
+- Located at `src/components/InstancePane.tsx`
+- Props: `{ instance: Instance, selected: boolean, width: number }`
 - Uses STATE_CONFIG from patterns for consistent visuals
 - Snapshot tests for each state
 
@@ -732,7 +738,7 @@ So that **pane rendering is consistent and testable via snapshots**.
 ### Story 3.3: Dashboard Layout and Grid
 
 As a **user**,
-I want **a dashboard that displays all DevPods in a grid layout**,
+I want **a dashboard that displays all instances in a grid layout**,
 So that **I can see everything at a glance when I launch the tool**.
 
 **Acceptance Criteria:**
@@ -741,18 +747,18 @@ So that **I can see everything at a glance when I launch the tool**.
 **When** the dashboard launches
 **Then** I see:
 - Header with "BMAD Orchestrator" and refresh timestamp
-- Grid of DevPod panes
+- Grid of instance panes
 - Footer with keybinding hints
 
-**Given** multiple DevPods are discovered
+**Given** multiple instances are discovered
 **When** the dashboard renders
 **Then** panes are arranged in a 2-column grid (at ≥120 cols)
 
-**Given** DevPods maintain stable positions
+**Given** instances maintain stable positions
 **When** the dashboard refreshes
 **Then** panes stay in the same order (sorted by name, not status) (UX12)
 
-**Given** no DevPods are discovered
+**Given** no instances are discovered
 **When** the dashboard renders
 **Then** I see the empty state with BMAD-contextual guidance (UX5, UX10)
 
@@ -763,7 +769,7 @@ So that **I can see everything at a glance when I launch the tool**.
 **Technical Notes:**
 - Located at `src/components/Dashboard.tsx`
 - Uses Ink's Box with flexDirection="row" and flexWrap="wrap"
-- Imports DevPodPane and useOrchestrator
+- Imports InstancePane and useOrchestrator
 - Entry point switches between TUI (default) and CLI commands
 
 ---
@@ -772,7 +778,7 @@ So that **I can see everything at a glance when I launch the tool**.
 
 As a **user**,
 I want **to navigate the dashboard using keyboard shortcuts**,
-So that **I can quickly select and interact with DevPods without a mouse**.
+So that **I can quickly select and interact with instances without a mouse**.
 
 **Acceptance Criteria:**
 
@@ -798,7 +804,7 @@ So that **I can quickly select and interact with DevPods without a mouse**.
 
 **Given** a pane is selected
 **When** I press `Enter`
-**Then** I enter detail view for that DevPod (FR27)
+**Then** I enter detail view for that instance (FR27)
 
 **Given** I am in detail view
 **When** I press `Esc`
@@ -845,11 +851,11 @@ So that **data stays current without manual intervention**.
 
 **Given** the initial load
 **When** discovery is in progress
-**Then** I see a centered spinner with "Discovering DevPods..."
+**Then** I see a centered spinner with "Discovering instances..."
 
 **Given** a partial failure occurs
-**When** one DevPod is unreachable
-**Then** other DevPods still display, and the failed one shows error state (NFR8)
+**When** one instance is unreachable
+**Then** other instances still display, and the failed one shows error state (NFR8)
 
 **Technical Notes:**
 - Use useEffect with setInterval for auto-refresh
@@ -883,47 +889,47 @@ So that **it works well on different screen widths**.
 **When** dimensions change
 **Then** the layout adapts automatically
 
-**Given** more than 4 DevPods in a 2-column layout
+**Given** more than 4 instances in a 2-column layout
 **When** the grid overflows
 **Then** vertical scrolling is available with scroll indicators
 
 **Technical Notes:**
 - Use Ink's `useStdoutDimensions()` hook (UX2)
 - Calculate pane width based on available columns
-- Pass width prop to DevPodPane for internal layout adjustments
+- Pass width prop to InstancePane for internal layout adjustments
 
 ---
 
 ## Epic 4: Command Generation & Clipboard Actions
 
-**Goal:** Add command generation (dispatch, SSH, tmux attach) and clipboard integration, enabling users to see and copy actionable commands for any DevPod with a single keypress.
+**Goal:** Add command generation (dispatch, attach, tmux attach) and clipboard integration, enabling users to see and copy actionable commands for any instance with a single keypress.
 
 ### Story 4.1: Command Generation Module
 
 As a **developer**,
-I want **a module that generates contextual commands for DevPods**,
+I want **a module that generates contextual commands for instances**,
 So that **users get copy-paste ready commands without manual assembly**.
 
 **Acceptance Criteria:**
 
-**Given** a DevPod name and workspace path
-**When** I call `generateSSHCommand(devpodName)`
-**Then** it returns `devpod ssh {devpodName}`
+**Given** an instance name
+**When** I call `generateAttachCommand(instanceName)`
+**Then** it returns `agent-env attach {instanceName}`
 
-**Given** a DevPod name and a story ID
-**When** I call `generateDispatchCommand(devpodName, storyId)`
-**Then** it returns `devpod ssh {devpodName} -- claude -p "/bmad:bmm:workflows:dev-story {storyId}" --output-format json` (FR23)
+**Given** an instance name and a story ID
+**When** I call `generateDispatchCommand(instanceName, storyId)`
+**Then** it returns `agent-env attach {instanceName} -- claude -p "/bmad:bmm:workflows:dev-story {storyId}" --output-format json` (FR23)
 
-**Given** a DevPod name
-**When** I call `generateTmuxAttachCommand(devpodName)`
+**Given** an instance name
+**When** I call `generateTmuxAttachCommand(instanceName)`
 **Then** it returns the command to attach to the tmux session (FR22)
 
-**Given** an idle DevPod with a suggested story
-**When** I call `generateNextStoryCommand(devpodName, suggestedStoryId)`
+**Given** an idle instance with a suggested story
+**When** I call `generateNextStoryCommand(instanceName, suggestedStoryId)`
 **Then** it returns the dispatch command for that story (FR19, FR20)
 
-**Given** a DevPod that needs input (Phase 2 prep)
-**When** I call `generateResumeCommand(devpodName, sessionId, answer)`
+**Given** an instance that needs input (Phase 2 prep)
+**When** I call `generateResumeCommand(instanceName, sessionId, answer)`
 **Then** it returns the resume command structure (FR21)
 
 **Given** any generated command
@@ -941,40 +947,40 @@ So that **users get copy-paste ready commands without manual assembly**.
 ### Story 4.2: Command Bar Component
 
 As a **user**,
-I want **to see the relevant command for my selected DevPod**,
+I want **to see the relevant command for my selected instance**,
 So that **I know exactly what action I can take without thinking**.
 
 **Acceptance Criteria:**
 
-**Given** a DevPod is selected in the dashboard
+**Given** an instance is selected in the dashboard
 **When** the command bar renders
-**Then** it shows the contextual command for that DevPod's state
+**Then** it shows the contextual command for that instance's state
 
-**Given** an idle DevPod is selected
+**Given** an idle instance is selected
 **When** the command bar renders
 **Then** it shows the dispatch command with suggested next story
 
-**Given** a running DevPod is selected
+**Given** a running instance is selected
 **When** the command bar renders
-**Then** it shows the SSH command to check on it
+**Then** it shows the attach command to check on it
 
-**Given** an inactive DevPod is selected
+**Given** an inactive instance is selected
 **When** the command bar renders
-**Then** it shows the SSH command with "investigate" context (FR18)
+**Then** it shows the attach command with "investigate" context (FR18)
 
-**Given** a DevPod in needs-input state is selected
+**Given** an instance in needs-input state is selected
 **When** the command bar renders
-**Then** it shows the SSH command to provide input
+**Then** it shows the attach command to provide input
 
 **Given** the command bar
 **When** displayed
 **Then** it shows:
-- Selected DevPod name: `▸ {devpodName} selected`
+- Selected instance name: `▸ {instanceName} selected`
 - The command on its own line for easy selection
 
 **Technical Notes:**
 - Located at `src/components/CommandBar.tsx`
-- Receives selected DevPod from useOrchestrator
+- Receives selected instance from useOrchestrator
 - Uses commands.ts for command generation
 - Styled with single-line border
 
@@ -988,7 +994,7 @@ So that **I can quickly paste and execute them in my terminal**.
 
 **Acceptance Criteria:**
 
-**Given** a DevPod is selected
+**Given** an instance is selected
 **When** I press `c`
 **Then** the displayed command is copied to the system clipboard
 
@@ -1001,7 +1007,7 @@ So that **I can quickly paste and execute them in my terminal**.
 **Then** I see the command inline with message "Copy manually:" (UX15)
 **And** the error is not blocking
 
-**Given** a DevPod is selected
+**Given** an instance is selected
 **When** I press `Enter`
 **Then** the command is also copied (Enter = primary action)
 
@@ -1020,7 +1026,7 @@ So that **I can quickly paste and execute them in my terminal**.
 ### Story 4.4: Backlog Panel and Story Suggestions
 
 As a **user**,
-I want **to see unassigned stories and get suggestions for idle DevPods**,
+I want **to see unassigned stories and get suggestions for idle instances**,
 So that **I can quickly decide what work to dispatch next**.
 
 **Acceptance Criteria:**
@@ -1045,11 +1051,11 @@ So that **I can quickly decide what work to dispatch next**.
 **When** I press `b` again
 **Then** the overlay closes (toggle behavior for muscle memory)
 
-**Given** an idle DevPod
+**Given** an idle instance
 **When** rendered in the pane
 **Then** it shows "Suggested: {storyId}" with the next logical story (FR20)
 
-**Given** multiple idle DevPods
+**Given** multiple idle instances
 **When** suggestions are calculated
 **Then** each gets a different story suggestion (no duplicates)
 
@@ -1077,9 +1083,9 @@ So that **I can script the orchestrator and integrate it with other tools**.
 
 **Acceptance Criteria:**
 
-**Given** DevPods are running with BMAD state
+**Given** instances are running with BMAD state
 **When** I run `bmad-orchestrator status`
-**Then** I see a summary of all DevPods with their current state (FR29)
+**Then** I see a summary of all instances with their current state (FR29)
 
 **Given** I run `bmad-orchestrator status`
 **When** output is generated
@@ -1092,7 +1098,7 @@ So that **I can script the orchestrator and integrate it with other tools**.
 {
   "version": "1",
   "timestamp": "ISO-8601",
-  "devpods": [
+  "instances": [
     {
       "name": "string",
       "workspace": "string",
@@ -1108,13 +1114,13 @@ So that **I can script the orchestrator and integrate it with other tools**.
 }
 ```
 
-**Given** I run `bmad-orchestrator status` with no DevPods
+**Given** I run `bmad-orchestrator status` with no instances
 **When** output is generated
-**Then** I see "No DevPods discovered" (text) or empty arrays (JSON)
+**Then** I see "No instances discovered" (text) or empty arrays (JSON)
 
 **Given** partial failures occur
-**When** one DevPod is unreachable
-**Then** other DevPods still display with the failed one in errors array
+**When** one instance is unreachable
+**Then** other instances still display with the failed one in errors array
 
 **Technical Notes:**
 - Located at `src/commands/status.ts`
@@ -1127,7 +1133,7 @@ So that **I can script the orchestrator and integrate it with other tools**.
 ### Story 5.2: Shell Completion
 
 As a **user**,
-I want **tab completion for commands and DevPod names**,
+I want **tab completion for commands and instance names**,
 So that **I can work faster in the terminal without typing full names**.
 
 **Acceptance Criteria:**
@@ -1203,6 +1209,6 @@ So that **users can install it globally with `pnpm add -g`**.
 
 **Technical Notes:**
 - Ensure `prepublishOnly` script runs build
-- Add `"engines": { "node": ">=22" }` for Node version requirement
+- Verify `"engines": { "node": ">=20" }` matches monorepo convention
 - Include LICENSE file
 - Test with `pnpm link` before publishing

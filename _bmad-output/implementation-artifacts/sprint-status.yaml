@@ -48,12 +48,15 @@ story_location: _bmad-output/implementation-artifacts
 # Product brief: product-brief-bmad-orchestrator-2026-01-06.md
 
 development_status:
-  # ─── Orchestrator Epic 1: Project Foundation & DevPod Discovery ───
+  # ─── Orchestrator Epic 1: Project Foundation & Instance Discovery ───
+  # Originally built against DevPod CLI; fully reworked to agent-env CLI (Story 1-5).
+  # Retro (2026-02-08): Epic orch-2 blocked pending monorepo system product brief.
   orch-epic-1: done
   orch-1-1-project-initialization-with-quality-gates: done
   orch-1-2-test-fixtures-and-discovery-types: done
   orch-1-3-devpod-discovery-module: done
   orch-1-4-list-command-implementation: done
+  orch-1-5-rework-agent-env-migration: done
   orch-epic-1-retrospective: done
 
   # ─── Orchestrator Epic 2: BMAD State Parsing & Activity Detection ───
@@ -68,7 +71,7 @@ development_status:
   # ─── Orchestrator Epic 3: Dashboard Experience ───
   orch-epic-3: backlog
   orch-3-1-orchestrator-state-hook: backlog
-  orch-3-2-devpodpane-component: backlog
+  orch-3-2-instancepane-component: backlog
   orch-3-3-dashboard-layout-and-grid: backlog
   orch-3-4-keyboard-navigation: backlog
   orch-3-5-auto-refresh-and-loading-states: backlog
@@ -195,8 +198,9 @@ cross_dependencies:
     blocked: orch-epic-3              # Dashboard needs live data
     note: "Dashboard development can proceed with mocks, real integration at epic end"
 
-  # Orchestrator Epic 1 is independent (uses DevPod, not agent-env)
-  # This allows parallel development of both components
+  # Orchestrator Epic 1 rework: now targets agent-env CLI (sprint change proposal 2026-02-07)
+  # Planning artifact updates must complete before Epic 1 code rework begins
+  # Epic 1 code rework must complete before Epic 2 development begins
 
   # Release infrastructure uses agent-env as pilot package
   - blocker: env-epic-1
@@ -214,9 +218,10 @@ cross_dependencies:
 # ══════════════════════════════════════════════════════════════════════════════
 # NOTES
 # ══════════════════════════════════════════════════════════════════════════════
-# - Orchestrator Epic 1 (done) used DevPod as discovery target
-# - agent-env will eventually replace/supplement DevPod as primary target
-# - Both components can be developed in parallel with mocking at boundaries
+# - Orchestrator Epic 1 (done) originally used DevPod as discovery target
+# - Sprint change proposal (2026-02-07): orchestrator now targets agent-env CLI
+#   Decision: CLI approach (agent-env list --json), not library import
+#   See: _bmad-output/planning-artifacts/sprint-change-proposal-2026-02-07.md
 # - env-epic-1 restructures repo into monorepo without breaking orchestrator
 # - Release infrastructure is independent of orchestrator/agent-env feature work
 # - rel-epic-1 and rel-epic-2 can be worked in parallel

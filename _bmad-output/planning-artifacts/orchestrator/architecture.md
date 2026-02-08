@@ -21,11 +21,34 @@ workflowType: 'architecture'
 project_name: 'BMAD Orchestrator'
 user_name: 'Node'
 date: '2026-01-07'
+lastValidated: '2026-02-08'
 ---
 
 # Architecture Decision Document
 
 _This document builds collaboratively through step-by-step discovery. Sections are appended as we work through each architectural decision together._
+
+### Post-Epic-1 Validation Summary (2026-02-07, updated 2026-02-08)
+
+This architecture was validated against the actual codebase after Epic 1 completion. Key corrections applied.
+
+**Important:** Epic 1 was originally built against DevPod CLI. Story `orch-1-5-rework-agent-env-migration` (`ready-for-dev`) will migrate the code to agent-env CLI. This document describes the **target state after rework**. Until story 1.R is complete, the actual codebase still uses DevPod types, fixtures, and CLI calls. Items marked "(✓ implemented)" below reflect the pre-rework DevPod implementation — the code structure and patterns are established but the types/fixtures/CLI target will change during rework.
+
+| Area | Original Assumption | Actual Implementation |
+|------|--------------------|-----------------------|
+| Project structure | Standalone TypeScript package | pnpm workspaces monorepo (`packages/orchestrator/`) |
+| Error utilities | Local `lib/errors.ts` with `formatError({code, context, suggestion})` | `@zookanalytics/shared` with `createError(code, message, suggestion)` + `formatError(error)` using `AppError` interface |
+| Error display | `✗` symbol prefix | `❌` emoji + `💡` suggestion prefix (from shared package) |
+| Instance discovery | execa subprocess to DevPod CLI | execa subprocess to agent-env CLI: `agent-env list --json` returns `{ok, data: Instance[], error}` with status, lastAttached, purpose, gitState |
+| InstanceDisplayStatus values | PascalCase (`'Running'`, `'Stopped'`, `'Busy'`, `'NotFound'`) | Lowercase (`'running'`, `'stopped'`, `'not-found'`, `'orphaned'`, `'unknown'`) |
+| Discovery data richness | DevPod CLI returns minimal fields (id, source, provider, timestamps) | agent-env CLI returns rich data: status, lastAttached, purpose, gitState (git safety info comes free) |
+| Node.js engine | `>=22` | `>=20` |
+| ESLint config | Per-package `.eslintrc` | Root-level ESLint 9 flat config (`eslint.config.js`) |
+| tsconfig | Local with all options | Extends `../../tsconfig.base.json` |
+| Story file paths | `_bmad-output/implementation-artifacts/stories/*.md` | `_bmad-output/implementation-artifacts/*.md` (flat, no stories/ subdirectory) |
+| Epic file paths | `_bmad-output/implementation-artifacts/epics/*.md` | `_bmad-output/planning-artifacts/{component}/epics.md` (single file per component) |
+| Versioning | Manual version bumps | Changesets-based versioning (rel-epic-2) |
+| Package state | Published | `"private": true` (not yet published) |
 
 ## Project Context Analysis
 
@@ -33,7 +56,7 @@ _This document builds collaboratively through step-by-step discovery. Sections a
 
 **Functional Requirements:**
 35 FRs spanning 8 categories:
-- DevPod Discovery & Status (FR1-4): Auto-discovery, unified view, config override
+- Instance Discovery & Status (FR1-4): Auto-discovery, unified view, config override
 - Story & Progress Visibility (FR5-10): Assignment, status, activity tracking, task progress, backlog
 - Needs-Input Handling (FR11-15): **Deferred to Phase 2** - requires container modification or SDK
 - Inactive Detection (FR16-18): Activity detection via file mtime, visual alerts, SSH commands
@@ -42,7 +65,7 @@ _This document builds collaboratively through step-by-step discovery. Sections a
 - CLI Commands (FR29-32): Scriptable status, list, JSON output, completion
 - Installation (FR33-35): pnpm package, host-based filesystem reads
 
-Core value proposition: Unified visibility across all DevPods with actionable commands, derived entirely from existing BMAD artifacts.
+Core value proposition: Unified visibility across all instances with actionable commands, derived entirely from existing BMAD artifacts.
 
 **Non-Functional Requirements:**
 18 NFRs with emphasis on:
@@ -61,11 +84,11 @@ Core value proposition: Unified visibility across all DevPods with actionable co
 | Constraint | Description |
 |------------|-------------|
 | Host-based execution | Dashboard runs on host machine, not inside containers |
-| **Zero container footprint (Phase 1)** | Phase 1 avoids modifications to BMAD workflows or DevPod containers; future phases may allow |
+| **Zero container footprint (Phase 1)** | Phase 1 avoids modifications to BMAD workflows or agent-env containers; future phases may allow |
 | Read-only observer | Derives ALL state from existing BMAD artifacts - no new file contracts in Phase 1 |
 | Git-native state | Uses existing `sprint-status.yaml` and story files only |
-| DevPod CLI dependency | Relies on `devpod list --output json` for container discovery |
-| **Single TypeScript package** | Standard `src/` directory structure - not a monorepo |
+| agent-env CLI dependency | Relies on `agent-env list --json` for instance discovery |
+| **pnpm workspaces monorepo** | Orchestrator is `packages/orchestrator/` in a monorepo with `shared` and `agent-env` packages |
 
 ### Data Sources (Existing BMAD Artifacts Only - Phase 1)
 
@@ -76,22 +99,26 @@ Core value proposition: Unified visibility across all DevPods with actionable co
 | Task progress | Story markdown files | Parse `## Tasks` section, regex: `/- \[(x| )\]/g` |
 | Last activity | Filesystem | `fs.stat().mtime` on story files |
 | Backlog | `sprint-status.yaml` | Filter `ready-for-dev` or `backlog` status |
-| DevPod list | DevPod CLI | `devpod list --output json` subprocess |
+| Instance list | agent-env CLI | `agent-env list --json` subprocess (returns Instance[] with name, status, lastAttached, purpose, gitState) |
 
 ### BMAD Artifact Path Contract
 
-| Artifact | Path (relative to DevPod workspace) |
+| Artifact | Path (relative to instance workspace) |
 |----------|-------------------------------------|
 | Sprint status | `_bmad-output/implementation-artifacts/sprint-status.yaml` |
-| Story files | `_bmad-output/implementation-artifacts/stories/*.md` |
-| Epic files | `_bmad-output/implementation-artifacts/epics/*.md` |
+| Story files | `_bmad-output/implementation-artifacts/*.md` (flat, NOT in a `stories/` subdirectory) |
+| Epic files | `_bmad-output/planning-artifacts/{component}/epics.md` (single file per component, NOT individual files in `epics/` directory) |
 
-**Validation:** If `_bmad-output` not found, mark DevPod as "not BMAD-initialized."
+**Validation:** If `_bmad-output` not found, mark instance as "not BMAD-initialized."
+
+**Instance workspace root:** `~/.agent-env/workspaces/<name>/`
+
+**Note (Post-Epic-1 correction):** Story files live directly in `implementation-artifacts/` alongside `sprint-status.yaml`, not in a nested `stories/` subdirectory. Epic definitions are in planning artifacts, not implementation artifacts.
 
 ### MVP FR Adjustments (Phase 1)
 
 **Achievable in Phase 1 (Zero Container Modification):**
-- FR1-10: DevPod discovery, story visibility, progress tracking ✓
+- FR1-10: Instance discovery, story visibility, progress tracking ✓
 - FR16-18: Inactive detection + SSH command for investigation ✓
 - FR19-23: Command generation (dispatch, SSH) ✓
 - FR24-28: Dashboard interface ✓
@@ -105,11 +132,11 @@ Core value proposition: Unified visibility across all DevPods with actionable co
 | FR13 | Session ID visibility | Claude CLI session IDs are ephemeral, not persisted |
 | FR14-15 | Resume with answer | Depends on FR12-13 |
 
-**FR18 Reframed:** "User can see suggested diagnostic actions" becomes "User can see SSH command to investigate inactive DevPods."
+**FR18 Reframed:** "User can see suggested diagnostic actions" becomes "User can see attach command to investigate inactive instances."
 
 ### Honest Status Language
 
-Without explicit heartbeat or session state, Phase 1 uses activity-based detection:
+Without explicit heartbeat or session state, Phase 1 uses activity-based detection. **Note:** These statuses are derived from BMAD state files, NOT from agent-env CLI (which returns `InstanceDisplayStatus`: `'running'`|`'stopped'`|`'not-found'`|`'orphaned'`|`'unknown'` for the container itself).
 
 | Status | Indicator | Detection Method | User Meaning |
 |--------|-----------|------------------|--------------|
@@ -119,6 +146,8 @@ Without explicit heartbeat or session state, Phase 1 uses activity-based detecti
 | Done | ✓ | Story status is `done` | Completed |
 
 **Display with Time Context:** Show duration for inactive: `⚠ Inactive (2h)` - helps users decide whether to investigate.
+
+**Container Status vs Work Status:** `InstanceDisplayStatus` (from agent-env CLI) tracks container state (`running`/`stopped`/`not-found`/`orphaned`/`unknown`). The orchestrator status language above tracks *work* state derived from BMAD artifacts. These are two different dimensions — an instance can be `running` (container up) but `Idle` (no story assigned).
 
 ### Activity Detection Configuration
 
@@ -130,43 +159,55 @@ Without explicit heartbeat or session state, Phase 1 uses activity-based detecti
 ### Discovery Pipeline
 
 ```
-1. devpod list --output json
-   └── Get DevPod names + workspace paths
+1. agent-env list --json (subprocess via execa, same DI pattern)
+   └── Returns {ok, data: Instance[], error} JSON
+   └── Each Instance includes: name, status, lastAttached, purpose, gitState
+   └── Handles Docker unavailability via {ok: false} error response
 
-2. For each DevPod (parallel):
-   └── Validate workspace path exists
+2. For each instance (parallel):
+   └── Resolve workspace path: ~/.agent-env/workspaces/<name>/
    └── Check for _bmad-output directory
    └── If missing: mark "not BMAD-initialized"
    └── If present: read sprint-status.yaml + story files
 
 3. Aggregate results
-   └── Successful reads → devpods[]
+   └── Successful reads → instances[]
    └── Failed reads → errors[]
    └── Promise.allSettled for error isolation
 ```
 
 ### Cross-Cutting Concerns
 
-1. **Error Resilience** - Partial failures (one DevPod unreachable) must not block other DevPods
+1. **Error Resilience** - Partial failures (one instance unreachable) must not block other instances
 2. **Activity Detection** - File mtime as proxy for "last activity" - threshold 1 hour default
 3. **State Derivation** - All state inferred from existing files in Phase 1; future phases may add contracts
-4. **Command Generation** - SSH commands for investigation; dispatch commands for starting work
+4. **Command Generation** - Attach commands for investigation; dispatch commands for starting work
 5. **Honest UX** - Status language reflects what we can actually detect, not aspirational features
 
 ### Project Structure
 
 ```
-src/
-├── cli.ts              # Entry point, Commander setup
-├── commands/           # status, list, dispatch (CLI mode)
-├── components/         # Ink TUI components
-├── lib/
-│   ├── discovery.ts    # devpod list subprocess
-│   ├── state.ts        # YAML + story file parsing
-│   ├── activity.ts     # mtime checks, threshold
-│   └── commands.ts     # Command string generation
-└── types.ts            # Interfaces
+packages/orchestrator/
+├── bin/
+│   └── bmad-orchestrator.js    # CLI entry point (shebang wrapper)
+├── src/
+│   ├── cli.ts                  # Entry point, Commander setup
+│   ├── commands/               # status, list, dispatch (CLI mode)
+│   │   └── list.ts             # List command (implemented in Epic 1)
+│   ├── components/             # Ink TUI components (Epic 3)
+│   └── lib/
+│       ├── types.ts            # All shared types
+│       ├── discovery.ts        # agent-env list subprocess (implemented in Epic 1)
+│       ├── state.ts            # YAML + story file parsing (Epic 2)
+│       ├── activity.ts         # mtime checks, threshold (Epic 2)
+│       ├── commands.ts         # Command string generation (Epic 4)
+│       └── __fixtures__/       # Test fixtures
+├── package.json
+├── tsconfig.json               # Extends ../../tsconfig.base.json
+└── vitest.config.ts
 ```
+
+**Monorepo Context:** Orchestrator is one package in a pnpm workspaces monorepo alongside `@zookanalytics/shared` (error utilities, types) and `@zookanalytics/agent-env`.
 
 **Code Quality Focus:** Meaningful, readable, maintainable code over arbitrary metrics.
 
@@ -178,69 +219,66 @@ The `docs/bmad_reference/` folder contains architecture from an archived related
 
 ### Primary Technology Domain
 
-CLI tool with TUI (Terminal UI) - host-based dashboard for DevPod orchestration.
+CLI tool with TUI (Terminal UI) - host-based dashboard for instance orchestration.
 
 ### Previous Implementation Reference
 
-Epic 1 from the previous attempt provides a solid foundation pattern - comprehensive quality gates from the start. The key adaptation: this is a standalone project, not a monorepo package.
+Epic 1 established the project as a pnpm workspaces monorepo package (not standalone as originally planned). This was the right decision - it enabled shared utilities (`@zookanalytics/shared`) and co-location with `agent-env`.
 
-**What to adopt from previous Epic 1:**
-- ESLint with TypeScript strict rules
-- Prettier for consistent formatting
-- Vitest for testing (co-located tests)
+**What was adopted from previous patterns:**
+- ESLint 9 flat config with TypeScript strict rules (root-level `eslint.config.js`)
+- Prettier for consistent formatting (root-level `.prettierrc`)
+- Vitest for testing (co-located tests, per-package `vitest.config.ts`)
 - CI workflow for quality checks
-- Pre-commit hooks
+- `eslint-plugin-perfectionist` for import ordering
 
-**What to adapt:**
-- Standalone project structure (not `packages/bmad-dashboard/`)
-- Simpler package scripts
+**Monorepo adaptations:**
+- `packages/orchestrator/` directory structure
+- `tsconfig.json` extends `../../tsconfig.base.json`
+- `@zookanalytics/shared` workspace dependency for error utilities
+- Root-level ESLint and Prettier configs shared across packages
 
-### Technology Versions (Verified 2026-01-07)
+### Technology Versions (Verified post-Epic-1)
 
 | Technology | Version | Purpose |
 |------------|---------|---------|
-| Ink | 6.6.0 | TUI framework (React for CLIs) |
-| Commander | 14.0.2 | CLI argument parsing |
-| React | 19.x | Component framework (required by Ink 6) |
-| TypeScript | 5.x | Type safety, strict mode |
-| Vitest | 4.0.16 | Testing framework |
-| ink-testing-library | latest | Ink component testing |
-| @inkjs/ui | latest | UI components (Badge, ProgressBar, Spinner) |
-| yaml | latest | YAML parsing for sprint-status.yaml |
-| timeago.js | latest | Relative timestamp formatting |
+| Ink | ^6.6.0 | TUI framework (React for CLIs) |
+| Commander | ^14.0.2 | CLI argument parsing |
+| React | ^19.2.3 | Component framework (required by Ink 6) |
+| TypeScript | 5.x | Type safety, strict mode (ES2022 target, NodeNext modules) |
+| Vitest | (workspace) | Testing framework (v8 coverage provider) |
+| ink-testing-library | ^4.0.0 | Ink component testing |
+| @inkjs/ui | ^2.0.0 | UI components (Badge, ProgressBar, Spinner) |
+| yaml | ^2.8.2 | YAML parsing for sprint-status.yaml |
+| timeago.js | ^4.0.2 | Relative timestamp formatting |
+| execa | ^9.6.1 | Subprocess execution with `reject: false` pattern |
+| clipboardy | ^5.0.2 | Cross-platform clipboard access |
+| @zookanalytics/shared | workspace:* (devDependency) | Shared error utilities (`createError`, `formatError`, `AppError`). **Intentionally a devDependency** — shared code is compiled in at build time. Orchestrator has no runtime package dependency on shared; the compiled output is self-contained. |
+| @zookanalytics/agent-env | workspace:* (CLI only) | Instance discovery via `agent-env list --json` subprocess. **No library import** — orchestrator interacts with agent-env exclusively through CLI subprocess, avoiding code-level coupling. The only shared code is common framework components (via `@zookanalytics/shared` at build time). |
 
-### Selected Approach: Manual Setup with Full Tooling
+### Selected Approach: Monorepo with Full Tooling (As Implemented)
 
 **Rationale:**
 - CI and testing should be in place before first line of code
-- Previous Epic 1 pattern worked well
-- Adapt for standalone project (not monorepo)
+- Monorepo enables shared utilities (`@zookanalytics/shared`) across packages
 - Quality gates from the start prevent technical debt
+- Root-level configs (ESLint, Prettier) ensure consistency across packages
 
-**Initialization Commands:**
+**TypeScript Configuration (packages/orchestrator/tsconfig.json):**
 
-```bash
-# Initialize project
-pnpm init
-
-# Core dependencies
-pnpm add ink@6 react@19 commander@14 @inkjs/ui yaml timeago.js
-
-# Dev dependencies - TypeScript
-pnpm add -D typescript@5 @types/node @types/react tsx
-
-# Dev dependencies - Testing
-pnpm add -D vitest ink-testing-library
-
-# Dev dependencies - Code Quality
-pnpm add -D eslint @typescript-eslint/eslint-plugin @typescript-eslint/parser
-pnpm add -D prettier eslint-config-prettier
-
-# Dev dependencies - Git hooks (optional, can use git-workflow skill)
-pnpm add -D husky lint-staged
+```json
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "outDir": "dist",
+    "rootDir": "src"
+  },
+  "include": ["src/**/*"],
+  "exclude": ["node_modules", "dist", "src/**/*.test.ts", "src/**/*.test.tsx"]
+}
 ```
 
-**TypeScript Configuration (tsconfig.json):**
+**Root tsconfig.base.json (shared):**
 
 ```json
 {
@@ -252,16 +290,14 @@ pnpm add -D husky lint-staged
     "strict": true,
     "esModuleInterop": true,
     "skipLibCheck": true,
-    "outDir": "dist",
-    "rootDir": "src",
-    "declaration": true
-  },
-  "include": ["src/**/*"],
-  "exclude": ["node_modules", "dist"]
+    "declaration": true,
+    "declarationMap": true,
+    "resolveJsonModule": true
+  }
 }
 ```
 
-**Vitest Configuration (vitest.config.ts):**
+**Vitest Configuration (packages/orchestrator/vitest.config.ts):**
 
 ```typescript
 import { defineConfig } from 'vitest/config';
@@ -271,11 +307,17 @@ export default defineConfig({
     globals: true,
     environment: 'node',
     include: ['src/**/*.test.ts', 'src/**/*.test.tsx'],
+    coverage: {
+      provider: 'v8',
+      reporter: ['text', 'lcov'],
+      include: ['src/**/*.ts', 'src/**/*.tsx'],
+      exclude: ['src/**/*.test.ts', 'src/**/*.test.tsx'],
+    },
   },
 });
 ```
 
-**Package Scripts:**
+**Package Scripts (packages/orchestrator/package.json):**
 
 ```json
 {
@@ -284,60 +326,41 @@ export default defineConfig({
     "build": "tsc",
     "test": "vitest",
     "test:run": "vitest run",
+    "test:coverage": "vitest run --coverage",
     "lint": "eslint src/",
-    "format": "prettier --write src/",
     "type-check": "tsc --noEmit",
     "check": "pnpm type-check && pnpm lint && pnpm test:run"
   }
 }
 ```
 
-**CI Workflow (.github/workflows/ci.yml):**
-
-```yaml
-name: CI
-on: [push, pull_request]
-jobs:
-  check:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: '22'
-      - uses: pnpm/action-setup@v4
-        with:
-          version: 9
-      - run: pnpm install --frozen-lockfile
-      - run: pnpm check
-```
-
-**Project Structure with Tests:**
+**Actual Project Structure (Post-Epic-1):**
 
 ```
-bmad-orchestrator/
+packages/orchestrator/
+├── bin/
+│   └── bmad-orchestrator.js    # #!/usr/bin/env node → ../dist/cli.js
 ├── src/
-│   ├── cli.ts              # Entry point
-│   ├── cli.test.ts         # Co-located test
+│   ├── cli.ts                  # Entry point (Commander setup)
+│   ├── cli.test.ts             # Co-located test
 │   ├── commands/
-│   ├── components/
-│   │   ├── Dashboard.tsx
-│   │   └── Dashboard.test.tsx
-│   ├── lib/
-│   │   ├── discovery.ts
-│   │   ├── discovery.test.ts
-│   │   ├── state.ts
-│   │   └── state.test.ts
-│   └── types.ts
-├── .github/workflows/ci.yml
+│   │   ├── list.ts             # List command handler
+│   │   └── list.test.ts
+│   └── lib/
+│       ├── types.ts            # All shared types (Instance, DiscoveryResult, etc.)
+│       ├── types.test.ts       # Type validation tests
+│       ├── discovery.ts        # agent-env CLI subprocess (DI factory)
+│       ├── discovery.test.ts   # Comprehensive discovery tests
+│       └── __fixtures__/
+│           ├── instanceList.json
+│           ├── instanceListEmpty.json
+│           └── instanceListError.json
 ├── package.json
-├── tsconfig.json
-├── vitest.config.ts
-├── eslint.config.js
-└── .prettierrc
+├── tsconfig.json               # Extends ../../tsconfig.base.json
+└── vitest.config.ts
 ```
 
-**Note:** Project initialization with full tooling is the first implementation story. Tests and CI should pass before any feature code is written.
+**Note:** ESLint config (`eslint.config.js`) and Prettier config (`.prettierrc`) live at root level, shared across all packages.
 
 ## Core Architectural Decisions
 
@@ -397,7 +420,7 @@ function useOrchestrator() {
 
 // Component stays declarative
 function Dashboard() {
-  const { devpods, selected, loading, refresh } = useOrchestrator();
+  const { instances, selected, loading, refresh } = useOrchestrator();
   return <Box>...</Box>;
 }
 ```
@@ -406,47 +429,80 @@ function Dashboard() {
 
 **Decision:** execa 9.x with thin wrapper using `reject: false` pattern
 
-**Version:** 9.6.1 (verified 2026-01-07)
+**Version:** ^9.6.1
 
 **Rationale:**
-- 16,553+ package dependents - battle-tested
+- Battle-tested subprocess library
 - `reject: false` returns errors in values, not exceptions
 - Cleaner aggregation with Promise.allSettled
 - Dependency injection enables testing without global mocks
 
-**Wrapper Pattern:**
+**Implementation Pattern (agent-env CLI subprocess):**
 
 ```typescript
-import { execa, type ExecaReturnValue } from 'execa';
+import { execa } from 'execa';
+import type { Instance } from './types.js';
 
+const DEFAULT_TIMEOUT = 10000;
 type CommandExecutor = typeof execa;
 
+// Mirrors agent-env's JSON output envelope.
+// Future: replace with a JSON schema exported from @zookanalytics/agent-env
+// so both sides validate against a single contract.
+interface AgentEnvJsonOutput {
+  ok: boolean;
+  data: Instance[] | null;
+  error: { code: string; message: string; suggestion?: string } | null;
+}
+
 export function createDiscovery(executor: CommandExecutor = execa) {
-  return async function discoverDevPods(): Promise<DiscoveryResult> {
-    const result = await executor('devpod', ['list', '--output', 'json'], {
-      timeout: 10000,
-      reject: false,  // Errors in return value, not thrown
+  return async function discoverInstances(): Promise<DiscoveryResult> {
+    const result = await executor('agent-env', ['list', '--json'], {
+      timeout: DEFAULT_TIMEOUT,
+      reject: false,  // Errors in return value, NOT thrown
     });
 
     if (result.failed) {
-      return { devpods: [], error: result.stderr };
+      let errorMessage: string;
+      if (result.timedOut) {
+        errorMessage = `Command timed out after ${DEFAULT_TIMEOUT}ms`;
+      } else {
+        errorMessage = result.stderr || result.shortMessage || 'Unknown error';
+      }
+      return { instances: [], error: `DISCOVERY_FAILED: ${errorMessage}` };
     }
 
-    return { devpods: JSON.parse(result.stdout), error: null };
+    try {
+      const parsed: AgentEnvJsonOutput = JSON.parse(result.stdout);
+      if (!parsed.ok || !parsed.data) {
+        const msg = parsed.error?.message ?? 'Unknown error';
+        return { instances: [], error: `DISCOVERY_FAILED: ${msg}` };
+      }
+      return { instances: parsed.data, error: null };
+    } catch {
+      return { instances: [], error: 'DISCOVERY_FAILED: Invalid JSON response' };
+    }
   };
 }
 
 // Production usage
-const discoverDevPods = createDiscovery();
+export const discoverInstances = createDiscovery();
 
 // Test usage - inject mock
-const mockExecutor = vi.fn().mockResolvedValue({ stdout: '[]', failed: false });
-const discoverDevPods = createDiscovery(mockExecutor);
+const mockExecutor = vi.fn().mockResolvedValue({
+  stdout: JSON.stringify({ ok: true, data: [], error: null }),
+  failed: false,
+});
+const discover = createDiscovery(mockExecutor);
 ```
 
+**Note:** The discovery module parses the agent-env JSON envelope (`{ok, data, error}`) and returns `Instance[]` directly. No field-by-field mapping is needed — agent-env's JSON contract provides typed, structured data including status, lastAttached, purpose, and gitState.
+
+**Future: JSON Schema contract.** Both agent-env and orchestrator currently define the JSON shape independently. A shared JSON schema (exported from `@zookanalytics/agent-env`) would let both sides validate against a single contract, eliminating drift risk. Not needed for Phase 1 (the shape is simple and stable), but worth adding when the contract grows.
+
 **Timeout Strategy:**
-- DevPod discovery: 10 seconds
-- Individual state reads: 5 seconds per DevPod
+- Instance discovery: 10 seconds
+- Individual state reads: 5 seconds per instance
 - `reject: false` means timeouts return error state, not throw
 
 ### Testing Strategy
@@ -455,8 +511,8 @@ const discoverDevPods = createDiscovery(mockExecutor);
 
 **Rationale:**
 - No global mocks - tests are explicit about what they mock
-- Fixtures enable TUI development without running DevPods
-- Never test against real DevPod CLI in CI
+- Fixtures enable TUI development without running instances
+- Never test against real agent-env CLI in CI
 
 **Test Priority:**
 
@@ -473,9 +529,9 @@ const discoverDevPods = createDiscovery(mockExecutor);
 ```
 src/
 └── __fixtures__/
-    ├── devpod-list.json          # Mock devpod list output
-    ├── devpod-list-empty.json    # No DevPods
-    ├── devpod-list-error.json    # CLI error response
+    ├── instanceList.json          # Mock agent-env list output
+    ├── instanceListEmpty.json     # No instances
+    ├── instanceListError.json     # CLI error response
     ├── sprint-status.yaml        # Valid sprint status
     ├── sprint-status-minimal.yaml
     ├── story-1-1.md              # Story with tasks
@@ -484,54 +540,66 @@ src/
 
 ### Distribution & Versioning
 
-**Decision:** Scoped package
+**Decision:** Scoped package within monorepo, versioned via changesets
 
 **Package Name:** `@zookanalytics/bmad-orchestrator`
+**Currently:** `"private": true` (not yet published; release infrastructure established in rel-epic-1 & rel-epic-2)
 
 **Rationale:**
 - Namespace prevents name collision
 - Groups related ZookAnalytics packages
 - Modern convention
+- Changesets-based versioning established for the monorepo
 
-**Publishing:**
+**Publishing (when ready):**
 
 ```bash
-pnpm publish --access public  # First publish
-pnpm publish                  # Subsequent
+pnpm changeset  # Create changeset
+pnpm changeset version  # Apply version bumps
+pnpm publish --access public  # Publish
 ```
 
-### Project Structure (Refined)
+### Project Structure (Actual Post-Epic-1 + Planned)
 
 ```
-bmad-orchestrator/
+packages/orchestrator/
+├── bin/
+│   └── bmad-orchestrator.js       # CLI bin entry point
 ├── src/
-│   ├── cli.ts                    # Entry point
+│   ├── cli.ts                     # Entry point (Commander setup)
 │   ├── cli.test.ts
-│   ├── __fixtures__/             # Test fixtures (step 1)
-│   │   ├── devpod-list.json
-│   │   ├── sprint-status.yaml
-│   │   └── story-1-1.md
 │   ├── lib/
-│   │   ├── types.ts              # Types live with code
-│   │   ├── discovery.ts
-│   │   ├── discovery.test.ts
-│   │   ├── state.ts
-│   │   └── state.test.ts
-│   ├── hooks/
+│   │   ├── types.ts               # All shared types
+│   │   ├── types.test.ts          # Type validation tests
+│   │   ├── discovery.ts           # agent-env CLI subprocess (✓ implemented)
+│   │   ├── discovery.test.ts      # (✓ implemented)
+│   │   ├── state.ts               # YAML + story parsing (Epic 2)
+│   │   ├── state.test.ts
+│   │   ├── activity.ts            # mtime detection (Epic 2)
+│   │   ├── activity.test.ts
+│   │   └── __fixtures__/          # Test fixtures
+│   │       ├── instanceList.json     # (✓ implemented)
+│   │       ├── instanceListEmpty.json # (✓ implemented)
+│   │       └── instanceListError.json # (✓ implemented)
+│   ├── hooks/                     # React hooks (Epic 3)
 │   │   ├── useOrchestrator.ts
 │   │   └── useOrchestrator.test.ts
-│   ├── components/
+│   ├── components/                # Ink TUI components (Epic 3)
 │   │   ├── Dashboard.tsx
 │   │   └── Dashboard.test.tsx
 │   └── commands/
-│       └── status.ts
-├── .github/workflows/ci.yml
+│       ├── list.ts                # (✓ implemented)
+│       ├── list.test.ts           # (✓ implemented)
+│       └── status.ts              # (Epic 5)
 ├── package.json
-├── tsconfig.json
+├── tsconfig.json                  # Extends ../../tsconfig.base.json
 └── vitest.config.ts
 ```
 
-**Key Refinement:** Types in `lib/types.ts`, not root level. Types serve the lib modules.
+**Key Points:**
+- Types in `lib/types.ts` (not root level)
+- Fixtures in `lib/__fixtures__/` (not src root)
+- ESLint/Prettier configs at monorepo root, not per-package
 
 ### Decisions Not Applicable
 
@@ -542,17 +610,20 @@ bmad-orchestrator/
 | API Server | Subprocess consumer only |
 | Hosting | Package runs locally |
 
-### Implementation Sequence (Refined)
+### Implementation Sequence (Updated Post-Epic-1)
 
 Types emerge with code, not before. Each step ships something testable:
 
-1. **Project init** - Tooling, CI, one passing test, test fixtures
-2. **Discovery module** - Start with hardcoded return, then real execa
-3. **State module** - YAML parsing with fixture tests
-4. **Orchestrator hook** - Compose discovery + state
-5. **Dashboard component** - Render with hardcoded, then hooks
-6. **CLI entry point** - Commander wrapper
-7. **Polish and publish**
+1. **Project init** - ✓ Done: Tooling, CI, test fixtures, monorepo setup
+2. **Discovery module** - ✓ Done: `createDiscovery()` with DI, execa subprocess
+3. **List command** - ✓ Done: Text table + JSON output
+4. **State module** - Next (Epic 2): YAML parsing with fixture tests
+5. **Activity module** - Epic 2: mtime-based inactive detection
+6. **Enhanced list** - Epic 2: BMAD state in list output
+7. **Orchestrator hook** - Epic 3: Compose discovery + state
+8. **Dashboard components** - Epic 3: Ink TUI
+9. **Command generation** - Epic 4: SSH, dispatch, tmux commands
+10. **CLI polish and publish** - Epic 5
 
 **Principle:** Don't plan the whole tree upfront. Each step ships something testable.
 
@@ -581,18 +652,18 @@ cli.ts
 
 | Type | Pattern | Example |
 |------|---------|---------|
-| React Components | PascalCase | `Dashboard.tsx`, `DevPodPane.tsx` |
+| React Components | PascalCase | `Dashboard.tsx`, `InstancePane.tsx` |
 | Hooks | camelCase with `use` prefix | `useOrchestrator.ts` |
-| Lib modules | camelCase | `discovery.ts`, `devPodParser.ts` |
+| Lib modules | camelCase | `discovery.ts`, `instanceParser.ts` |
 | Test files | Co-located `.test.ts` | `discovery.test.ts` |
 | Type files | camelCase | `types.ts` |
-| Fixtures | camelCase in `lib/__fixtures__/` | `devPodList.json` |
+| Fixtures | camelCase in `src/lib/__fixtures__/` | `instanceList.json` |
 
 **TypeScript Naming Conventions:**
 
 | Type | Pattern | Example | Anti-Pattern |
 |------|---------|---------|--------------|
-| Interfaces | PascalCase, no prefix | `DevPod` | `IDevPod` |
+| Interfaces | PascalCase, no prefix | `Instance` | `IInstance` |
 | Types | PascalCase, no prefix | `Status` | `TStatus` |
 | Constants | SCREAMING_SNAKE_CASE | `DEFAULT_TIMEOUT` | `defaultTimeout` |
 | Reducer Actions | SCREAMING_SNAKE_CASE | `'REFRESH_START'` | `'refreshStart'` |
@@ -604,11 +675,11 @@ No prefix required. The `async` keyword and `Promise<T>` return type communicate
 
 ```typescript
 // Correct
-async function discoverDevPods(): Promise<DevPod[]> { ... }
+async function discoverInstances(): Promise<Instance[]> { ... }
 async function parseState(): Promise<BmadState> { ... }
 
 // Incorrect - unnecessary prefix
-async function fetchDevPodsAsync(): Promise<DevPod[]> { ... }
+async function fetchInstancesAsync(): Promise<Instance[]> { ... }
 ```
 
 ### Import Patterns
@@ -618,24 +689,26 @@ async function fetchDevPodsAsync(): Promise<DevPod[]> { ... }
 Types are grouped with their category, not all at the end. Blank lines separate groups.
 
 ```typescript
-// 1. React imports
+// 1. External package imports (including monorepo shared)
+import { createError, formatError } from '@zookanalytics/shared';
+
+// 2. React imports (when in hooks/components)
 import { useState, useCallback, useReducer } from 'react';
 
-// 2. Ink imports
+// 3. Ink imports
 import { Box, Text, useInput } from 'ink';
 import { Spinner } from '@inkjs/ui';
 
-// 3. External type imports
+// 4. External type imports
 import type { ExecaReturnValue } from 'execa';
 
-// 4. External value imports (node builtins, packages)
-import { execaCommand } from 'execa';
+// 5. External value imports (node builtins, packages)
+import { execa } from 'execa';
 import path from 'node:path';
 
-// 5. Internal imports (types then values)
-import type { DevPod, BmadState } from '../lib/types.js';
+// 6. Internal imports (types then values)
+import type { Instance, BmadState } from '../lib/types.js';
 
-import { formatError } from '../lib/errors.js';
 import { useOrchestrator } from '../hooks/useOrchestrator.js';
 ```
 
@@ -643,37 +716,42 @@ import { useOrchestrator } from '../hooks/useOrchestrator.js';
 - Use `.js` extension for relative imports (ESM requirement)
 - ESLint auto-fixes import order on save
 - `import type` syntax required for type-only imports
+- Import error utilities from `@zookanalytics/shared`, NOT local files
 
 ### Structure Patterns
 
 **Project Organization:**
 
 ```
-src/
-├── cli.ts                    # Entry point only - no business logic
-├── types.ts                  # Root-level type re-exports (optional)
+packages/orchestrator/src/
+├── cli.ts                    # Entry point only - Commander setup, no business logic
 ├── lib/                      # Business logic (no React)
 │   ├── __fixtures__/         # Test fixtures (mock data)
-│   │   ├── devPodList.json
-│   │   └── sprintStatus.yaml
+│   │   ├── instanceList.json
+│   │   ├── instanceListEmpty.json
+│   │   ├── instanceListError.json
+│   │   └── sprintStatus.yaml    # (Epic 2)
 │   ├── types.ts              # All shared types
-│   ├── discovery.ts          # DevPod discovery
+│   ├── types.test.ts         # Type validation tests
+│   ├── discovery.ts          # Instance discovery
 │   ├── discovery.test.ts
-│   ├── state.ts              # BMAD state parsing
+│   ├── state.ts              # BMAD state parsing (Epic 2)
 │   ├── state.test.ts
-│   ├── errors.ts             # Error formatting
-│   └── errors.test.ts
-├── hooks/                    # React hooks
+│   ├── activity.ts           # mtime detection (Epic 2)
+│   └── activity.test.ts
+├── hooks/                    # React hooks (Epic 3)
 │   ├── useOrchestrator.ts
 │   └── useOrchestrator.test.ts
-├── components/               # Ink components
+├── components/               # Ink components (Epic 3)
 │   ├── Dashboard.tsx
 │   ├── Dashboard.test.tsx
-│   ├── DevPodPane.tsx
+│   ├── InstancePane.tsx
 │   └── StatusBadge.tsx
 └── commands/                 # CLI subcommands
-    ├── status.ts
-    └── list.ts
+    ├── list.ts               # (✓ implemented)
+    ├── list.test.ts
+    ├── status.ts             # (Epic 5)
+    └── status.test.ts
 ```
 
 **Key Rules:**
@@ -683,6 +761,7 @@ src/
 - `lib/` contains pure functions (no React imports)
 - `hooks/` contains React hooks only
 - `components/` contains Ink components only
+- **Error utilities** live in `@zookanalytics/shared`, NOT in orchestrator's `lib/errors.ts`
 
 ### Format Patterns
 
@@ -691,14 +770,14 @@ src/
 ```typescript
 interface JsonOutput {
   version: '1';
-  devpods: DevPod[];
+  instances: Instance[];
   errors: OutputError[];
 }
 
 // Always wrap in this structure
 {
   "version": "1",
-  "devpods": [...],
+  "instances": [...],
   "errors": [...]
 }
 ```
@@ -715,49 +794,52 @@ interface JsonOutput {
 
 ### Error Handling Patterns
 
-**Error Message Template Function:**
+**Error utilities live in `@zookanalytics/shared` package:**
 
 ```typescript
+// From packages/shared/src/types.ts
 interface AppError {
-  code: string;
-  context?: string;
-  suggestion?: string;
+  code: string;      // Machine-readable error code (e.g., "DISCOVERY_FAILED")
+  message: string;   // Human-readable error description
+  suggestion?: string;  // Optional actionable suggestion
 }
 
-function formatError(error: AppError): string {
-  const parts = [`✗ ${error.code}`];
-  if (error.context) parts[0] += `: ${error.context}`;
-  if (error.suggestion) parts.push(`  Suggestion: ${error.suggestion}`);
-  return parts.join('\n');
-}
+// From packages/shared/src/errors.ts
+function createError(code: string, message: string, suggestion?: string): AppError;
+function formatError(error: AppError): string;
+// Output format:
+// ❌ [ERROR_CODE] Error message
+//    💡 Suggestion text (if provided)
+```
 
-// Usage
-formatError({
-  code: 'CONNECTION_TIMEOUT',
-  context: 'devpod-3',
-  suggestion: 'Check if DevPod is running with `devpod list`'
-});
+**Usage in orchestrator commands:**
 
-// Output:
-// ✗ CONNECTION_TIMEOUT: devpod-3
-//   Suggestion: Check if DevPod is running with `devpod list`
+```typescript
+import { createError, formatError } from '@zookanalytics/shared';
+
+// In list command error handling:
+formatError(
+  createError(
+    'DISCOVERY_FAILED',
+    result.error.replace('DISCOVERY_FAILED: ', ''),
+    'Check if agent-env CLI is available with `agent-env --version`'
+  )
+);
 ```
 
 **Error Handling in Async Functions:**
 
 ```typescript
-// Use reject: false pattern with execa
-const result = await executor('devpod', ['list'], { reject: false });
-if (result.failed) {
-  return { devpods: [], error: formatError({ code: 'DISCOVERY_FAILED', ... }) };
-}
+// Discovery module uses reject: false pattern with execa
+// Errors are embedded in DiscoveryResult.error string, NOT thrown
+// Commands layer then wraps these in AppError via createError()
 
 // Never let exceptions bubble up unhandled
 // Always return error state, not throw
 ```
 
 **Null Usage:**
-- `null` is allowed and preferred for intentional absence (API semantics)
+- `null` is allowed and preferred for intentional absence (API semantics, e.g., `DiscoveryResult.error: string | null`)
 - `undefined` for optional/unset values
 
 ### State Management Patterns
@@ -770,7 +852,7 @@ type OrchestratorAction =
   | { type: 'REFRESH_START' }
   | { type: 'REFRESH_COMPLETE'; payload: RefreshResult }
   | { type: 'REFRESH_ERROR'; payload: string }
-  | { type: 'SELECT_DEVPOD'; payload: number }
+  | { type: 'SELECT_INSTANCE'; payload: number }
   | { type: 'NAVIGATE_UP' }
   | { type: 'NAVIGATE_DOWN' };
 
@@ -783,7 +865,7 @@ function orchestratorReducer(
     case 'REFRESH_START':
       return { ...state, loading: true };
     case 'REFRESH_COMPLETE':
-      return { ...state, loading: false, devpods: action.payload.devpods };
+      return { ...state, loading: false, instances: action.payload.instances };
     // ...
   }
 }
@@ -796,7 +878,7 @@ function orchestratorReducer(
 ```typescript
 // Correct: Function declaration
 function Dashboard({ onQuit }: DashboardProps) {
-  const { devpods, selected, loading } = useOrchestrator();
+  const { instances, selected, loading } = useOrchestrator();
   return <Box>...</Box>;
 }
 
@@ -812,8 +894,8 @@ interface DashboardProps {
   onQuit: () => void;
 }
 
-interface DevPodPaneProps {
-  devpod: DevPod;
+interface InstancePaneProps {
+  instance: Instance;
   selected: boolean;
 }
 ```
@@ -832,8 +914,8 @@ import { describe, it, expect, vi } from 'vitest';
 import { createDiscovery } from './discovery.js';
 
 describe('discovery', () => {
-  describe('discoverDevPods', () => {
-    it('returns empty array when DevPod CLI not installed', async () => {
+  describe('discoverInstances', () => {
+    it('returns empty array when agent-env CLI not installed', async () => {
       const mockExecutor = vi.fn().mockResolvedValue({
         failed: true,
         stderr: 'command not found'
@@ -842,7 +924,7 @@ describe('discovery', () => {
 
       const result = await discover();
 
-      expect(result.devpods).toEqual([]);
+      expect(result.instances).toEqual([]);
       expect(result.error).toContain('DISCOVERY_FAILED');
     });
   });
@@ -875,12 +957,13 @@ const discover = createDiscovery(mockExecutor);
 2. Use co-located tests (never separate `__tests__/` directory)
 3. Use `import type` syntax for type-only imports
 4. Use `.js` extension for relative imports
-5. Use the `formatError()` template for all error messages
+5. Use `createError()` + `formatError()` from `@zookanalytics/shared` for all user-facing error messages
 6. Use SCREAMING_SNAKE_CASE for reducer action types and enum members
 7. Use function declarations for components (not arrow functions)
 8. Place all shared types in `lib/types.ts`
 9. Do NOT import React explicitly (only import hooks)
 10. Never leave TODO comments (track work externally)
+11. Extend `../../tsconfig.base.json` in per-package tsconfig (monorepo pattern)
 
 **Pattern Verification:**
 - ESLint with `eslint-plugin-perfectionist` enforces import ordering
@@ -892,7 +975,7 @@ const discover = createDiscovery(mockExecutor);
 
 | Anti-Pattern | Correct Pattern |
 |--------------|-----------------|
-| `interface IDevPod` | `interface DevPod` |
+| `interface IInstance` | `interface Instance` |
 | `const Dashboard: FC = () => {}` | `function Dashboard() {}` |
 | `src/types.ts` (root level) | `src/lib/types.ts` |
 | `__tests__/discovery.test.ts` | `lib/discovery.test.ts` |
@@ -902,75 +985,78 @@ const discover = createDiscovery(mockExecutor);
 | `async function fetchDataAsync()` | `async function fetchData()` |
 | `import React from 'react'` | `import { useState } from 'react'` |
 | `import { Foo } from './foo'` | `import { Foo } from './foo.js'` |
-| `devpod-parser.ts` (kebab-case) | `devPodParser.ts` (camelCase) |
+| `instance-parser.ts` (kebab-case) | `instanceParser.ts` (camelCase) |
 | `// TODO: fix later` | Track in issue tracker |
+| Local `errors.ts` in orchestrator | Use `@zookanalytics/shared` createError/formatError |
+| Per-package `.eslintrc` / `eslint.config.js` | Root-level ESLint 9 flat config shared across packages |
 
 ## Project Structure & Boundaries
 
 ### Complete Project Structure
 
 ```
-bmad-orchestrator/
-├── .github/
-│   └── workflows/
-│       └── ci.yml                 # Quality gates: type-check, lint, test
+packages/orchestrator/                # Within pnpm workspaces monorepo
 ├── bin/
-│   └── bmad-orchestrator.js       # CLI bin entry point (FR33-35)
+│   └── bmad-orchestrator.js          # CLI bin entry point (FR33-35)
 ├── src/
-│   ├── cli.ts                     # Entry point - Commander setup only
+│   ├── cli.ts                        # Entry point - Commander setup only
 │   ├── cli.test.ts
-│   ├── lib/                       # Pure business logic (NO React imports)
-│   │   ├── __fixtures__/          # Test fixtures for all lib modules
-│   │   │   ├── devPodList.json
-│   │   │   ├── devPodListEmpty.json
-│   │   │   ├── devPodListError.json
-│   │   │   ├── sprintStatus.yaml
-│   │   │   ├── sprintStatusMinimal.yaml
-│   │   │   ├── sprintStatusMalformed.yaml
-│   │   │   ├── story-1-1.md
-│   │   │   └── story-1-1-complete.md
-│   │   ├── types.ts               # All shared types
-│   │   ├── discovery.ts           # DevPod CLI subprocess (FR1-4)
-│   │   ├── discovery.test.ts
-│   │   ├── state.ts               # YAML + story file parsing (FR5-10)
+│   ├── lib/                          # Pure business logic (NO React imports)
+│   │   ├── __fixtures__/             # Test fixtures for all lib modules
+│   │   │   ├── instanceList.json       # (✓ implemented)
+│   │   │   ├── instanceListEmpty.json  # (✓ implemented)
+│   │   │   ├── instanceListError.json  # (✓ implemented)
+│   │   │   ├── sprintStatus.yaml             # (Epic 2)
+│   │   │   ├── sprintStatusMinimal.yaml      # (Epic 2)
+│   │   │   ├── sprintStatusMalformed.yaml    # (Epic 2)
+│   │   │   ├── story-1-1.md                  # (Epic 2)
+│   │   │   └── story-1-1-complete.md         # (Epic 2)
+│   │   ├── types.ts                  # All shared types
+│   │   ├── types.test.ts             # Type validation tests
+│   │   ├── discovery.ts              # agent-env CLI subprocess (FR1-4) (✓ implemented)
+│   │   ├── discovery.test.ts         # (✓ implemented)
+│   │   ├── state.ts                  # YAML + story file parsing (FR5-10) (Epic 2)
 │   │   ├── state.test.ts
-│   │   ├── activity.ts            # mtime detection only (FR16-18)
+│   │   ├── activity.ts               # mtime detection only (FR16-18) (Epic 2)
 │   │   ├── activity.test.ts
-│   │   ├── commands.ts            # Command string generation (FR19-23)
-│   │   ├── commands.test.ts
-│   │   ├── errors.ts              # formatError() template
-│   │   └── errors.test.ts
-│   ├── hooks/
-│   │   ├── useOrchestrator.ts     # Single state hook (reducer pattern)
+│   │   ├── commands.ts               # Command string generation (FR19-23) (Epic 4)
+│   │   └── commands.test.ts
+│   ├── hooks/                        # (Epic 3)
+│   │   ├── useOrchestrator.ts        # Single state hook (reducer pattern)
 │   │   └── useOrchestrator.test.ts
-│   ├── components/                # Ink TUI components (FR24-28)
+│   ├── components/                   # Ink TUI components (FR24-28) (Epic 3)
 │   │   ├── Dashboard.tsx
 │   │   ├── Dashboard.test.tsx
-│   │   ├── DevPodPane.tsx
-│   │   ├── DevPodPane.test.tsx
+│   │   ├── InstancePane.tsx
+│   │   ├── InstancePane.test.tsx
 │   │   ├── StatusBadge.tsx
 │   │   ├── CommandPanel.tsx
 │   │   └── BacklogPanel.tsx
-│   └── commands/                  # CLI subcommands (FR29-32)
-│       ├── status.ts
-│       ├── status.test.ts
-│       ├── list.ts
-│       └── list.test.ts
-├── package.json
-├── tsconfig.json
-├── vitest.config.ts
-├── eslint.config.js
-└── .prettierrc
+│   └── commands/                     # CLI subcommands (FR29-32)
+│       ├── list.ts                   # (✓ implemented)
+│       ├── list.test.ts              # (✓ implemented)
+│       ├── status.ts                 # (Epic 5)
+│       └── status.test.ts
+├── package.json                      # @zookanalytics/bmad-orchestrator
+├── tsconfig.json                     # Extends ../../tsconfig.base.json
+└── vitest.config.ts                  # v8 coverage provider
+
+# Root-level shared configs (NOT per-package):
+# eslint.config.js  - ESLint 9 flat config
+# .prettierrc       - Prettier config
+# tsconfig.base.json - Shared TypeScript base config
 ```
+
+**Note:** Error utilities (`createError`, `formatError`, `AppError`) live in `@zookanalytics/shared`, not in orchestrator's `lib/`. No `errors.ts` in the orchestrator package.
 
 ### Architectural Boundaries
 
 | Layer | Purpose | Import Rules |
 |-------|---------|--------------|
-| `lib/` | Pure business logic | NO React imports. Only node builtins + external packages |
+| `lib/` | Pure business logic | NO React imports. Only node builtins + external packages + `@zookanalytics/shared` |
 | `hooks/` | React state bridge | May import from `lib/`. NO component imports |
 | `components/` | UI rendering | May import from `hooks/` and `lib/types.ts` |
-| `commands/` | CLI entry points | May import from `lib/`. NO React imports |
+| `commands/` | CLI entry points | May import from `lib/` and `@zookanalytics/shared`. NO React imports |
 | `cli.ts` | Entry point | Routes to `commands/` or renders `Dashboard` |
 
 ### Module Responsibility Clarification
@@ -988,7 +1074,7 @@ These modules share types from `lib/types.ts` but have no logic dependency. `sta
 
 | FR Range | Capability | Primary Files |
 |----------|------------|---------------|
-| FR1-4 | DevPod Discovery | `lib/discovery.ts` |
+| FR1-4 | Instance Discovery | `lib/discovery.ts` |
 | FR5-10 | Story & Progress | `lib/state.ts` |
 | FR11-15 | Needs-Input | **Deferred to Phase 2** |
 | FR16-18 | Inactive Detection | `lib/activity.ts` |
@@ -1005,21 +1091,22 @@ cli.ts
 │                      ──→ lib/state.ts
 │                      ──→ lib/commands.ts
 ├── commands/list.ts   ──→ lib/discovery.ts
+│                      ──→ @zookanalytics/shared (createError, formatError)
 └── Dashboard.tsx      ──→ useOrchestrator.ts
                             ├── lib/discovery.ts
                             ├── lib/state.ts
                             └── lib/activity.ts
 ```
 
-All arrows point toward `lib/`. No circular dependencies.
+All arrows point toward `lib/` and `@zookanalytics/shared`. No circular dependencies.
 
 ### Test Fixtures (Required for Step 1)
 
 | Fixture | Purpose | Edge Case |
 |---------|---------|-----------|
-| `devPodList.json` | Normal DevPod list | 3 DevPods, mixed states |
-| `devPodListEmpty.json` | No DevPods | Empty array |
-| `devPodListError.json` | CLI error | stderr output |
+| `instanceList.json` | Normal instance list | 3 instances, mixed states |
+| `instanceListEmpty.json` | No instances | Empty array |
+| `instanceListError.json` | CLI error | stderr output |
 | `sprintStatus.yaml` | Normal sprint | Multiple stories, various statuses |
 | `sprintStatusMinimal.yaml` | Minimal valid | One story, defaults |
 | `sprintStatusMalformed.yaml` | Invalid YAML | Tests error handling |
@@ -1037,7 +1124,7 @@ import { vi } from 'vitest';
 // Mock the hook module
 vi.mock('../hooks/useOrchestrator.js', () => ({
   useOrchestrator: () => ({
-    devpods: mockDevPods,
+    instances: mockInstances,
     selected: 0,
     loading: false,
     error: null,
@@ -1049,21 +1136,31 @@ vi.mock('../hooks/useOrchestrator.js', () => ({
 
 This pattern keeps component tests focused on rendering logic, not state management.
 
-### bin Entry Point
+### bin Entry Point (Implemented)
 
 ```javascript
 #!/usr/bin/env node
-// bin/bmad-orchestrator.js
+// packages/orchestrator/bin/bmad-orchestrator.js
 import '../dist/cli.js';
 ```
 
-**package.json bin configuration:**
+**package.json configuration (actual):**
 
 ```json
 {
+  "name": "@zookanalytics/bmad-orchestrator",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
   "bin": {
     "bmad-orchestrator": "./bin/bmad-orchestrator.js"
-  }
+  },
+  "main": "dist/cli.js",
+  "types": "dist/cli.d.ts",
+  "engines": {
+    "node": ">=20"
+  },
+  "files": ["dist", "bin"]
 }
 ```
 
@@ -1073,7 +1170,7 @@ import '../dist/cli.js';
 
 | FR Range | Capability | Architecture Component | Status |
 |----------|------------|------------------------|--------|
-| FR1-4 | DevPod Discovery | `lib/discovery.ts` + execa | ✓ Covered |
+| FR1-4 | Instance Discovery | `lib/discovery.ts` + agent-env CLI | ✓ Covered |
 | FR5-10 | Story & Progress | `lib/state.ts` + YAML parsing | ✓ Covered |
 | FR11-15 | Needs-Input | **Deferred to Phase 2** | ⏸ Intentionally scoped out |
 | FR16-18 | Inactive Detection | `lib/activity.ts` + mtime | ✓ Covered (via file mtime) |
@@ -1092,13 +1189,13 @@ import '../dist/cli.js';
 | NFR2 | <1s refresh | Interval-based refresh with file stat | ✓ |
 | NFR3 | <500ms CLI | Direct subprocess, no TUI overhead | ✓ |
 | NFR4 | <3s discovery | 10s timeout, parallel reads | ✓ |
-| NFR5 | Zero false negatives on stale | Conservative 1-hour threshold | ✓ |
+| NFR5 | Zero false negatives on inactive | Conservative 1-hour threshold | ✓ |
 | NFR6 | Acceptable false positives | Activity detection via mtime | ✓ |
-| NFR7 | Graceful DevPod failures | `reject: false` + Promise.allSettled | ✓ |
-| NFR8 | Partial failure handling | Error isolation per DevPod | ✓ |
+| NFR7 | Graceful instance failures | `reject: false` + Promise.allSettled | ✓ |
+| NFR8 | Partial failure handling | Error isolation per instance | ✓ |
 | NFR9 | macOS support | Node.js + Ink (cross-platform) | ✓ |
 | NFR10 | Linux support | Node.js + Ink (cross-platform) | ✓ |
-| NFR11 | DevPod CLI integration | execa subprocess | ✓ |
+| NFR11 | agent-env CLI integration | execa subprocess | ✓ |
 | NFR12 | BMAD file parsing | yaml package + regex | ✓ |
 | NFR13 | Claude JSON output | Future Phase 2+ | ⏸ |
 | NFR14 | tmux session naming | SSH command generation | ✓ |
@@ -1113,7 +1210,7 @@ import '../dist/cli.js';
 
 | UX Pattern | Architecture Support |
 |------------|---------------------|
-| Pane-based grid layout | `DevPodPane.tsx` component with props |
+| Pane-based grid layout | `InstancePane.tsx` component with props |
 | j/k keyboard navigation | `useOrchestrator` hook with useInput |
 | Status indicators (✓●○⏸⚠✗) | STATE_CONFIG in `lib/types.ts` |
 | Command bar with copy-paste | `CommandPanel.tsx` + clipboard integration |
@@ -1122,22 +1219,26 @@ import '../dist/cli.js';
 | Double-border for needs-input | Component prop `borderStyle` conditional |
 | Backlog overlay | `BacklogPanel.tsx` + keyboard trigger |
 
-### Technology Version Validation
+### Technology Version Validation (Post-Epic-1)
 
-| Technology | Architecture Version | Latest Stable | Risk |
-|------------|---------------------|---------------|------|
-| Ink | 6.6.0 | 6.x | ✓ Current |
-| React | 19.x | 19.x | ✓ Current |
-| Commander | 14.0.2 | 14.x | ✓ Current |
-| Vitest | 4.0.16 | 4.x | ✓ Current |
-| execa | 9.6.1 | 9.x | ✓ Current |
-| TypeScript | 5.x | 5.x | ✓ Current |
+| Technology | Installed Version | Risk |
+|------------|------------------|------|
+| Ink | ^6.6.0 | ✓ Current |
+| React | ^19.2.3 | ✓ Current |
+| Commander | ^14.0.2 | ✓ Current |
+| Vitest | (workspace) | ✓ Current |
+| execa | ^9.6.1 | ✓ Current |
+| TypeScript | 5.x | ✓ Current |
+| @inkjs/ui | ^2.0.0 | ✓ Current |
+| yaml | ^2.8.2 | ✓ Current |
+| timeago.js | ^4.0.2 | ✓ Current |
+| clipboardy | ^5.0.2 | ✓ Current |
 
 ### Risk Assessment
 
 | Risk | Likelihood | Impact | Mitigation |
 |------|------------|--------|------------|
-| DevPod path discovery fails | Medium | High | Validate early in Story 1; document path contract |
+| Instance discovery fails | Medium | High | Validate early in Story 1; agent-env returns structured errors with suggestions |
 | Ink 6 + React 19 incompatibility | Low | High | Test all @inkjs/ui components in Story 1 |
 | mtime detection unreliable | Low | Medium | Document 1-hour threshold rationale; allow config Phase 2 |
 | YAML parsing edge cases | Medium | Medium | Comprehensive fixture coverage from Day 1 |
@@ -1165,23 +1266,32 @@ import '../dist/cli.js';
 
 ### Implementation Readiness
 
-**Ready for Epic/Story creation:**
-- Project structure defined with clear boundaries
-- FR-to-file mapping complete
-- Test fixtures specified
-- Patterns documented for AI agent consistency
+**Epic 1 (orch-epic-1: done, rework pending):**
+- Project structure established as monorepo package
+- CI, tooling, quality gates all working
+- Discovery module implemented with full DI pattern (currently targeting DevPod CLI)
+- `list` command with text + JSON output modes (currently DevPod terminology)
+- Comprehensive test coverage with fixtures
+- **Rework pending:** Story `orch-1-5-rework-agent-env-migration` (`ready-for-dev`) will migrate types, fixtures, discovery CLI target, and list command from DevPod to agent-env
 
-**Recommended Epic Sequence:**
+**Epic 2 (orch-epic-2: backlog) - Blocked on Epic 1 rework:**
+- Requires: Epic 1 rework (story 1.R) complete first — Epic 2 builds on agent-env types
+- Requires: BMAD state fixtures (sprintStatus.yaml, story markdown files)
+- Requires: `state.ts` (YAML parsing) and `activity.ts` (mtime detection) modules
+- All patterns established in Epic 1 carry forward
+- Note: Cross-dependency on `env-epic-3` for integration testing with real agent-env instances (env-epic-3 is done)
 
-1. **Epic 1: Project Foundation** - CI, tooling, one passing test
-2. **Epic 2: Discovery & State** - lib modules with fixtures
-3. **Epic 3: Dashboard Core** - TUI with useOrchestrator
-4. **Epic 4: CLI Commands** - status, list with JSON output
-5. **Epic 5: Polish & Publish** - Package ready for publishing
+**Epic Sequence:**
+
+1. **Epic 1: Project Foundation** - ✓ Done (CI, tooling, discovery, list command)
+2. **Epic 2: BMAD State Parsing & Activity Detection** - Next (state.ts, activity.ts, enhanced list)
+3. **Epic 3: Dashboard Experience** - TUI with useOrchestrator
+4. **Epic 4: Command Generation & Clipboard Actions** - commands.ts, CommandBar
+5. **Epic 5: CLI Polish & Package Publishing** - status command, shell completion, publish
 
 ## Phase 3+ Considerations: Execution Engine Architecture
 
-Phase 3 introduces autonomous execution within DevPods. Rather than building from scratch, an **execution engine abstraction** allows multiple approaches:
+Phase 3 introduces autonomous execution within instances. Rather than building from scratch, an **execution engine abstraction** allows multiple approaches:
 
 | Engine | Description | Availability |
 |--------|-------------|--------------|
@@ -1210,7 +1320,7 @@ interface ExecutionStatus {
 
 ```typescript
 // lib/discovery.ts enhancement for Phase 3
-interface DevPodInfo {
+interface InstanceInfo {
   // ... existing fields
   executionEngine?: {
     type: 'autopilot' | 'direct-claude' | 'custom' | 'none';
