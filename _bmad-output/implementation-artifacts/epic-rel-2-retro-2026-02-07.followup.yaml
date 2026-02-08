@@ -5,7 +5,7 @@ items:
   - id: 1
     action_item: 1
     workflow: bmad:bmm:workflows:quick-dev
-    status: pending
+    status: done
     summary: |
       Add ESM vs CJS mocking guidance to architecture or dev guidelines.
       Specifically document that vi.spyOn(require('node:fs'), ...) doesn't

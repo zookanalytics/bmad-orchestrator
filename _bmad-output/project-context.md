@@ -110,6 +110,33 @@ _This file contains critical rules and patterns that AI agents must follow when 
   const discover = createDiscovery(mockExecutor);
   ```
 
+**ESM Mocking Pitfalls (CRITICAL):**
+- This project uses ESM (`module: NodeNext`). CJS mocking patterns do not work:
+  ```typescript
+  // ❌ BROKEN: require() is not defined in ESM — throws ReferenceError
+  vi.spyOn(require('node:fs'), 'readFileSync');
+
+  // ❌ UNRELIABLE: vi.mock without factory cannot auto-mock Node built-ins
+  // in ESM because built-ins are not standard modules — mocks silently fail
+  vi.mock('node:fs');
+  ```
+- **Correct patterns for unit tests:**
+  ```typescript
+  // ✅ PREFERRED: Dependency injection (our standard pattern)
+  export async function readConfig(deps = { readFile: fs.readFile }) { ... }
+
+  // ✅ OK: vi.spyOn works on global objects (process, console)
+  vi.spyOn(process, 'exit').mockImplementation((() => {}) as never);
+
+  // ✅ ALTERNATIVE: vi.mock with explicit factory (when DI isn't practical)
+  vi.mock('node:fs', () => ({
+    readFileSync: vi.fn().mockReturnValue('mocked content'),
+  }));
+  ```
+- **Integration tests (e.g., `src/release/*.test.ts`) intentionally use real I/O** to validate actual config files. Do not add mocking to these — they should fail when files are wrong.
+- When using `vi.mock` with a factory, the call is hoisted above all imports by Vitest. You cannot reference test-scoped variables in the factory, but you can reference `vi.fn()` and other imports. Configure return values in individual tests via `vi.mocked()`.
+- **When to use DI vs. `vi.mock`:** Prefer DI for all new code. Use `vi.mock` with factory only when the dependency is deeply embedded and DI would require threading it through 3+ layers of function signatures.
+
 **Subprocess Testing:**
 - Never call real `git`, `docker`, or `devcontainer` in tests
 - Create fixtures for command outputs (JSON, text)
