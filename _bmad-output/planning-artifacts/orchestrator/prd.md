@@ -16,7 +16,17 @@ documentCounts:
   decisions: 1
   projectDocs: 2
 workflowType: 'prd'
+classification:
+  technicalType: 'CLI tool + Developer tool hybrid'
+  domain: 'General (developer tooling)'
+  complexity: 'Medium'
 lastStep: 4
+lastEdited: '2026-02-08'
+editHistory:
+  - date: '2026-02-08'
+    changes: 'DevPod-to-agent-env migration: replaced all DevPod references with agent-env/instance equivalents, stale→inactive throughout'
+  - date: '2026-02-08'
+    changes: 'Validation fixes: FR23 rewritten to Actor-can-capability format, NFR6 given concrete 5% threshold, NFR15 given measurable criteria (LOC/JSDoc), added classification to frontmatter'
 ---
 
 # Product Requirements Document - BMAD Orchestration Layer
@@ -26,17 +36,17 @@ lastStep: 4
 
 ## Executive Summary
 
-BMAD Orchestrator is a unified command center for multi-DevPod development. See every workflow, every story, every heartbeat - and know exactly what to do next.
+BMAD Orchestrator is a unified command center for multi-instance development. See every workflow, every story, every heartbeat - and know exactly what to do next.
 
-The core problem: BMAD methodology is effective, but scaling it across multiple parallel workstreams creates cognitive overhead. Developers must manually track which stories are assigned where, detect stuck workflows, and determine optimal next actions. This coordination tax grows with each additional DevPod.
+The core problem: BMAD methodology is effective, but scaling it across multiple parallel workstreams creates cognitive overhead. Developers must manually track which stories are assigned where, detect stuck workflows, and determine optimal next actions. This coordination tax grows with each additional instance.
 
-The solution: A host-based dashboard that reads BMAD state files (sprint-status.yaml, .worker-state.yaml) from all DevPod workspaces, aggregates progress, and surfaces actionable next steps with ready-to-run commands.
+The solution: A host-based dashboard that reads BMAD state files from all instance workspaces, aggregates progress, and surfaces actionable next steps with ready-to-run commands.
 
 ### What Makes This Special
 
 **Confidence through clarity.** The dashboard doesn't just show status - it eliminates decision paralysis by making the next action obvious. Users stop asking "where are we?" and start executing.
 
-**Git-native state architecture.** No new databases or sync infrastructure. Each DevPod writes its own state files; the orchestrator is read-only. State flows through git like all other BMAD artifacts.
+**Git-native state architecture.** No new databases or sync infrastructure. Each instance writes its own state files; the orchestrator is read-only. State flows through git like all other BMAD artifacts.
 
 **Progressive automation.** Start with visibility and manual commands (Phase 1), evolve to one-click dispatch (Phase 2), then autonomous execution with approval gates (Phase 3). Value delivered immediately, automation added incrementally.
 
@@ -48,18 +58,18 @@ The solution: A host-based dashboard that reads BMAD state files (sprint-status.
 **Domain:** General (developer tooling)
 **Complexity:** Medium - multi-instance coordination with known patterns
 **Project Context:** Greenfield - new bmad-orchestrator system
-**Deployment Model:** Host-based (reads DevPod filesystems via mounted workspaces)
+**Deployment Model:** Host-based (reads instance workspaces via host filesystem)
 
 ### Phase 1 Scope (MVP)
 
-- Dashboard aggregating state from all DevPods
+- Dashboard aggregating state from all instances
 - Copy-paste commands for manual dispatch
-- Heartbeat monitoring and stale detection
+- Heartbeat monitoring and inactive detection
 - No Claude Agent SDK integration yet
 
 The orchestrator integrates with:
 - Existing BMAD workflows and state files
-- DevPod for container lifecycle management
+- agent-env for instance lifecycle management
 - Existing claude-instance tooling (tmux integration)
 
 ## Success Criteria
@@ -69,7 +79,7 @@ The orchestrator integrates with:
 **Core Success Metric:** "I know what to work on next."
 
 - Open dashboard → immediately see next action → execute with confidence
-- Works whether you have 1 DevPod or 5
+- Works whether you have 1 instance or 5
 - Portable across any BMAD project, not just one codebase
 - **"Aha!" moment:** Clone a new repo, run the dashboard, and without reading docs know exactly where the project is and what to do next
 
@@ -93,7 +103,7 @@ The orchestrator integrates with:
 ### Measurable Outcomes
 
 - Dashboard renders full state within 2 seconds of launch
-- Stale worker detection fires reliably (no false negatives)
+- Inactive instance detection fires reliably (no false negatives)
 - Commands provided are copy-paste ready (no manual editing required)
 - New project onboarding: working dashboard in <5 minutes
 
@@ -103,12 +113,12 @@ The orchestrator integrates with:
 
 What must work for this to be useful:
 
-- Dashboard shows all DevPods + story status at a glance
+- Dashboard shows all instances + story status at a glance
 - Surfaces next action clearly per worker
 - Provides copy-paste commands for manual dispatch
-- Heartbeat monitoring with stale detection
+- Heartbeat monitoring with inactive detection
 - Runs on Mac and Linux
-- Host-based, reads DevPod filesystems
+- Host-based, reads instance workspaces
 
 ### Growth Features (Post-MVP)
 
@@ -132,7 +142,7 @@ The dream version:
 
 ### Journey 1: Node - The Morning Orchestration
 
-Node starts his day with three DevPods running from yesterday - one finishing a story, one mid-implementation, one that was supposed to run overnight. He opens VS Code and sees three workspaces in his dock. *Which one needs attention first?*
+Node starts his day with three instances running from yesterday - one finishing a story, one mid-implementation, one that was supposed to run overnight. He opens VS Code and sees three workspaces in his dock. *Which one needs attention first?*
 
 He could cycle through each, run `/workflow-status`, piece together the picture. But today he opens BMAD Orchestrator instead.
 
@@ -141,7 +151,7 @@ One glance (pane-based layout provides room for inline questions):
 ```
 ┌─ BMAD Orchestrator ──────────────────────────────────────────── ↻ 5s ago ─┐
 │                                                                            │
-│  ┌─ devpod-1 ──────────────────────┐  ┌─ devpod-2 ──────────────────────┐ │
+│  ┌─ main-dev ──────────────────────┐  ┌─ api-work ──────────────────────┐ │
 │  │  ✓ DONE                  2h ago │  │  ● RUNNING              12m ago │ │
 │  │  → 1-3-auth-flow                │  │  → 2-1-api-layer                │ │
 │  │    Complete                     │  │    ▓▓▓▓▓▓▓▓▓▓▓▓░░░░░░ 60%      │ │
@@ -149,7 +159,7 @@ One glance (pane-based layout provides room for inline questions):
 │  │  Suggested: 1-4-tests           │  │                                 │ │
 │  └─────────────────────────────────┘  └─────────────────────────────────┘ │
 │                                                                            │
-│  ╔═ devpod-3 ══════════════════════╗                                      │
+│  ╔═ data-dev ══════════════════════╗                                      │
 │  ║  ⏸ NEEDS INPUT           6h ago ║                                      │
 │  ║  → 2-2-persistence              ║                                      │
 │  ║                                 ║                                      │
@@ -166,29 +176,29 @@ One glance (pane-based layout provides room for inline questions):
 └────────────────────────────────────────────────────────────────────────────┘
 ```
 
-*Note: Needs-input pane (devpod-3) uses double-line border to draw attention. Pane layout provides space for inline question display without drilling down.*
+*Note: Needs-input pane (data-dev) uses double-line border to draw attention. Pane layout provides space for inline question display without drilling down.*
 
-DevPod-3 needs input - Claude asked a question overnight that went unanswered (visible right in the pane). DevPod-1 finished and is idle. DevPod-2 is humming along. Without opening a single VS Code window, Node knows: answer DevPod-3's question, then assign new work to DevPod-1.
+`data-dev` needs input - Claude asked a question overnight that went unanswered (visible right in the pane). `main-dev` finished and is idle. `api-work` is humming along. Without opening a single VS Code window, Node knows: answer `data-dev`'s question, then assign new work to `main-dev`.
 
-The dashboard shows the command for the idle DevPod:
+The dashboard shows the command for the idle instance:
 
 ```
-devpod ssh devpod-1 -- claude -p "/bmad:bmm:workflows:dev-story 1-4-tests" --output-format json
+agent-env attach main-dev -- claude -p "/bmad:bmm:workflows:dev-story 1-4-tests" --output-format json
 ```
 
 Copy. Paste. Execute. Back to the dashboard. On to the next decision.
 
-By the time he finishes his coffee, Node has answered DevPod-3's question, confirmed it resumed successfully, and dispatched two new stories. Total time: 8 minutes. Total context switches: zero.
+By the time he finishes his coffee, Node has answered `data-dev`'s question, confirmed it resumed successfully, and dispatched two new stories. Total time: 8 minutes. Total context switches: zero.
 
 ### Journey 2: The Needs-Input Resolution
 
 *Note: This journey shows the full vision including Phase 2 features (answer input field, Interactive Mode button). MVP uses copy-paste commands; inline response is Phase 2.*
 
-Node sees DevPod-3 showing `⏸ needs-input` with last activity 6 hours ago. Claude asked a question that went unanswered overnight. The question is already visible in the pane (see Journey 1 mockup), but for complex questions with multiple options, he drills into the detail view for full context:
+Node sees `data-dev` showing `⏸ needs-input` with last activity 6 hours ago. Claude asked a question that went unanswered overnight. The question is already visible in the pane (see Journey 1 mockup), but for complex questions with multiple options, he drills into the detail view for full context:
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
-│  DevPod-3: devpod-3-persistence                              │
+│  Instance: data-dev                                          │
 ├─────────────────────────────────────────────────────────────┤
 │  Story: 2-2-persistence                                      │
 │  Status: needs-input (waiting 6h)                            │
@@ -218,10 +228,10 @@ Node sees DevPod-3 showing `⏸ needs-input` with last activity 6 hours ago. Cla
 **MVP:** Node copies the resume command, pastes into a terminal, and provides the answer. **Phase 2:** Node types "1" directly in the dashboard and clicks Send. The dashboard generates:
 
 ```
-devpod ssh devpod-3 -- claude -p "1" --resume "ab2c3d4-e5f6-7890-abcd-ef1234567890" --output-format json
+agent-env attach data-dev -- claude -p "1" --resume "ab2c3d4-e5f6-7890-abcd-ef1234567890" --output-format json
 ```
 
-The command executes. Claude resumes with the answer, mocks the database connection, and continues implementing. The dashboard refreshes: DevPod-3 now shows `● running`.
+The command executes. Claude resumes with the answer, mocks the database connection, and continues implementing. The dashboard refreshes: `data-dev` now shows `● running`.
 
 **For complex situations**, Node could click [Interactive Mode] to attach via tmux and have a back-and-forth conversation. But for clear transactional decisions like this? One answer, structured response, back to orchestrating.
 
@@ -238,8 +248,8 @@ Most BMAD steps are transactional: dispatch a skill, get a result. JSON mode mak
 
 | Capability | Revealed By |
 |------------|-------------|
-| **Unified status view** | Journey 1 - see all DevPods at a glance |
-| **Idle worker detection** | Journey 1 - know which DevPod can take work |
+| **Unified status view** | Journey 1 - see all instances at a glance |
+| **Idle worker detection** | Journey 1 - know which instance can take work |
 | **Needs-input detection** | Journey 1 & 2 - surface questions immediately |
 | **Question display** | Journey 2 - show exactly what Claude is asking |
 | **Session ID tracking** | Journey 2 - enable structured resume |
@@ -276,24 +286,24 @@ BMAD Orchestrator is a hybrid CLI/developer tool:
 |---------|-------------|
 | `bmad-orchestrator` | Launch persistent TUI (default) |
 | `bmad-orchestrator status` | One-shot status dump (scriptable) |
-| `bmad-orchestrator list` | List discovered DevPods |
-| `bmad-orchestrator dispatch <devpod> <story>` | Generate/execute dispatch command |
-| `bmad-orchestrator resume <devpod> <answer>` | Resume needs-input session |
+| `bmad-orchestrator list` | List discovered instances |
+| `bmad-orchestrator dispatch <instance> <story>` | Generate/execute dispatch command |
+| `bmad-orchestrator resume <instance> <answer>` | Resume needs-input session |
 
 ### Configuration & Discovery
 
 **Auto-Discovery (zero-config):**
-- Query `devpod list` for active instances
-- Filter by naming convention (e.g., `devpod-*`, `{project}-*`)
-- Detect workspace paths from DevPod metadata
+- Query `agent-env list` for active instances
+- Filter by naming convention (e.g., `{project}-*`)
+- Detect workspace paths from agent-env metadata
 
 **Optional Config Override:**
 ```yaml
 # ~/.bmad-orchestrator.yaml (optional)
-devpods:
-  include: ["devpod-*"]
-  exclude: ["devpod-test-*"]
-workspaces_root: "~/.devpod/workspaces"
+instances:
+  include: ["*"]
+  exclude: ["test-*"]
+workspaces_root: "~/.agent-env/workspaces"
 ```
 
 ### Output Formats
@@ -307,7 +317,7 @@ workspaces_root: "~/.devpod/workspaces"
 ### Shell Completion
 
 - Leverage `yargs` or `commander` built-in completion support
-- Complete DevPod names, story IDs from discovered state
+- Complete instance names, story IDs from discovered state
 - Install via: `bmad-orchestrator completion >> ~/.bashrc`
 
 ### Installation Method
@@ -324,12 +334,12 @@ pnpm add -g @zookanalytics/bmad-orchestrator
 
 CLI commands designed for pipeline integration:
 ```bash
-# Check if any DevPod needs input
-bmad-orchestrator status --json | jq '.devpods[] | select(.status == "needs-input")'
+# Check if any instance needs input
+bmad-orchestrator status --json | jq '.instances[] | select(.status == "needs-input")'
 
 # Auto-dispatch to idle workers
-for pod in $(bmad-orchestrator list --idle); do
-  bmad-orchestrator dispatch $pod --next-story
+for instance in $(bmad-orchestrator list --idle); do
+  bmad-orchestrator dispatch $instance --next-story
 done
 ```
 
@@ -338,7 +348,7 @@ done
 ### MVP Strategy & Philosophy
 
 **MVP Approach:** Problem-Solving MVP
-- Solve the core cognitive load problem: "Which DevPod needs attention? What should I do next?"
+- Solve the core cognitive load problem: "Which instance needs attention? What should I do next?"
 - Deliver working visibility before adding automation
 - Value delivered immediately, automation added incrementally
 
@@ -354,9 +364,9 @@ done
 
 | Capability | Rationale |
 |------------|-----------|
-| Unified status view | This IS the product - see all DevPods at a glance |
+| Unified status view | This IS the product - see all instances at a glance |
 | Copy-paste commands | Enables immediate action from dashboard |
-| Stale/needs-input detection | Surfaces problems before they become blockers |
+| Inactive/needs-input detection | Surfaces problems before they become blockers |
 | Auto-discovery | Existing capability in claude-instance, must preserve |
 | Session ID tracking | Required for structured resume workflow |
 
@@ -395,22 +405,22 @@ done
 
 ## Functional Requirements
 
-### DevPod Discovery & Status
+### Instance Discovery & Status
 
-- FR1: User can view all active DevPods in a single unified display
-- FR2: System can auto-discover DevPods via naming convention without manual configuration
+- FR1: User can view all active instances in a single unified display
+- FR2: System can auto-discover instances via naming convention without manual configuration
 - FR3: User can optionally override auto-discovery with explicit configuration
-- FR4: User can see which project/workspace each DevPod is working on
+- FR4: User can see which project/workspace each instance is working on
 
 ### Story & Progress Visibility
 
-- FR5: User can see current story assignment for each DevPod
-- FR6: User can see story status (done, running, needs-input, stale)
-- FR7: User can see time since last activity/heartbeat per DevPod
+- FR5: User can see current story assignment for each instance
+- FR6: User can see story status (done, running, needs-input, inactive)
+- FR7: User can see time since last activity/heartbeat per instance
 - FR8: User can see task progress within a story (e.g., "3/7 tasks completed")
 - FR8a: User can see epic progress (overall completion percentage) for the epic containing the current story
 - FR9: User can see the backlog of unassigned stories
-- FR10: System can detect idle DevPods (completed story, no current assignment)
+- FR10: System can detect idle instances (completed story, no current assignment)
 
 ### Needs-Input Handling
 
@@ -420,40 +430,40 @@ done
 - FR14: User can provide an answer to resume a paused session
 - FR15: System can generate copy-paste resume command with answer
 
-### Stale Detection & Alerts
+### Inactive Detection & Alerts
 
-- FR16: System can detect stale workers (no heartbeat within threshold)
-- FR17: User can see visual indication of stale status
-- FR18: User can see suggested diagnostic actions for stale DevPods
+- FR16: System can detect inactive instances (no heartbeat within threshold)
+- FR17: User can see visual indication of inactive status
+- FR18: User can see suggested diagnostic actions for inactive instances
 
 ### Command Generation
 
-- FR19: User can see copy-paste ready dispatch commands for idle DevPods
+- FR19: User can see copy-paste ready dispatch commands for idle instances
 - FR20: User can see suggested next story to assign
 - FR21: User can see copy-paste ready resume commands
 - FR22: User can see command to attach to interactive tmux session
-- FR23: All generated commands use JSON output mode by default
+- FR23: System generates all commands with JSON output mode by default
 
 ### Dashboard Interface
 
 - FR24: User can launch a persistent TUI dashboard
 - FR25: User can quit the dashboard gracefully
 - FR26: User can refresh dashboard state manually
-- FR27: User can drill into detail view for specific DevPod
+- FR27: User can drill into detail view for specific instance
 - FR28: User can navigate back from detail view to main view
 
 ### CLI Commands (Scriptable)
 
 - FR29: User can get one-shot status dump via CLI command
-- FR30: User can list discovered DevPods via CLI command
+- FR30: User can list discovered instances via CLI command
 - FR31: User can get output in JSON format for any CLI command
-- FR32: User can use shell completion for DevPod names and commands
+- FR32: User can use shell completion for instance names and commands
 
 ### Installation & Configuration
 
 - FR33: User can install via pnpm
 - FR34: User can run dashboard from any directory on host machine
-- FR35: System can read BMAD state files from DevPod workspaces on host filesystem
+- FR35: System can read BMAD state files from instance workspaces on host filesystem
 
 ## Non-Functional Requirements
 
@@ -462,28 +472,27 @@ done
 - NFR1: Dashboard initial render completes within 2 seconds of launch
 - NFR2: Status refresh completes within 1 second
 - NFR3: CLI commands return within 500ms for status queries
-- NFR4: DevPod discovery completes within 3 seconds for up to 10 DevPods
+- NFR4: Instance discovery completes within 3 seconds for up to 10 instances
 
 ### Reliability
 
-- NFR5: Stale detection has zero false negatives (never misses a stale DevPod)
-- NFR6: False positive rate for stale detection is acceptable (may flag active DevPod briefly after network hiccup)
-- NFR7: Dashboard gracefully handles unreachable DevPods without crashing
-- NFR8: Partial failures (one DevPod unreachable) do not block display of other DevPods
+- NFR5: Inactive detection has zero false negatives (never misses an inactive instance)
+- NFR6: False positive rate for inactive detection is below 5% under normal operation (may flag active instance briefly after network hiccup)
+- NFR7: Dashboard gracefully handles unreachable instances without crashing
+- NFR8: Partial failures (one instance unreachable) do not block display of other instances
 
 ### Integration & Compatibility
 
 - NFR9: Runs on macOS (Intel and Apple Silicon)
 - NFR10: Runs on Linux (Ubuntu 22.04+, Debian-based)
-- NFR11: Works with DevPod CLI for container discovery
-- NFR12: Correctly parses BMAD state files (sprint-status.yaml, .worker-state.yaml)
+- NFR11: Works with agent-env CLI for instance discovery
+- NFR12: Correctly parses BMAD state files (sprint-status.yaml)
 - NFR13: Works with Claude CLI `--output-format json` responses
 - NFR14: Compatible with existing claude-instance tmux session naming
 
 ### Maintainability
 
-- NFR15: Codebase is understandable by owner without extensive documentation
+- NFR15: Codebase follows consistent patterns: all modules under 300 LOC, functions under 30 LOC, public functions have JSDoc
 - NFR16: Clear separation between TUI rendering, state aggregation, and command generation
 - NFR17: No external runtime dependencies beyond Node.js packages
 - NFR18: Configuration schema is self-documenting (YAML with comments)
-
