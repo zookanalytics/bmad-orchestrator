@@ -99,6 +99,7 @@ function createMockContainer(overrides: Partial<ContainerLifecycle> = {}): Conta
       .fn()
       .mockResolvedValue({ ok: true, status: 'running', containerId: 'abc', error: null }),
     getContainerNameById: vi.fn().mockResolvedValue(null), // Default: no name discovery
+    findContainerByWorkspaceLabel: vi.fn().mockResolvedValue(null), // Default: no existing container
     devcontainerUp: vi.fn().mockResolvedValue({
       ok: true,
       status: 'running',
@@ -178,6 +179,10 @@ function createTestDeps(
       writeFile: devcontainerWriteFile,
     },
     rm,
+    logger: {
+      warn: vi.fn(),
+      info: vi.fn(),
+    },
   };
 }
 
@@ -386,6 +391,78 @@ describe('createInstance', () => {
       exists = false;
     }
     expect(exists).toBe(false);
+
+    // Logger should have been called
+    expect(deps.logger?.warn).toHaveBeenCalledWith(expect.stringContaining('Rolling back'));
+  });
+
+  it('returns CONTAINER_EXISTS when a container already exists for workspace path', async () => {
+    const deps = createTestDeps(gitCloneSuccess, {
+      findContainerByWorkspaceLabel: vi.fn().mockResolvedValue('agenttools-bmad-orch-auth'),
+    });
+
+    const result = await createInstance('auth', 'https://github.com/user/bmad-orch.git', deps);
+
+    expect(result.ok).toBe(false);
+    if (result.ok) throw new Error('Expected failure');
+    expect(result.error.code).toBe('CONTAINER_EXISTS');
+    expect(result.error.message).toContain('agenttools-bmad-orch-auth');
+    expect(result.error.suggestion).toContain('docker rm -f agenttools-bmad-orch-auth');
+  });
+
+  it('cleans up workspace when pre-flight container check finds conflict', async () => {
+    const deps = createTestDeps(gitCloneSuccess, {
+      findContainerByWorkspaceLabel: vi.fn().mockResolvedValue('stale-container'),
+    });
+
+    await createInstance('auth', 'https://github.com/user/bmad-orch.git', deps);
+
+    // Workspace should be cleaned up
+    const wsDir = join(tempDir, AGENT_ENV_DIR, WORKSPACES_DIR, 'bmad-orch-auth');
+    let exists = false;
+    try {
+      await stat(wsDir);
+      exists = true;
+    } catch {
+      exists = false;
+    }
+    expect(exists).toBe(false);
+  });
+
+  it('returns CONTAINER_ERROR with name conflict details when pre-flight passes but devcontainerUp hits name conflict', async () => {
+    const deps = createTestDeps(gitCloneSuccess, {
+      findContainerByWorkspaceLabel: vi.fn().mockResolvedValue(null),
+      devcontainerUp: vi.fn().mockResolvedValue({
+        ok: false,
+        status: 'not-found',
+        containerId: null,
+        error: {
+          code: 'CONTAINER_ERROR',
+          message: "devcontainer up failed for 'ae-bmad-orch-auth':\n   name is already in use",
+          suggestion:
+            'A container with this name already exists. Use `docker ps -a` to find it, then `docker rm -f <name>` to remove it and retry.',
+        },
+      }),
+    });
+
+    const result = await createInstance('auth', 'https://github.com/user/bmad-orch.git', deps);
+
+    expect(result.ok).toBe(false);
+    if (result.ok) throw new Error('Expected failure');
+    expect(result.error.code).toBe('CONTAINER_ERROR');
+    expect(result.error.message).toContain('name is already in use');
+    expect(result.error.suggestion).toContain('docker ps -a');
+  });
+
+  it('proceeds normally when no existing container is found', async () => {
+    const deps = createTestDeps(gitCloneSuccess, {
+      findContainerByWorkspaceLabel: vi.fn().mockResolvedValue(null),
+    });
+
+    const result = await createInstance('auth', 'https://github.com/user/bmad-orch.git', deps);
+
+    expect(result.ok).toBe(true);
+    expect(deps.container.devcontainerUp).toHaveBeenCalled();
   });
 
   it('returns GIT_ERROR for invalid URL', async () => {

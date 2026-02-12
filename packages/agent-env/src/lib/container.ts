@@ -41,6 +41,7 @@ export interface ContainerLifecycle {
   isDockerAvailable(): Promise<boolean>;
   containerStatus(containerName: string): Promise<ContainerResult>;
   getContainerNameById(containerId: string): Promise<string | null>;
+  findContainerByWorkspaceLabel(workspacePath: string): Promise<string | null>;
   devcontainerUp(workspacePath: string, containerName: string): Promise<ContainerResult>;
   containerStop(containerName: string): Promise<ContainerStopResult>;
   containerRemove(containerName: string): Promise<ContainerRemoveResult>;
@@ -172,6 +173,38 @@ export function createContainerLifecycle(executor: Execute = createExecutor()): 
   }
 
   /**
+   * Find an existing container created from a given workspace folder.
+   *
+   * Uses the `devcontainer.local_folder` label that the devcontainer CLI
+   * automatically applies to containers it creates.
+   *
+   * @param workspacePath - Absolute path to workspace folder
+   * @returns Container name if found, null otherwise (returns first match if multiple)
+   */
+  async function findContainerByWorkspaceLabel(workspacePath: string): Promise<string | null> {
+    const result = await executor(
+      'docker',
+      [
+        'ps',
+        '-a',
+        '--filter',
+        // Quote the label value to prevent parsing issues with special characters like commas
+        `label=devcontainer.local_folder="${workspacePath}"`,
+        '--format',
+        '{{.Names}}',
+      ],
+      { timeout: DOCKER_INSPECT_TIMEOUT }
+    );
+
+    if (!result.ok) {
+      return null;
+    }
+
+    const name = result.stdout.trim().split('\n')[0]?.trim();
+    return name || null;
+  }
+
+  /**
    * Start a devcontainer from a workspace folder.
    *
    * Checks Docker availability first, then runs `devcontainer up`
@@ -231,12 +264,20 @@ export function createContainerLifecycle(executor: Execute = createExecutor()): 
 
     if (!result.ok) {
       // Build detailed error message from all available sources
-      const details =
-        parsedOutput?.message ||
-        parsedOutput?.description ||
-        result.stderr ||
-        result.stdout.slice(0, 500) ||
-        'No error details available';
+      const parts: string[] = [];
+      if (parsedOutput?.message) parts.push(parsedOutput.message);
+      if (parsedOutput?.description) parts.push(parsedOutput.description);
+      if (result.stderr) parts.push(result.stderr);
+      if (parts.length === 0 && result.stdout) parts.push(result.stdout.slice(0, 1000));
+      const details = parts.join('\n   ') || 'No error details available';
+
+      // Detect container name conflict for a targeted suggestion
+      const combined = `${result.stderr} ${result.stdout}`;
+      const isNameConflict =
+        combined.includes('is already in use') ||
+        combined.includes('name is already in use') ||
+        combined.includes('Conflict.') ||
+        combined.includes('conflict');
 
       return {
         ok: false,
@@ -245,7 +286,9 @@ export function createContainerLifecycle(executor: Execute = createExecutor()): 
         error: {
           code: 'CONTAINER_ERROR',
           message: `devcontainer up failed for '${containerName}':\n   ${details}`,
-          suggestion: 'Check the devcontainer.json configuration and Docker logs.',
+          suggestion: isNameConflict
+            ? 'A container with this name already exists. Use `docker ps -a` to find it, then `docker rm -f <name>` to remove it and retry.'
+            : 'Check the devcontainer.json configuration and Docker logs.',
         },
       };
     }
@@ -332,6 +375,7 @@ export function createContainerLifecycle(executor: Execute = createExecutor()): 
     isDockerAvailable,
     containerStatus,
     getContainerNameById,
+    findContainerByWorkspaceLabel,
     devcontainerUp,
     containerStop,
     containerRemove,
