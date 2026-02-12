@@ -64,6 +64,10 @@ export interface CreateInstanceDeps {
   stateFsDeps: StateFsDeps;
   devcontainerFsDeps: Pick<DevcontainerFsDeps, 'cp' | 'mkdir' | 'readFile' | 'stat' | 'writeFile'>;
   rm: typeof rm;
+  logger?: {
+    warn: (message: string) => void;
+    info: (message: string) => void;
+  };
 }
 
 // ─── URL Parsing ─────────────────────────────────────────────────────────────
@@ -218,6 +222,10 @@ export function createDefaultDeps(): CreateInstanceDeps {
     stateFsDeps: { readFile, writeFile, rename, mkdir, appendFile },
     devcontainerFsDeps: { cp, mkdir, readFile, stat, writeFile },
     rm,
+    logger: {
+      warn: (msg) => console.warn(msg),
+      info: (msg) => console.info(msg),
+    },
   };
 }
 
@@ -298,7 +306,7 @@ export async function createInstance(
 
   if (!cloneResult.ok) {
     // Clean up any partial clone
-    await safeRollback(wsPath.root, deps.rm);
+    await safeRollback(wsPath.root, deps.rm, deps.logger);
     return {
       ok: false,
       error: {
@@ -313,7 +321,7 @@ export async function createInstance(
   try {
     await deps.workspaceFsDeps.mkdir(wsPath.agentEnvDir, { recursive: true });
   } catch (err) {
-    await safeRollback(wsPath.root, deps.rm);
+    await safeRollback(wsPath.root, deps.rm, deps.logger);
     return {
       ok: false,
       error: {
@@ -330,7 +338,7 @@ export async function createInstance(
     try {
       await copyBaselineConfig(wsPath.root, deps.devcontainerFsDeps);
     } catch (err) {
-      await safeRollback(wsPath.root, deps.rm);
+      await safeRollback(wsPath.root, deps.rm, deps.logger);
       return {
         ok: false,
         error: {
@@ -346,7 +354,7 @@ export async function createInstance(
     try {
       await patchContainerName(wsPath.root, containerName, deps.devcontainerFsDeps);
     } catch (err) {
-      await safeRollback(wsPath.root, deps.rm);
+      await safeRollback(wsPath.root, deps.rm, deps.logger);
       return {
         ok: false,
         error: {
@@ -357,10 +365,25 @@ export async function createInstance(
     }
   }
 
+  // Step 5c: Pre-flight check for existing containers at this workspace path
+  const existingContainer = await deps.container.findContainerByWorkspaceLabel(wsPath.root);
+  if (existingContainer) {
+    await safeRollback(wsPath.root, deps.rm, deps.logger);
+    return {
+      ok: false,
+      error: {
+        code: 'CONTAINER_EXISTS',
+        message: `A container '${existingContainer}' already exists for this workspace path.`,
+        suggestion: `Remove it first with: docker rm -f ${existingContainer}`,
+      },
+    };
+  }
+
   // Step 6: Start container
   const containerResult = await deps.container.devcontainerUp(wsPath.root, containerName);
   if (!containerResult.ok) {
-    await safeRollback(wsPath.root, deps.rm);
+    deps.logger?.warn(`Rolling back workspace at ${wsPath.root} due to container startup failure.`);
+    await safeRollback(wsPath.root, deps.rm, deps.logger);
     return {
       ok: false,
       error: containerResult.error ?? {
@@ -381,7 +404,7 @@ export async function createInstance(
     }
   } else {
     // Container started but no containerId returned - unusual state, log for debugging
-    console.warn(
+    deps.logger?.warn(
       `Warning: devcontainer started successfully but no containerId returned. Using derived name '${containerName}'.`
     );
   }
@@ -406,11 +429,15 @@ export async function createInstance(
  * Safely remove a workspace directory during rollback.
  * Logs but does not throw on failure.
  */
-async function safeRollback(workspacePath: string, rmFn: typeof rm): Promise<void> {
+async function safeRollback(
+  workspacePath: string,
+  rmFn: typeof rm,
+  logger?: { warn: (msg: string) => void }
+): Promise<void> {
   try {
     await rmFn(workspacePath, { recursive: true, force: true });
   } catch {
     // Rollback failure is logged but not thrown - the primary error is more important
-    console.warn(`Warning: Failed to clean up workspace at ${workspacePath}`);
+    logger?.warn(`Warning: Failed to clean up workspace at ${workspacePath}`);
   }
 }

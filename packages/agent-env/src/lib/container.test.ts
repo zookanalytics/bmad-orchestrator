@@ -318,6 +318,138 @@ describe('getContainerNameById', () => {
   });
 });
 
+// ─── findContainerByWorkspaceLabel ──────────────────────────────────────────
+
+describe('findContainerByWorkspaceLabel', () => {
+  it('returns container name when a matching container exists', async () => {
+    const executor = mockExecutor({
+      'docker ps': {
+        ok: true,
+        stdout: 'agenttools-bmad-orch-strategy\n',
+        stderr: '',
+        exitCode: 0,
+      },
+    });
+    const lifecycle = createContainerLifecycle(executor);
+
+    const name = await lifecycle.findContainerByWorkspaceLabel('/workspaces/bmad-orch-strategy');
+    expect(name).toBe('agenttools-bmad-orch-strategy');
+  });
+
+  it('returns null when no matching container exists', async () => {
+    const executor = mockExecutor({
+      'docker ps': {
+        ok: true,
+        stdout: '',
+        stderr: '',
+        exitCode: 0,
+      },
+    });
+    const lifecycle = createContainerLifecycle(executor);
+
+    const name = await lifecycle.findContainerByWorkspaceLabel('/workspaces/bmad-orch-strategy');
+    expect(name).toBeNull();
+  });
+
+  it('returns null when docker is not available', async () => {
+    const executor = mockExecutor({
+      'docker ps': {
+        ok: false,
+        stdout: '',
+        stderr: 'Cannot connect to the Docker daemon',
+        exitCode: 1,
+      },
+    });
+    const lifecycle = createContainerLifecycle(executor);
+
+    const name = await lifecycle.findContainerByWorkspaceLabel('/workspaces/test');
+    expect(name).toBeNull();
+  });
+
+  it('returns only the first container name when multiple match', async () => {
+    const executor = mockExecutor({
+      'docker ps': {
+        ok: true,
+        stdout: 'container-one\ncontainer-two\n',
+        stderr: '',
+        exitCode: 0,
+      },
+    });
+    const lifecycle = createContainerLifecycle(executor);
+
+    const name = await lifecycle.findContainerByWorkspaceLabel('/workspaces/test');
+    expect(name).toBe('container-one');
+  });
+
+  it('returns null for whitespace-only output', async () => {
+    const executor = mockExecutor({
+      'docker ps': {
+        ok: true,
+        stdout: '  \n  \t  ',
+        stderr: '',
+        exitCode: 0,
+      },
+    });
+    const lifecycle = createContainerLifecycle(executor);
+
+    const name = await lifecycle.findContainerByWorkspaceLabel('/workspaces/test');
+    expect(name).toBeNull();
+  });
+
+  it('calls docker ps with correct label filter', async () => {
+    const executor = mockExecutor({
+      'docker ps': {
+        ok: true,
+        stdout: '',
+        stderr: '',
+        exitCode: 0,
+      },
+    });
+    const lifecycle = createContainerLifecycle(executor);
+
+    await lifecycle.findContainerByWorkspaceLabel('/my/workspace/path');
+    expect(executor).toHaveBeenCalledWith(
+      'docker',
+      [
+        'ps',
+        '-a',
+        '--filter',
+        'label=devcontainer.local_folder="/my/workspace/path"',
+        '--format',
+        '{{.Names}}',
+      ],
+      expect.objectContaining({ timeout: DOCKER_INSPECT_TIMEOUT })
+    );
+  });
+
+  it('handles workspace paths with special characters (commas, spaces)', async () => {
+    const executor = mockExecutor({
+      'docker ps': {
+        ok: true,
+        stdout: 'special-container\n',
+        stderr: '',
+        exitCode: 0,
+      },
+    });
+    const lifecycle = createContainerLifecycle(executor);
+
+    const path = '/workspaces/path,with,commas and spaces';
+    await lifecycle.findContainerByWorkspaceLabel(path);
+    expect(executor).toHaveBeenCalledWith(
+      'docker',
+      [
+        'ps',
+        '-a',
+        '--filter',
+        `label=devcontainer.local_folder="${path}"`,
+        '--format',
+        '{{.Names}}',
+      ],
+      expect.objectContaining({ timeout: DOCKER_INSPECT_TIMEOUT })
+    );
+  });
+});
+
 // ─── devcontainerUp ──────────────────────────────────────────────────────────
 
 describe('devcontainerUp', () => {
