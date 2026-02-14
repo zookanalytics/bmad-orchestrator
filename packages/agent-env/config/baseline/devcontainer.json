@@ -7,8 +7,12 @@
   "containerUser": "node",
   "initializeCommand": "bash .devcontainer/init-host.sh",
   "mounts": [
-    "source=${localEnv:HOME}/.claude,target=/home/node/.claude,type=bind,readonly"
+    "source=${localEnv:HOME}/.claude,target=/home/node/.claude,type=bind,readonly",
+    "source=/run/host-services/ssh-auth.sock,target=/run/host-services/ssh-auth.sock,type=bind"
   ],
+  "containerEnv": {
+    "SSH_AUTH_SOCK": "/run/host-services/ssh-auth.sock"
+  },
   "features": {
     "ghcr.io/devcontainers/features/git:1": {},
     "ghcr.io/devcontainers/features/git-lfs:1": {}

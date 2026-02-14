@@ -11,6 +11,11 @@ import {
   patchContainerName,
 } from './devcontainer.js';
 
+// ─── Constants ──────────────────────────────────────────────────────────────
+
+/** Docker Desktop / OrbStack SSH agent socket path (macOS) */
+const SSH_AUTH_SOCKET = '/run/host-services/ssh-auth.sock';
+
 // ─── Test helpers ────────────────────────────────────────────────────────────
 
 let tempDir: string;
@@ -205,10 +210,18 @@ describe('devcontainer.json content', () => {
     expect(claudeMount).toContain('/home/node/.claude');
   });
 
-  it('does not include SSH agent socket mount (devcontainer handles SSH forwarding)', () => {
+  it('mounts Docker SSH agent socket for SSH forwarding', () => {
     const mounts = config.mounts as string[];
-    const sshMount = mounts.find((m) => m.includes('SSH_AUTH_SOCK'));
-    expect(sshMount).toBeUndefined();
+    const sshMount = mounts.find((m) => m.includes('ssh-auth.sock'));
+    expect(sshMount).toBeDefined();
+    expect(sshMount).toContain(SSH_AUTH_SOCKET);
+    expect(sshMount).toContain('type=bind');
+  });
+
+  it('sets SSH_AUTH_SOCK in containerEnv', () => {
+    const containerEnv = config.containerEnv as Record<string, string>;
+    expect(containerEnv).toBeDefined();
+    expect(containerEnv.SSH_AUTH_SOCK).toBe(SSH_AUTH_SOCKET);
   });
 
   it('has initializeCommand referencing init-host.sh', () => {

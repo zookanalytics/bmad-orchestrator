@@ -30,7 +30,8 @@
   "mounts": [
     "source=claude-devcontainer-shared-data,target=/shared-data,type=volume",
     "source=pnpm-store,target=/workspaces/.pnpm-store,type=volume",
-    "source=agent-tools-node-modules-${localWorkspaceFolderBasename},target=/workspaces/${localWorkspaceFolderBasename}/node_modules,type=volume"
+    "source=agent-tools-node-modules-${localWorkspaceFolderBasename},target=/workspaces/${localWorkspaceFolderBasename}/node_modules,type=volume",
+    "source=/run/host-services/ssh-auth.sock,target=/run/host-services/ssh-auth.sock,type=bind"
   ],
   // Project-specific environment variables (additions to image defaults)
   "containerEnv": {
@@ -43,7 +44,10 @@
     // Override pnpm store path for VS Code's /workspace convention (image uses /workspaces).
     // Virtual store uses default (node_modules/.pnpm) — per-container Docker volume mounts
     // already isolate each container's node_modules, so no custom path needed.
-    "npm_config_store_dir": "/workspaces/.pnpm-store"
+    "npm_config_store_dir": "/workspaces/.pnpm-store",
+    // SSH agent forwarding via Docker/OrbStack magic socket.
+    // VS Code overrides this via remoteEnv with its own forwarded socket, so both paths coexist.
+    "SSH_AUTH_SOCK": "/run/host-services/ssh-auth.sock"
   },
   // Container user and lifecycle commands
   // (Also in image LABEL, but explicit here for VS Code DevContainers compatibility)
