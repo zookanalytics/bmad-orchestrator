@@ -4,7 +4,7 @@ description: "Perform an ADVERSARIAL Senior Developer code review that finds 3-1
 author: "BMad"
 
 # Critical variables from config
-config_source: "{project-root}/_bmad/core/config.yaml"
+config_source: "{project-root}/_bmad/bmm/config.yaml"
 user_name: "{config_source}:user_name"
 communication_language: "{config_source}:communication_language"
 user_skill_level: "{config_source}:user_skill_level"
@@ -46,5 +46,3 @@ input_file_patterns:
     sharded_index: "{planning_artifacts}/*epic*/index.md"
     sharded_single: "{planning_artifacts}/*epic*/epic-{{epic_num}}.md"
     load_strategy: "SELECTIVE_LOAD"
-
-standalone: true
