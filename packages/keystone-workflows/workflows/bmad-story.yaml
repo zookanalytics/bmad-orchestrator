@@ -1,0 +1,173 @@
+$schema: https://raw.githubusercontent.com/mhingston/keystone-cli/main/schemas/workflow.json
+name: bmad-story
+description: "BMAD single-story workflow: dev-story → code-review (gemini) → code-review (claude) → verify → commit"
+
+inputs:
+  story_id:
+    type: string
+    description: "Story ID to process (e.g., '3c-1')"
+
+outputs:
+  success: ${{ steps.postCommit.exitCode == 0 }}
+  story_id: ${{ inputs.story_id }}
+  preflight_state: ${{ steps.preflight.output }}
+  commit_state: ${{ steps.postCommit.output }}
+
+steps:
+  # Step 1: Pre-flight check - record initial git state
+  - id: preflight
+    type: shell
+    allowInsecure: true
+    run: |
+      DIRTY_FILES=$(git status --porcelain 2>/dev/null | wc -l | tr -d ' ')
+      if [ "$DIRTY_FILES" -gt 0 ]; then
+        echo "⚠️  Warning: Working directory has $DIRTY_FILES uncommitted file(s):"
+        git status --porcelain
+        echo ""
+        echo "These files existed before workflow started."
+        printf "dirty:%s" "$DIRTY_FILES"
+      else
+        printf "clean:0"
+      fi
+
+  # Step 2: Develop the story using Claude Code CLI
+  - id: devStory
+    needs: [preflight]
+    type: shell
+    allowInsecure: true
+    run: |
+      claude -p "/bmad:bmm:workflows:dev-story - Work on story: ${{ inputs.story_id }}. Complete all tasks. Run tests after each implementation. Do not ask clarifying questions - use best judgment based on existing patterns. Do not commit any changes." --dangerously-skip-permissions
+    timeout: 900000
+    retry:
+      count: 1
+      backoff: exponential
+      baseDelay: 30000
+
+  # Step 3: Code review with Gemini CLI
+  - id: reviewGemini
+    type: shell
+    needs: [devStory]
+    allowInsecure: true
+    run: |
+      gemini "/bmad:bmm:workflows:code-review - Review story: ${{ inputs.story_id }}. When presenting fix options, always choose to auto-fix all issues immediately. Do not wait for user input. Do not commit any changes." --yolo
+    timeout: 900000
+    retry:
+      count: 1
+      backoff: exponential
+      baseDelay: 30000
+
+  # Step 4: Code review with Claude CLI (second opinion)
+  - id: reviewClaude
+    type: shell
+    needs: [reviewGemini]
+    allowInsecure: true
+    run: |
+      claude -p "/bmad:bmm:workflows:code-review - Review story: ${{ inputs.story_id }}. When presenting fix options, always choose to auto-fix all issues immediately. Do not wait for user input. Do not commit any changes." --dangerously-skip-permissions
+    timeout: 900000
+    retry:
+      count: 1
+      backoff: exponential
+      baseDelay: 30000
+
+  # Step 5: Verify tests pass
+  - id: verify
+    type: shell
+    needs: [reviewClaude]
+    allowInsecure: true
+    run: |
+      claude -p "/bmad:bmm:workflows:quick-dev - Verify tests pass for story ${{ inputs.story_id }}. Run all tests and fix any failures. Do not ask questions. Do not commit any changes." --dangerously-skip-permissions
+    timeout: 900000
+    retry:
+      count: 1
+      backoff: exponential
+      baseDelay: 30000
+
+  # Step 6: Check if there are changes to commit (idempotency)
+  - id: checkChanges
+    type: shell
+    needs: [verify]
+    allowInsecure: true
+    run: |
+      if git diff --quiet && git diff --cached --quiet; then
+        printf "no_changes"
+      else
+        printf "has_changes"
+      fi
+
+  # Step 7: Commit changes (skip if no changes)
+  - id: commit
+    type: shell
+    needs: [checkChanges]
+    if: ${{ steps.checkChanges.output != 'no_changes' }}
+    allowInsecure: true
+    run: |
+      claude -p "/git-workflow:commit - Commit implementation for story ${{ inputs.story_id }}. Stage all relevant changes and commit with a descriptive message. Do not ask for confirmation." --dangerously-skip-permissions
+    timeout: 300000
+    retry:
+      count: 1
+      backoff: exponential
+      baseDelay: 10000
+
+  # Step 8: Post-commit verification - ensure all changes are committed
+  - id: postCommit
+    type: shell
+    needs: [commit]
+    allowInsecure: true
+    run: |
+      # Handle "no changes" case
+      if [ "${{ steps.checkChanges.output }}" = "no_changes" ]; then
+        echo "ℹ️  No changes to commit - story already complete or no modifications made"
+        printf "ok:no_changes"
+        exit 0
+      fi
+
+      # Check for any uncommitted changes after commit
+      UNCOMMITTED=$(git status --porcelain 2>/dev/null)
+      if [ -n "$UNCOMMITTED" ]; then
+        echo "⚠️  Uncommitted changes detected after commit:"
+        echo "$UNCOMMITTED"
+        echo ""
+        # Extract pre-workflow dirty count from preflight output
+        PREFLIGHT_STATE="${{ steps.preflight.output }}"
+        PRE_DIRTY=$(echo "$PREFLIGHT_STATE" | cut -d: -f2)
+        POST_DIRTY=$(echo "$UNCOMMITTED" | wc -l | tr -d ' ')
+
+        if [ "$POST_DIRTY" -gt "$PRE_DIRTY" ]; then
+          NEW_FILES=$((POST_DIRTY - PRE_DIRTY))
+          echo "❌ $NEW_FILES new uncommitted file(s) created during workflow!"
+          echo "These should be reviewed and either committed or added to .gitignore"
+          exit 1
+        else
+          echo "ℹ️  These files existed before workflow started (pre-existing dirty state)"
+          printf "warn:pre_existing_dirty"
+        fi
+      else
+        echo "✅ All changes committed successfully"
+        printf "ok:clean"
+      fi
+
+  # Step 9: Story completion summary
+  - id: summary
+    type: shell
+    needs: [postCommit]
+    allowInsecure: true
+    run: |
+      echo "══════════════════════════════════════════════════════════════"
+      echo "Story ${{ inputs.story_id }} processing complete."
+      echo "══════════════════════════════════════════════════════════════"
+      echo ""
+      echo "Pre-flight: ${{ steps.preflight.output }}"
+      echo ""
+      echo "Steps completed:"
+      echo "  - devStory: ✓"
+      echo "  - reviewGemini: ✓"
+      echo "  - reviewClaude: ✓"
+      echo "  - verify: ✓"
+      if [ "${{ steps.checkChanges.output }}" = "no_changes" ]; then
+        echo "  - commit: skipped (no changes)"
+      else
+        echo "  - commit: ✓"
+      fi
+      echo ""
+      echo "Post-commit: ${{ steps.postCommit.output }}"
+      echo "══════════════════════════════════════════════════════════════"

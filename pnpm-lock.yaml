@@ -111,6 +111,8 @@ importers:
 
   packages/bmm-retrospective-module: {}
 
+  packages/keystone-workflows: {}
+
   packages/orchestrator:
     dependencies:
       '@inkjs/ui':
