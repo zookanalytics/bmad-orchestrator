@@ -115,12 +115,6 @@ describe('copyBaselineConfig', () => {
     expect(stats.isFile()).toBe(true);
   });
 
-  it('copies git-config to workspace', async () => {
-    await copyBaselineConfig(tempDir);
-    const stats = await stat(join(tempDir, '.devcontainer', 'git-config'));
-    expect(stats.isFile()).toBe(true);
-  });
-
   it('copies post-create.sh to workspace', async () => {
     await copyBaselineConfig(tempDir);
     const stats = await stat(join(tempDir, '.devcontainer', 'post-create.sh'));
@@ -208,6 +202,14 @@ describe('devcontainer.json content', () => {
     expect(claudeMount).toBeDefined();
     expect(claudeMount).toContain('readonly');
     expect(claudeMount).toContain('/home/node/.claude');
+  });
+
+  it('mounts host .gitconfig as read-only', () => {
+    const mounts = config.mounts as string[];
+    const gitconfigMount = mounts.find((m) => m.includes('.gitconfig'));
+    expect(gitconfigMount).toBeDefined();
+    expect(gitconfigMount).toContain('readonly');
+    expect(gitconfigMount).toContain('/home/node/.gitconfig');
   });
 
   it('mounts Docker SSH agent socket for SSH forwarding', () => {

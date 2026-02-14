@@ -6,10 +6,6 @@ set -euo pipefail
 
 echo "=== agent-env: post-create initialization ==="
 
-# Include agent-env git config for SSH-based signing
-cp .devcontainer/git-config /home/node/.devcontainer-git-config 2>/dev/null || true
-git config --global include.path /home/node/.devcontainer-git-config
-
 # Verify tool installation
 echo "--- Tool verification ---"
 echo "Node.js: $(node --version)"

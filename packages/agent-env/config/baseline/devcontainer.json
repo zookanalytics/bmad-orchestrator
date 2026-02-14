@@ -8,6 +8,7 @@
   "initializeCommand": "bash .devcontainer/init-host.sh",
   "mounts": [
     "source=${localEnv:HOME}/.claude,target=/home/node/.claude,type=bind,readonly",
+    "source=${localEnv:HOME}/.gitconfig,target=/home/node/.gitconfig,type=bind,readonly",
     "source=/run/host-services/ssh-auth.sock,target=/run/host-services/ssh-auth.sock,type=bind"
   ],
   "containerEnv": {
