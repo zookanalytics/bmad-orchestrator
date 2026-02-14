@@ -1,0 +1,55 @@
+# Keystone Configuration
+# Default configuration for BMAD workflows
+
+logging:
+  suppress_security_warning: true
+
+default_provider: openai
+
+providers:
+  # Install with: npm install @ai-sdk/openai @ai-sdk/anthropic
+  openai:
+    package: "@ai-sdk/openai"
+    api_key_env: OPENAI_API_KEY
+    default_model: gpt-4o
+  anthropic:
+    package: "@ai-sdk/anthropic"
+    api_key_env: ANTHROPIC_API_KEY
+    default_model: claude-sonnet-4-20250514
+
+  # Example: OpenAI-compatible provider (Groq)
+  # groq:
+  #   package: "@ai-sdk/openai"
+  #   base_url: https://api.groq.com/openai/v1
+  #   api_key_env: GROQ_API_KEY
+  #   default_model: llama-3.3-70b-versatile
+
+model_mappings:
+  "gpt-*": openai
+  "claude-*": anthropic
+  "o1-*": openai
+
+# mcp_servers:
+#   filesystem:
+#     command: npx
+#     args: ["-y", "@modelcontextprotocol/server-filesystem", "."]
+
+engines:
+  allowlist:
+    claude:
+      command: claude
+      version: "*"
+      versionArgs: ["--version"]
+    gemini:
+      command: gemini
+      version: "*"
+      versionArgs: ["--version"]
+
+defaults:
+  timeout: 900000  # 15 minutes for long CLI operations
+
+storage:
+  retention_days: 30
+
+expression:
+  strict: false

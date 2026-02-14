@@ -1,0 +1,28 @@
+{
+  "name": "@zookanalytics/keystone-workflows",
+  "version": "0.1.0",
+  "description": "Declarative automation workflows for AI-assisted development on keystone-cli",
+  "files": [
+    "workflows/",
+    "config/",
+    "scripts/postinstall.sh",
+    "LICENSE"
+  ],
+  "scripts": {
+    "postinstall": "sh ./scripts/postinstall.sh"
+  },
+  "keywords": [
+    "keystone",
+    "bmad",
+    "workflows",
+    "automation",
+    "agent",
+    "pipeline"
+  ],
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/zookanalytics/bmad-orchestrator",
+    "directory": "packages/keystone-workflows"
+  }
+}

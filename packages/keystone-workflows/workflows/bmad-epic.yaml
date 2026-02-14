@@ -1,0 +1,192 @@
+$schema: https://raw.githubusercontent.com/mhingston/keystone-cli/main/schemas/workflow.json
+name: bmad-epic
+description: "BMAD epic iterator: Parse sprint-status.yaml and process all stories in an epic using native foreach"
+
+inputs:
+  epic_id:
+    type: string
+    description: "Epic ID prefix (e.g., 'env-1')"
+  sprint_status_path:
+    type: string
+    default: "_bmad-output/implementation-artifacts/sprint-status.yaml"
+    description: "Path to sprint-status.yaml file"
+
+outputs:
+  result: ${{ steps.summary.output }}
+
+steps:
+  # Step 1: Parse sprint-status.yaml and output JSON array using shell
+  - id: parseStories
+    type: shell
+    allowInsecure: true
+    run: |
+      EPIC_ID="${{ inputs.epic_id }}"
+      SPRINT_STATUS="${{ inputs.sprint_status_path }}"
+
+      if [ ! -f "$SPRINT_STATUS" ]; then
+        echo "Error: Sprint status file not found at $SPRINT_STATUS" >&2
+        exit 1
+      fi
+
+      # Extract story IDs and write to temp file for script to read
+      STORIES=$(grep -E "^  ${EPIC_ID}-[0-9]+" "$SPRINT_STATUS" 2>/dev/null | sed 's/:.*//' | tr -d ' ')
+
+      if [ -z "$STORIES" ]; then
+        echo "Error: No stories found for epic $EPIC_ID in $SPRINT_STATUS" >&2
+        exit 1
+      fi
+
+      # Write as JSON array to well-known temp file
+      TMPFILE="/tmp/keystone-epic-stories.json"
+      printf '[' > "$TMPFILE"
+      FIRST=true
+      printf '%s\n' "$STORIES" | while IFS= read -r story; do
+        if [ "$FIRST" = "true" ]; then
+          FIRST=false
+        else
+          printf ',' >> "$TMPFILE"
+        fi
+        printf '"%s"' "$story" >> "$TMPFILE"
+      done
+      printf ']' >> "$TMPFILE"
+
+      # Output the temp file path
+      printf '%s' "$TMPFILE"
+
+  # Step 2: Read the JSON and return as array
+  - id: loadStories
+    type: script
+    allowInsecure: true
+    needs: [parseStories]
+    run: |
+      const tmpFile = "/tmp/keystone-epic-stories.json";
+      const content = require("fs").readFileSync(tmpFile, "utf8");
+      require("fs").unlinkSync(tmpFile);
+      return JSON.parse(content);
+
+  # Step 3: Confirm before processing
+  - id: confirmStart
+    type: human
+    needs: [loadStories]
+    message: |
+      Ready to process Epic ${{ inputs.epic_id }}
+
+      Stories to process:
+      ${{ steps.loadStories.output }}
+
+      Start processing?
+    inputType: confirm
+
+  # Step 4: Process each story using native foreach (sequential)
+  - id: processStory
+    type: workflow
+    needs: [confirmStart]
+    foreach: ${{ steps.loadStories.output }}
+    concurrency: 1
+    path: bmad-story.yaml
+    inputs:
+      story_id: ${{ item }}
+
+  # Step 5: Prepare summary data (shell step for template interpolation)
+  - id: prepareSummaryData
+    type: shell
+    needs: [processStory]
+    allowInsecure: true
+    run: |
+      cat > /tmp/keystone-summary-data.json << 'JSONEOF'
+      {"results": ${{ steps.processStory.output }}, "stories": ${{ steps.loadStories.output }}}
+      JSONEOF
+      echo "/tmp/keystone-summary-data.json"
+
+  # Step 6: Generate summary report
+  - id: generateSummary
+    type: script
+    needs: [prepareSummaryData]
+    allowInsecure: true
+    run: |
+      const fs = require("fs");
+      const data = JSON.parse(fs.readFileSync("/tmp/keystone-summary-data.json", "utf8"));
+      fs.unlinkSync("/tmp/keystone-summary-data.json");
+      const results = data.results || [];
+      const stories = data.stories || [];
+
+      let successful = 0;
+      let failed = 0;
+      const details = [];
+
+      for (let i = 0; i < stories.length; i++) {
+        const storyId = stories[i];
+        const result = results[i] || {};
+        const success = result.success !== false;
+
+        if (success) {
+          successful++;
+          details.push(`✅ ${storyId}: ${result.commit_state || 'completed'}`);
+        } else {
+          failed++;
+          details.push(`❌ ${storyId}: ${result.error || 'failed'}`);
+        }
+      }
+
+      return {
+        total: stories.length,
+        successful,
+        failed,
+        details: details.join('\n')
+      };
+
+  # Step 7: Display summary and confirm
+  - id: summary
+    type: human
+    needs: [generateSummary]
+    message: |
+      ══════════════════════════════════════════════════════════════
+      Epic ${{ inputs.epic_id }} Processing Complete
+      ══════════════════════════════════════════════════════════════
+
+      Stories: ${{ steps.generateSummary.output.total }} total
+        ✅ Successful: ${{ steps.generateSummary.output.successful }}
+        ❌ Failed: ${{ steps.generateSummary.output.failed }}
+
+      Results:
+      ${{ steps.generateSummary.output.details }}
+
+      ══════════════════════════════════════════════════════════════
+
+      Continue to retrospective?
+    inputType: confirm
+
+  # Step 8: Retrospective (manual - user runs interactively)
+  - id: retrospective
+    type: human
+    needs: [summary]
+    message: |
+      Time for Epic ${{ inputs.epic_id }} retrospective.
+
+      Please run in another terminal:
+        claude "/bmad:bmm:workflows:retrospective - Epic ${{ inputs.epic_id }}"
+
+      Confirm when complete.
+    inputType: confirm
+
+  # Step 9: Final Evaluation/Synopsis
+  - id: evaluation
+    type: shell
+    needs: [retrospective]
+    allowInsecure: true
+    run: |
+      claude -p "Perform final evaluation synopsis for Epic ${{ inputs.epic_id }}. Do not ask questions. Checklist: 1) Deliverables Check - list files created/modified, compare against planned deliverables, identify missing items. 2) Deviation Analysis - compare implementation vs tech spec, document deviations and scope changes. 3) Quality Gates - verify tests pass, check for TODO/FIXME comments, confirm docs updated. 4) Integration Verification - confirm proper integration, check for breaking changes. Save report to _bmad-output/implementation-artifacts/evaluations/epic-${{ inputs.epic_id }}-evaluation.md with ✅/⚠️/❌ format and final PASS/NEEDS_ATTENTION/FAIL status." --dangerously-skip-permissions
+    timeout: 1800000
+
+  # Step 10: Final sign-off
+  - id: finalSignoff
+    type: human
+    needs: [evaluation]
+    message: |
+      Epic ${{ inputs.epic_id }} Completion Checks Finished
+
+      Review the evaluation report at:
+      _bmad-output/implementation-artifacts/evaluations/epic-${{ inputs.epic_id }}-evaluation.md
+
+      Mark epic as complete?
+    inputType: confirm

@@ -126,6 +126,11 @@ jobs:
       #   - Workflow: publish.yml
       #   - npm settings: https://www.npmjs.com/package/@zookanalytics/agent-env/access
       #
+      #   - Package: @zookanalytics/keystone-workflows
+      #   - Repository: ZookAnalytics/bmad-orchestrator
+      #   - Workflow: publish.yml
+      #   - npm settings: https://www.npmjs.com/package/@zookanalytics/keystone-workflows/access
+      #
       # How it works:
       #   1. The `id-token: write` permission allows GitHub to issue an OIDC token
       #   2. npm verifies the token matches the configured repository and workflow
