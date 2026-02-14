@@ -2,17 +2,20 @@
  * Interactive menu orchestration for agent-env
  *
  * Lists instances and renders an interactive menu for selection.
- * On selection, attaches to the chosen instance's tmux session.
+ * On selection, provides an action menu (Attach, Rebuild, etc.).
  * Uses dependency injection for all I/O operations to enable testing.
  */
 
+import type { InstanceAction } from '../components/InteractiveMenu.js';
 import type { AttachResult, AttachInstanceDeps } from './attach-instance.js';
 import type { Instance, ListResult } from './list-instances.js';
+import type { RebuildInstanceDeps, RebuildResult } from './rebuild-instance.js';
+import type { RemoveInstanceDeps, RemoveResult } from './remove-instance.js';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
 export type MenuResult =
-  | { ok: true; action: 'attached'; instanceName: string }
+  | { ok: true; action: 'attached' | 'rebuilt' | 'removed' | 'purpose-shown'; instanceName: string }
   | { ok: true; action: 'empty' }
   | { ok: false; error: { code: string; message: string; suggestion?: string } };
 
@@ -23,10 +26,18 @@ export interface InteractiveMenuDeps {
     deps: AttachInstanceDeps,
     onStarting?: () => void
   ) => Promise<AttachResult>;
+  rebuildInstance: (
+    name: string,
+    deps: RebuildInstanceDeps,
+    force: boolean
+  ) => Promise<RebuildResult>;
+  removeInstance: (name: string, deps: RemoveInstanceDeps, force: boolean) => Promise<RemoveResult>;
   createAttachDeps: () => AttachInstanceDeps;
+  createRebuildDeps: () => RebuildInstanceDeps;
+  createRemoveDeps: () => RemoveInstanceDeps;
   renderMenu: (
     instances: Instance[],
-    onSelect: (name: string) => void
+    onAction: (action: InstanceAction, name: string) => void
   ) => { waitUntilExit: () => Promise<void> };
 }
 
@@ -38,7 +49,8 @@ export interface InteractiveMenuDeps {
  * 1. List all instances
  * 2. If none, show empty state and return
  * 3. Render interactive menu with instance selection
- * 4. On selection, attach to the chosen instance
+ * 4. On selection, show action menu
+ * 5. Execute chosen action
  */
 export async function launchInteractiveMenu(deps: InteractiveMenuDeps): Promise<MenuResult> {
   // Step 1: List instances
@@ -57,45 +69,72 @@ export async function launchInteractiveMenu(deps: InteractiveMenuDeps): Promise<
 
   // Step 2: No instances
   if (listResult.instances.length === 0) {
-    // Render menu with empty state (component handles display)
     deps.renderMenu(listResult.instances, () => {});
     return { ok: true, action: 'empty' };
   }
 
   // Step 3: Render menu and wait for selection
   let selectedName: string | undefined;
+  let selectedAction: InstanceAction | undefined;
 
-  const selectionPromise = new Promise<string>((resolve) => {
-    const { waitUntilExit } = deps.renderMenu(listResult.instances, (name: string) => {
-      selectedName = name;
-      resolve(name);
-    });
+  const selectionPromise = new Promise<{ action: InstanceAction; name: string }>((resolve) => {
+    const { waitUntilExit } = deps.renderMenu(
+      listResult.instances,
+      (action: InstanceAction, name: string) => {
+        selectedAction = action;
+        selectedName = name;
+        resolve({ action, name });
+      }
+    );
 
-    // If the user exits without selecting (e.g., Ctrl+C), waitUntilExit resolves
     void waitUntilExit().then(() => {
-      if (!selectedName) {
-        resolve('');
+      if (!selectedName || !selectedAction) {
+        // Resolve with empty to indicate exit
+        resolve({ action: 'attach', name: '' });
       }
     });
   });
 
-  const name = await selectionPromise;
+  const { action, name } = await selectionPromise;
 
   // User exited without selecting
   if (!name) {
     return { ok: true, action: 'empty' };
   }
 
-  // Step 4: Attach to selected instance
-  const attachDeps = deps.createAttachDeps();
-  const attachResult = await deps.attachInstance(name, attachDeps);
+  // Step 4: Execute selected action
+  switch (action) {
+    case 'attach': {
+      const attachDeps = deps.createAttachDeps();
+      const attachResult = await deps.attachInstance(name, attachDeps);
+      if (!attachResult.ok) return { ok: false, error: attachResult.error };
+      return { ok: true, action: 'attached', instanceName: name };
+    }
 
-  if (!attachResult.ok) {
-    return {
-      ok: false,
-      error: attachResult.error,
-    };
+    case 'rebuild': {
+      // Interactive menu selection IS the user's confirmation — pass force: true
+      // so running containers can be rebuilt without a dead-end.
+      const rebuildDeps = deps.createRebuildDeps();
+      const rebuildResult = await deps.rebuildInstance(name, rebuildDeps, true);
+      if (!rebuildResult.ok) return { ok: false, error: rebuildResult.error };
+      return { ok: true, action: 'rebuilt', instanceName: name };
+    }
+
+    case 'purpose': {
+      const instance = listResult.instances.find((i) => i.name === name);
+      if (instance) {
+        console.log(`\nPurpose for ${name}:`);
+        console.log(instance.purpose || 'No purpose set.');
+      }
+      return { ok: true, action: 'purpose-shown', instanceName: name };
+    }
+
+    case 'remove': {
+      const removeDeps = deps.createRemoveDeps();
+      // We use force=false for the interactive menu to trigger safety checks
+      const removeResult = await deps.removeInstance(name, removeDeps, false);
+      if (!removeResult.ok) return { ok: false, error: removeResult.error };
+      return { ok: true, action: 'removed', instanceName: name };
+    }
   }
-
-  return { ok: true, action: 'attached', instanceName: name };
 }

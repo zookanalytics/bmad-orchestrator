@@ -318,8 +318,53 @@ describe('createInitialState', () => {
   });
 
   it('accepts custom container name', () => {
-    const state = createInitialState('test', 'repo-url', 'custom-container');
+    const state = createInitialState('test', 'repo-url', { containerName: 'custom-container' });
     expect(state.containerName).toBe('custom-container');
+  });
+
+  it('sets configSource when provided', () => {
+    const state = createInitialState('test', 'repo-url', { configSource: 'repo' });
+    expect(state.configSource).toBe('repo');
+  });
+
+  it('defaults configSource to baseline when not provided', () => {
+    const state = createInitialState('test', 'repo-url');
+    expect(state.configSource).toBe('baseline');
+  });
+
+  it('sets both containerName and configSource via options', () => {
+    const state = createInitialState('test', 'repo-url', {
+      containerName: 'custom',
+      configSource: 'repo',
+    });
+    expect(state.containerName).toBe('custom');
+    expect(state.configSource).toBe('repo');
+  });
+});
+
+// ─── isValidState backwards compatibility ───────────────────────────────────
+
+describe('isValidState backwards compatibility', () => {
+  it('accepts state without configSource field', async () => {
+    const wsPath = createWorkspacePath(tempDir, 'no-config-source');
+    await mkdir(wsPath.agentEnvDir, { recursive: true });
+    // Write state WITHOUT configSource — mimics pre-existing state files
+    const legacyState = {
+      name: 'test',
+      repo: 'https://github.com/user/repo.git',
+      createdAt: '2026-01-01T00:00:00.000Z',
+      lastAttached: '2026-01-01T00:00:00.000Z',
+      purpose: null,
+      containerName: 'ae-test',
+    };
+    await writeFile(wsPath.stateFile, JSON.stringify(legacyState, null, 2));
+
+    const state = await readState(wsPath);
+
+    expect(state.name).toBe('test');
+    expect(state.containerName).toBe('ae-test');
+    // configSource should be undefined (not present in old state files)
+    expect(state.configSource).toBeUndefined();
   });
 });
 

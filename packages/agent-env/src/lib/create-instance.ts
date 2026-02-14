@@ -334,6 +334,7 @@ export async function createInstance(
 
   // Step 5: Copy baseline devcontainer config if none exists
   const hasConfig = await hasDevcontainerConfig(wsPath.root, deps.devcontainerFsDeps);
+  let configSource: 'baseline' | 'repo' = 'baseline';
   if (!hasConfig) {
     try {
       await copyBaselineConfig(wsPath.root, deps.devcontainerFsDeps);
@@ -363,6 +364,8 @@ export async function createInstance(
         },
       };
     }
+  } else {
+    configSource = 'repo';
   }
 
   // Step 5c: Pre-flight check for existing containers at this workspace path
@@ -410,7 +413,10 @@ export async function createInstance(
   }
 
   // Step 7: Write initial state
-  const state = createInitialState(wsPath.name, repoUrl, actualContainerName);
+  const state = createInitialState(wsPath.name, repoUrl, {
+    containerName: actualContainerName,
+    configSource,
+  });
   await writeStateAtomic(wsPath, state, deps.stateFsDeps);
 
   // Step 8: Ensure .agent-env/ is in .git/info/exclude so state files don't show as untracked

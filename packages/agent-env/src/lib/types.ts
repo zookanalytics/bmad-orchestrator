@@ -43,10 +43,14 @@ export interface InstanceState {
   createdAt: string;
   /** ISO 8601 last-attached timestamp */
   lastAttached: string;
+  /** ISO 8601 last-rebuilt timestamp */
+  lastRebuilt?: string;
   /** User-provided description, null if not set */
   purpose: string | null;
   /** Container name (e.g., "ae-bmad-orch-auth") */
   containerName: string;
+  /** How the devcontainer config was provisioned. Absent = 'baseline' for backwards compat. */
+  configSource?: 'baseline' | 'repo';
 }
 
 // ─── Container Types ────────────────────────────────────────────────────────

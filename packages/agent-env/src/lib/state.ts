@@ -98,14 +98,15 @@ export async function writeStateAtomic(
  *
  * @param name - Workspace name (e.g., "bmad-orch-auth")
  * @param repo - Git remote URL
- * @param containerName - Optional container name (defaults to ae-<name>)
+ * @param options - Optional container name and config source
  * @returns New InstanceState with current timestamp
  */
 export function createInitialState(
   name: string,
   repo: string,
-  containerName?: string
+  options?: { containerName?: string; configSource?: 'baseline' | 'repo' }
 ): InstanceState {
+  const { containerName, configSource } = options ?? {};
   const now = new Date().toISOString();
   return {
     name,
@@ -114,6 +115,7 @@ export function createInitialState(
     lastAttached: now,
     purpose: null,
     containerName: containerName ?? `${CONTAINER_PREFIX}${name}`,
+    configSource: configSource ?? 'baseline',
   };
 }
 

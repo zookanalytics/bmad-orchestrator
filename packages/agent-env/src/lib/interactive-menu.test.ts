@@ -1,8 +1,11 @@
 import { describe, it, expect, vi } from 'vitest';
 
+import type { InstanceAction } from '../components/InteractiveMenu.js';
 import type { AttachResult, AttachInstanceDeps } from './attach-instance.js';
 import type { InteractiveMenuDeps } from './interactive-menu.js';
 import type { ListResult, Instance } from './list-instances.js';
+import type { RebuildResult, RebuildInstanceDeps } from './rebuild-instance.js';
+import type { RemoveResult, RemoveInstanceDeps } from './remove-instance.js';
 
 import { launchInteractiveMenu } from './interactive-menu.js';
 
@@ -55,7 +58,15 @@ function createMockDeps(overrides: Partial<InteractiveMenuDeps> = {}): Interacti
     attachInstance: vi
       .fn<(name: string, deps: AttachInstanceDeps) => Promise<AttachResult>>()
       .mockResolvedValue({ ok: true }),
+    rebuildInstance: vi
+      .fn<(name: string, deps: RebuildInstanceDeps) => Promise<RebuildResult>>()
+      .mockResolvedValue({ ok: true, containerName: 'ae-test', wasRunning: false }),
+    removeInstance: vi
+      .fn<(name: string, deps: RemoveInstanceDeps) => Promise<RemoveResult>>()
+      .mockResolvedValue({ ok: true }),
     createAttachDeps: vi.fn().mockReturnValue({} as AttachInstanceDeps),
+    createRebuildDeps: vi.fn().mockReturnValue({} as RebuildInstanceDeps),
+    createRemoveDeps: vi.fn().mockReturnValue({} as RemoveInstanceDeps),
     renderMenu: vi.fn().mockReturnValue({ waitUntilExit: () => new Promise(() => {}) }),
     ...overrides,
   };
@@ -92,18 +103,18 @@ describe('launchInteractiveMenu', () => {
     });
   });
 
-  describe('instance selection (AC: #1, #3)', () => {
-    it('calls attachInstance with selected instance name', async () => {
-      const instances = [makeInstance({ name: 'alpha' }), makeInstance({ name: 'beta' })];
+  describe('action selection', () => {
+    it('calls attachInstance when attach action is selected', async () => {
+      const instances = [makeInstance({ name: 'alpha' })];
 
-      // Mock renderMenu to immediately call onSelect with 'alpha'
       const renderMenu = vi
         .fn()
-        .mockImplementation((_instances: Instance[], onSelect: (name: string) => void) => {
-          // Simulate user selecting 'alpha'
-          setTimeout(() => onSelect('alpha'), 0);
-          return { waitUntilExit: () => new Promise(() => {}) };
-        });
+        .mockImplementation(
+          (_instances: Instance[], onAction: (action: InstanceAction, name: string) => void) => {
+            setTimeout(() => onAction('attach', 'alpha'), 0);
+            return { waitUntilExit: () => new Promise(() => {}) };
+          }
+        );
 
       const attachInstance = vi.fn().mockResolvedValue({ ok: true });
 
@@ -119,33 +130,60 @@ describe('launchInteractiveMenu', () => {
       expect(attachInstance).toHaveBeenCalledWith('alpha', expect.anything());
     });
 
-    it('returns attach error when attach fails', async () => {
+    it('calls rebuildInstance when rebuild action is selected', async () => {
       const instances = [makeInstance({ name: 'alpha' })];
 
       const renderMenu = vi
         .fn()
-        .mockImplementation((_instances: Instance[], onSelect: (name: string) => void) => {
-          setTimeout(() => onSelect('alpha'), 0);
-          return { waitUntilExit: () => new Promise(() => {}) };
-        });
+        .mockImplementation(
+          (_instances: Instance[], onAction: (action: InstanceAction, name: string) => void) => {
+            setTimeout(() => onAction('rebuild', 'alpha'), 0);
+            return { waitUntilExit: () => new Promise(() => {}) };
+          }
+        );
 
-      const attachInstance = vi.fn().mockResolvedValue({
-        ok: false,
-        error: { code: 'CONTAINER_ERROR', message: 'Failed to start' },
+      const rebuildInstance = vi.fn().mockResolvedValue({
+        ok: true,
+        containerName: 'ae-alpha',
+        wasRunning: false,
       });
 
       const deps = createMockDeps({
         listInstances: vi.fn().mockResolvedValue(makeListSuccess(instances)),
         renderMenu,
-        attachInstance,
+        rebuildInstance,
       });
 
       const result = await launchInteractiveMenu(deps);
 
-      expect(result.ok).toBe(false);
-      if (!result.ok) {
-        expect(result.error.code).toBe('CONTAINER_ERROR');
-      }
+      expect(result).toEqual({ ok: true, action: 'rebuilt', instanceName: 'alpha' });
+      expect(rebuildInstance).toHaveBeenCalledWith('alpha', expect.anything(), true);
+    });
+
+    it('calls removeInstance when remove action is selected', async () => {
+      const instances = [makeInstance({ name: 'alpha' })];
+
+      const renderMenu = vi
+        .fn()
+        .mockImplementation(
+          (_instances: Instance[], onAction: (action: InstanceAction, name: string) => void) => {
+            setTimeout(() => onAction('remove', 'alpha'), 0);
+            return { waitUntilExit: () => new Promise(() => {}) };
+          }
+        );
+
+      const removeInstance = vi.fn().mockResolvedValue({ ok: true });
+
+      const deps = createMockDeps({
+        listInstances: vi.fn().mockResolvedValue(makeListSuccess(instances)),
+        renderMenu,
+        removeInstance,
+      });
+
+      const result = await launchInteractiveMenu(deps);
+
+      expect(result).toEqual({ ok: true, action: 'removed', instanceName: 'alpha' });
+      expect(removeInstance).toHaveBeenCalledWith('alpha', expect.anything(), false);
     });
   });
 
@@ -153,7 +191,6 @@ describe('launchInteractiveMenu', () => {
     it('returns empty action when user exits menu', async () => {
       const instances = [makeInstance({ name: 'alpha' })];
 
-      // Mock renderMenu where waitUntilExit resolves (user pressed Ctrl+C)
       const renderMenu = vi.fn().mockImplementation(() => ({
         waitUntilExit: () => Promise.resolve(),
       }));

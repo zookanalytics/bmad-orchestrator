@@ -586,6 +586,32 @@ describe('createInstance', () => {
     expect(state.containerName).toBe('custom-container-name');
   });
 
+  it('sets configSource to baseline when repo has no devcontainer config', async () => {
+    const deps = createTestDeps(gitCloneSuccess, {}, false);
+
+    const result = await createInstance('auth', 'https://github.com/user/bmad-orch.git', deps);
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) throw new Error('Expected success');
+
+    const stateContent = await readFile(result.workspacePath.stateFile, 'utf-8');
+    const state = JSON.parse(stateContent);
+    expect(state.configSource).toBe('baseline');
+  });
+
+  it('sets configSource to repo when repo has its own devcontainer config', async () => {
+    const deps = createTestDeps(gitCloneSuccess, {}, true);
+
+    const result = await createInstance('auth', 'https://github.com/user/bmad-orch.git', deps);
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) throw new Error('Expected success');
+
+    const stateContent = await readFile(result.workspacePath.stateFile, 'utf-8');
+    const state = JSON.parse(stateContent);
+    expect(state.configSource).toBe('repo');
+  });
+
   it('adds .agent-env/ to .git/info/exclude after writing state', async () => {
     // Override the default executor to also create .git/info/exclude (simulating real git clone)
     const deps = createTestDeps(gitCloneSuccess);

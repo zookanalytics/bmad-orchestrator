@@ -47,9 +47,9 @@ function makeInstance(overrides: Partial<Instance> = {}): Instance {
 describe('InteractiveMenu', () => {
   describe('empty state (AC: #6)', () => {
     it('shows create suggestion when no instances exist', () => {
-      const onSelect = vi.fn();
+      const onAction = vi.fn();
       const { lastFrame } = render(
-        <InteractiveMenu instances={[]} onSelect={onSelect} terminalWidth={80} />
+        <InteractiveMenu instances={[]} onAction={onAction} terminalWidth={80} />
       );
       const output = lastFrame() ?? '';
       expect(output).toContain('No instances found');
@@ -63,12 +63,12 @@ describe('InteractiveMenu', () => {
         makeInstance({ name: 'alpha', status: 'running', purpose: 'Auth service' }),
         makeInstance({ name: 'beta', status: 'stopped', purpose: 'Database work' }),
       ];
-      const onSelect = vi.fn();
+      const onAction = vi.fn();
       const { lastFrame } = render(
-        <InteractiveMenu instances={instances} onSelect={onSelect} terminalWidth={100} />
+        <InteractiveMenu instances={instances} onAction={onAction} terminalWidth={100} />
       );
       const output = lastFrame() ?? '';
-      expect(output).toContain('Select an instance to attach');
+      expect(output).toContain('Select an instance:');
       expect(output).toContain('alpha');
       expect(output).toContain('beta');
     });
@@ -84,9 +84,9 @@ describe('InteractiveMenu', () => {
           },
         }),
       ];
-      const onSelect = vi.fn();
+      const onAction = vi.fn();
       const { lastFrame } = render(
-        <InteractiveMenu instances={instances} onSelect={onSelect} terminalWidth={100} />
+        <InteractiveMenu instances={instances} onAction={onAction} terminalWidth={100} />
       );
       const output = lastFrame() ?? '';
       // Clean state shows ✓
@@ -97,30 +97,50 @@ describe('InteractiveMenu', () => {
   });
 
   describe('user interaction (AC: #3)', () => {
-    it('calls onSelect with the selected instance name when user presses Enter', async () => {
+    it('shows action menu after selecting an instance', async () => {
       const instances = [
         makeInstance({ name: 'alpha', status: 'running' }),
         makeInstance({ name: 'beta', status: 'stopped' }),
       ];
-      const onSelect = vi.fn();
+      const onAction = vi.fn();
       const { stdin, lastFrame } = render(
-        <InteractiveMenu instances={instances} onSelect={onSelect} terminalWidth={80} />
+        <InteractiveMenu instances={instances} onAction={onAction} terminalWidth={80} />
       );
 
       // Verify initial render
-      const output = lastFrame() ?? '';
+      let output = lastFrame() ?? '';
+      expect(output).toContain('Select an instance:');
       expect(output).toContain('alpha');
-      expect(output).toContain('beta');
 
-      // Simulate pressing down arrow to select 'beta', then Enter
-      stdin.write('\x1B[B'); // Down arrow key
+      // Select 'alpha'
       stdin.write('\r'); // Enter key
 
       // Wait for Ink to process the input
       await new Promise((resolve) => setTimeout(resolve, 50));
 
-      expect(onSelect).toHaveBeenCalledTimes(1);
-      expect(onSelect).toHaveBeenCalledWith('beta');
+      output = lastFrame() ?? '';
+      expect(output).toContain('Manage alpha:');
+      expect(output).toContain('Attach to session');
+      expect(output).toContain('Rebuild container');
+    });
+
+    it('calls onAction with selected action and instance name', async () => {
+      const instances = [makeInstance({ name: 'alpha', status: 'running' })];
+      const onAction = vi.fn();
+      const { stdin } = render(
+        <InteractiveMenu instances={instances} onAction={onAction} terminalWidth={80} />
+      );
+
+      // Select 'alpha'
+      stdin.write('\r'); // Enter key
+      await new Promise((resolve) => setTimeout(resolve, 50));
+
+      // Action menu is now visible, select 'rebuild' (down arrow once from 'attach')
+      stdin.write('\x1B[B'); // Down arrow key
+      stdin.write('\r'); // Enter key
+      await new Promise((resolve) => setTimeout(resolve, 50));
+
+      expect(onAction).toHaveBeenCalledWith('rebuild', 'alpha');
     });
   });
 });

@@ -141,9 +141,10 @@ export async function copyBaselineConfig(
 export async function patchContainerName(
   workspacePath: string,
   containerName: string,
-  deps: Pick<DevcontainerFsDeps, 'readFile' | 'writeFile'> = defaultFsDeps
+  deps: Pick<DevcontainerFsDeps, 'readFile' | 'writeFile'> = defaultFsDeps,
+  configDir: string = DEVCONTAINER_DIR
 ): Promise<void> {
-  const configPath = join(workspacePath, DEVCONTAINER_DIR, DEVCONTAINER_JSON);
+  const configPath = join(workspacePath, configDir, DEVCONTAINER_JSON);
   const content = await deps.readFile(configPath, 'utf-8');
   const config = JSON.parse(content);
 
