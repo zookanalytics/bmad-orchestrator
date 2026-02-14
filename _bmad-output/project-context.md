@@ -11,6 +11,13 @@ status: 'complete'
 
 _This file contains critical rules and patterns that AI agents must follow when implementing code in this project. Focus on unobvious details that agents might otherwise miss._
 
+## Ecosystem Brief
+
+**Before starting work on any component in this repository, read the ecosystem brief:**
+`_bmad-output/planning-artifacts/monorepo-brief.md`
+
+This document defines the shared context all tools operate within: the three-concern taxonomy (Isolate, Automate, Observe), ecosystem principles, integration boundaries, and architectural decisions. It explains how components relate to each other and what boundaries they must respect.
+
 ---
 
 ## Technology Stack & Versions
