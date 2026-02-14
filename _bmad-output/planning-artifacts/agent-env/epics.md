@@ -1,14 +1,25 @@
 ---
-stepsCompleted: [1, 2, 3, 4, 5]
+stepsCompleted: [1, 2, 3, 4, 5, 'env2-step1', 'env2-step2', 'env2-step2-approved', 'env2-step3']
 epicStructureApproved: true
 storiesComplete: true
 advancedElicitation:
   - pre-mortem-analysis
   - challenge-from-critical-perspective
-status: complete
+  - architecture-decision-records
+status: in-progress-expansion
+previousStatus: complete
+expansionRound: 2
 inputDocuments:
   - '_bmad-output/planning-artifacts/agent-env/prd.md'
   - '_bmad-output/planning-artifacts/agent-env/architecture.md'
+  - '_bmad-output/planning-artifacts/monorepo-brief.md'
+notes:
+  - 'Epics 1-5 implemented, covering FR1-FR42, NFR1-NFR21'
+  - 'PRD revised 2026-02-14: added FR43-FR54, NFR22-NFR24'
+  - 'Architecture revised 2026-02-14: naming model, baseline prompt, purpose propagation, CLI inside container'
+  - 'FR44 missing from PRD numbering (jumps FR43 to FR45)'
+  - 'Epics 6-8 designed via pre-mortem + challenge + ADR elicitation'
+  - 'Key ADR decisions: jq for tmux, no migration, opaque AGENT_ENV_INSTANCE, CLI-in-container with dev mode, VS Code regen in purpose command'
 ---
 
 # agent-env - Epic Breakdown
@@ -143,6 +154,78 @@ This document provides the complete epic and story breakdown for agent-env, deco
 - Error codes: `SAFETY_CHECK_FAILED`, `WORKSPACE_NOT_FOUND`, `CONTAINER_ERROR`, `GIT_ERROR`, `ORBSTACK_REQUIRED`
 - JSON output contract: `{ ok: boolean, data: T | null, error: AppError | null }`
 
+## New Requirements (PRD Revision 2026-02-14)
+
+### New Functional Requirements
+
+**Multi-Instance & Naming (FR43, FR45)**
+- FR43: User can create multiple instances from the same repository, each with a distinct user-chosen name
+- FR45: User can see the source repository for each instance in list output
+
+**Purpose at Creation & In-Container Visibility (FR46-FR50)**
+- FR46: User can set instance purpose at creation time via `--purpose` flag
+- FR47: System exposes instance name as `$AGENT_ENV_INSTANCE` environment variable inside the container
+- FR48: System exposes instance purpose as `$AGENT_ENV_PURPOSE` environment variable inside the container
+- FR49: System displays instance name and purpose in the tmux status bar inside the container
+- FR50: System updates tmux status bar purpose live when purpose changes externally (within 30 seconds)
+
+**Repo Management — Growth (FR51-FR53)**
+- FR51: System tracks repositories used for instance creation in a local registry
+- FR52: User can list tracked repositories
+- FR53: User can create a new instance from a registered repository without re-entering the URL
+
+**VS Code Purpose Visibility — Growth (FR54)**
+- FR54: System displays instance purpose in VS Code window title when attached via VS Code
+
+### New Non-Functional Requirements
+
+- NFR22: Purpose displayed in tmux status bar within 1 second of attach
+- NFR23: Live purpose updates reflected in tmux status bar within 30 seconds of change
+- NFR24: tmux status bar integration does not interfere with user's tmux configuration outside agent-env instances
+
+### Additional Requirements from Architecture Revision (2026-02-14)
+
+**Revised Naming Model (supersedes flat workspace layout):**
+- Instance name is user-chosen, scoped to a repository. Unique key is `(repo-slug, instance-name)`
+- Workspace folder structure: `~/.agent-env/workspaces/<repo-slug>/<instance>/`
+- Repo slug derived from git remote URL (last path segment, minus `.git`)
+- Slug compression for slugs > 39 chars: `<first 15>_<6-char SHA-256>_<last 15>`
+- Instance name max 20 chars, validated at create time
+- Container naming: `ae-<repo-slug>-<instance>` (max 63 chars)
+- Two-phase repo resolution: (1) resolve repo from `--repo` or cwd, (2) resolve instance — unambiguous resolves directly, ambiguous errors with suggestion
+- BREAKING CHANGE: existing flat workspaces need migration to nested structure
+- BREAKING CHANGE: existing state.json schema changes (`name` → `instance`, adds `repoSlug`, `repoUrl`)
+
+**Baseline Config Prompt (supersedes silent copy-if-missing):**
+- Repos with `.devcontainer/`: prompt user ("Use repo config or agent-env baseline?")
+- `--baseline` flag: force agent-env baseline over repo config, no prompt
+- `--no-baseline` flag: use repo config, no prompt
+- Create command signature: `agent-env create <name> [--repo <url|.>] [--attach] [--purpose <text>] [--baseline | --no-baseline]`
+
+**Purpose Propagation into Container:**
+- Bind-mount `.agent-env/` to `/etc/agent-env/` inside container (read-write)
+- Container env vars set in devcontainer.json: `AGENT_ENV_CONTAINER=true`, `AGENT_ENV_INSTANCE=<name>`, `AGENT_ENV_REPO=<repo-slug>`
+- tmux status bar reads from `/etc/agent-env/state.json`, `status-interval` set to 15s
+- Purpose env var (`$AGENT_ENV_PURPOSE`) set via baseline shell init scripts, reads from state.json per shell session
+
+**agent-env CLI Inside Container:**
+- Installed globally via `post-create.sh` (`pnpm add -g @zookanalytics/agent-env`)
+- Environment-aware: detects container via `AGENT_ENV_CONTAINER` env var
+- Resolves state path to `/etc/agent-env/state.json` when inside container
+- Purpose update pipeline: state.json atomic write → VS Code template processing → tmux auto-refresh
+- VS Code: `.vscode/statusBar.template.json` → `statusBar.json` with `{{PURPOSE}}` substitution (skipped silently if no template exists)
+
+**Repo Registry (Growth — FR51-53):**
+- Derived from existing workspaces, no separate registry file
+- `agent-env repos` scans `~/.agent-env/workspaces/*/` and cross-references state.json for full URLs
+- Repos disappear from list when all their instances are removed (acceptable for convenience shortcut)
+
+**From Monorepo Brief — Ecosystem Context:**
+- agent-env serves the "Isolate" concern
+- CLI contracts (`--json` output) are the integration mechanism between tools
+- agent-env owns the workspace data directory structure, including reserved path for workflow state
+- Components are independently upgradeable — agent-env upgrades without requiring orchestrator changes
+
 ### FR Coverage Map
 
 | FR | Epic | Description |
@@ -173,7 +256,7 @@ This document provides the complete epic and story breakdown for agent-env, deco
 | FR24 | Epic 5 | Detect never-pushed branches |
 | FR25 | Epic 5 | Clear blocker messaging |
 | FR26 | Epic 5 | Force-remove warning |
-| FR27 | Epic 2 | Baseline devcontainer |
+| FR27 | Epic 2 (original), Epic 7 (revision) | Baseline devcontainer; opt-in prompt added in Epic 7 |
 | FR28 | Epic 2 | Claude Code ready |
 | FR29 | Epic 2 | Git signing configured |
 | FR30 | Epic 2 | SSH agent forwarded |
@@ -190,7 +273,19 @@ This document provides the complete epic and story breakdown for agent-env, deco
 | FR41 | Epic 1 | Linux support |
 | FR42 | Epic 1 | Docker requirement |
 
-**Coverage:** 42/42 FRs mapped (100%)
+| FR43 | Epic 7 | Multi-instance per repo with user-chosen names |
+| FR45 | Epic 7 | Source repo visible in list output |
+| FR46 | Epic 6 | Purpose set at creation via --purpose flag |
+| FR47 | Epic 6 | $AGENT_ENV_INSTANCE env var inside container |
+| FR48 | Epic 6 | $AGENT_ENV_PURPOSE env var inside container |
+| FR49 | Epic 6 | Instance name + purpose in tmux status bar |
+| FR50 | Epic 6 | Live tmux purpose updates (within 30s) |
+| FR51 | Epic 8 | Track repos in local registry |
+| FR52 | Epic 8 | List tracked repos |
+| FR53 | Epic 8 | Create from registered repo |
+| FR54 | Epic 8 | VS Code window title shows purpose |
+
+**Coverage:** 53/54 FRs mapped (100% of existing FRs; FR44 absent from PRD numbering)
 
 ### NFR Touchpoints by Epic
 
@@ -201,6 +296,9 @@ This document provides the complete epic and story breakdown for agent-env, deco
 | Epic 3 | NFR2 (list < 500ms), NFR10 (partial failures don't block), NFR13 (JSON parseable), NFR14 (any git remote) |
 | Epic 4 | NFR1 (attach < 2s), NFR8 (tmux persists), NFR16 (works in tmux/screen/bare) |
 | Epic 5 | NFR5 (safety check < 3s), NFR6 (zero false negatives), NFR7 (false positives acceptable), NFR9 (state survives restart) |
+| Epic 6 | NFR22 (purpose in tmux < 1s attach), NFR23 (live purpose updates < 30s), NFR24 (tmux integration non-interfering) |
+| Epic 7 | NFR17 (understandable naming model), NFR18 (clear separation) |
+| Epic 8 | NFR17 (understandable codebase) |
 
 ## Existing Infrastructure
 
@@ -1245,17 +1343,572 @@ So that I can clean up without resolving every git issue.
 
 ---
 
+### Epic 6: In-Container Purpose & Tmux Visibility
+**User Value:** Users always know what they're working on — purpose is visible in the tmux status bar, accessible via env vars, and updatable from anywhere (host CLI or inside the container).
+
+This delivers the "context is always visible" experience from Journey 5 in the PRD. Works with the current flat naming model — no dependency on Epic 7.
+
+**What it delivers:**
+- `--purpose` flag on `create` command
+- `$AGENT_ENV_INSTANCE`, `$AGENT_ENV_PURPOSE`, `$AGENT_ENV_CONTAINER`, `$AGENT_ENV_REPO` env vars inside container
+- tmux status bar shows instance name + purpose
+- Live tmux updates within 30 seconds when purpose changes
+- Bind-mount `.agent-env/` to `/etc/agent-env/` (read-write)
+- agent-env CLI installed inside containers (with dev mode bind-mount for testing unreleased versions)
+
+**FRs covered:** FR46, FR47, FR48, FR49, FR50
+**NFRs covered:** NFR22, NFR23, NFR24
+
+**Architecture Decisions (from ADR review):**
+- **tmux reads purpose via jq:** `jq -r '"\(.instance // "?") | \(.purpose // "")"' /etc/agent-env/state.json 2>/dev/null || echo "?"` — single invocation for both fields, file guard for missing state. jq is a hard dependency — baseline guarantees it. Non-baseline containers without jq get a clear error message, not a silent fallback. If you opt out of the baseline, you need jq in your image for purpose display.
+- **`AGENT_ENV_INSTANCE` is opaque:** With current flat model it's the compound name (e.g., `bmad-orch-auth`). Epic 7 changes it to the short instance name (`auth`). Consumers treat it as opaque. The "break" is a UX improvement (shorter tmux display).
+- **First story is tmux spike:** Validate jq parsing, tmux `status-interval 15`, status bar format before building the full pipeline.
+- **CLI-in-container with dev mode:** `post-create.sh` checks for local dev mount at `/opt/agent-env-dev` and runs `pnpm link --global`. Falls back to `pnpm add -g @zookanalytics/agent-env`. Full CLI inside container from day one — required for VS Code template regeneration in Epic 8.
+- **Purpose update writes state.json only.** tmux refreshes on its 15s interval. VS Code template regeneration added in Epic 8 by extending the purpose command.
+
+**UX Decisions (from War Room):**
+- **Purpose truncation in tmux:** Truncate purpose at 40 characters with `…` in the tmux status script. Full purpose always available via `agent-env purpose <name>`. The bar is a reminder, not the source of truth.
+- **No-purpose display:** If purpose is null/empty, show instance name only — no trailing pipe, no placeholder text. Clean and intentional.
+- **tmux display improves retroactively after Epic 7:** Current compound names (e.g., `bmad-orch-auth | JWT auth`) are longer. After Epic 7, short names (`auth | JWT auth`) are cleaner. No action needed — it just gets better.
+- **tmux testing strategy:** Unit test the jq data extraction command against fixture JSON files (various states: purpose set, purpose null, file missing, malformed JSON). Manual validation for tmux wiring in the spike story. Don't try to mock tmux in vitest.
+- **Existing instances:** New baseline features (bind-mount, env vars, tmux status bar, CLI installation) only apply to newly created instances. Existing instances must be recreated. A `rebuild` command is being spec'd separately to address this for future baseline updates. Document in release notes.
+- **Parallel development note:** Recommended order is Epic 6 first, then Epic 7. While architecturally independent, simultaneous development creates merge conflicts in 4+ shared files (`create.ts`, `devcontainer.json`, `state.ts`, `workspace.ts`). Sequential development is significantly cleaner.
+
+**Dependencies:** Requires Epics 1-5 (complete). Independent of Epics 7 and 8.
+
+#### Story 6.1: Baseline devcontainer updates for purpose infrastructure
+
+As a user,
+I want my container environment to be purpose-aware,
+So that the tmux status bar shows what I'm working on as soon as I attach.
+
+**Acceptance Criteria:**
+
+**Given** a newly created instance with purpose "JWT authentication"
+**When** I attach to the instance
+**Then** the tmux status bar shows `bmad-orch-auth | JWT authentication`
+**And** it appears within 1 second of attach (NFR22)
+
+**Given** a newly created instance with no purpose set
+**When** I attach to the instance
+**Then** the tmux status bar shows only the instance name (e.g., `bmad-orch-auth`)
+**And** there is no trailing pipe or placeholder text
+
+**Given** a purpose longer than 40 characters
+**When** the tmux status bar renders
+**Then** the purpose is truncated at 40 characters with `…`
+
+**Given** the container is running
+**When** I check the environment variables
+**Then** `$AGENT_ENV_CONTAINER` is `true`
+**And** `$AGENT_ENV_INSTANCE` contains the workspace identifier
+**And** `$AGENT_ENV_REPO` contains the repo slug
+
+**Given** a non-baseline container image without jq
+**When** the tmux status bar script runs
+**Then** a clear error message indicates jq is required for purpose display
+
+**Given** the container starts before state.json exists
+**When** the tmux status bar refreshes
+**Then** it shows `?` (graceful fallback, no crash)
+
+**Technical Requirements:**
+- Update `config/baseline/devcontainer.json`: add bind-mount of `.agent-env/` → `/etc/agent-env/` (read-write)
+- Update `config/baseline/devcontainer.json`: add `containerEnv` for `AGENT_ENV_CONTAINER`, `AGENT_ENV_INSTANCE`, `AGENT_ENV_REPO`
+- Ensure jq available in baseline Dockerfile
+- Create tmux status bar script: single jq invocation for instance + purpose, file guard, truncation at 40 chars
+- Configure tmux: `status-interval 15`, `status-right` calls the purpose script
+- Unit tests: jq extraction against fixture JSON files (purpose set, purpose null, file missing, malformed JSON, purpose >40 chars)
+- Manual validation protocol: document exact steps to verify tmux wiring in a running container
+- FR47, FR49 covered. NFR22, NFR24 addressed.
+
+---
+
+#### Story 6.2: --purpose flag on create and AGENT_ENV_PURPOSE env var
+
+As a user,
+I want to set an instance's purpose at creation time,
+So that the context is visible from the very first attach.
+
+**Acceptance Criteria:**
+
+**Given** I run `agent-env create auth --repo <url> --purpose "JWT authentication"`
+**When** the instance is created
+**Then** state.json contains `"purpose": "JWT authentication"`
+**And** the tmux bar shows the purpose on first attach
+
+**Given** I run `agent-env create auth --repo <url>` without `--purpose`
+**When** the instance is created
+**Then** state.json contains `"purpose": null`
+**And** the tmux bar shows instance name only
+
+**Given** an instance with purpose "JWT work"
+**When** I open a new shell inside the container
+**Then** `$AGENT_ENV_PURPOSE` is set to `JWT work`
+
+**Given** an instance with no purpose
+**When** I open a shell inside the container
+**Then** `$AGENT_ENV_PURPOSE` is set to an empty string
+
+**Technical Requirements:**
+- Add `--purpose <text>` option to create command in `commands/create.ts`
+- Write purpose to state.json during instance creation
+- Add shell init in baseline config (`.bashrc`/`.zshrc`): `export AGENT_ENV_PURPOSE=$(jq -r '.purpose // ""' /etc/agent-env/state.json 2>/dev/null)`
+- Note: env var is set at shell startup, not live-updated. Live updates are via tmux bar (Story 6.1) and purpose command (Story 6.3).
+- FR46, FR48 covered.
+
+---
+
+#### Story 6.3: agent-env CLI inside containers with live purpose updates
+
+As a user,
+I want to update an instance's purpose from inside the container,
+So that I can change context without leaving my working environment.
+
+**Acceptance Criteria:**
+
+**Given** I'm inside a running instance
+**When** I run `agent-env purpose "OAuth implementation"`
+**Then** the purpose is updated in `/etc/agent-env/state.json`
+**And** the tmux status bar reflects the change within 30 seconds (NFR23)
+
+**Given** I'm inside a running instance
+**When** I run `agent-env purpose`
+**Then** I see the current purpose
+
+**Given** I'm inside a running instance
+**When** the purpose command writes state.json
+**Then** it uses atomic write (tmp + rename) to prevent corruption
+
+**Given** a newly created instance
+**When** the container starts
+**Then** `agent-env` CLI is installed globally and available on `$PATH`
+
+**Given** development of agent-env itself
+**When** a local dev mount exists at `/opt/agent-env-dev`
+**Then** `post-create.sh` links the local build instead of installing from npm
+
+**Given** no local dev mount exists
+**When** `post-create.sh` runs
+**Then** it installs the published version via `pnpm add -g @zookanalytics/agent-env`
+
+**Given** the purpose command runs inside a container
+**When** it detects `$AGENT_ENV_CONTAINER=true`
+**Then** it resolves state path to `/etc/agent-env/state.json`
+
+**Given** the purpose command runs on the host
+**When** it detects no `$AGENT_ENV_CONTAINER` env var
+**Then** it resolves state path via the normal workspace directory lookup
+
+**Technical Requirements:**
+- Update `config/baseline/post-create.sh`: install agent-env CLI (dev mode check for `/opt/agent-env-dev`, fallback to npm)
+- Add `isInsideContainer()` helper to detect container environment via `$AGENT_ENV_CONTAINER`
+- Add `resolveStatePath()` that returns `/etc/agent-env/state.json` inside container, normal workspace path on host
+- Update existing purpose command (`commands/purpose.ts` and `lib/purpose-instance.ts`) to be environment-aware
+- Verify atomic write works across bind-mount (tmp + rename in same filesystem)
+- FR50, NFR23 covered.
+
+---
+
+### Epic 7: Naming Model, Multi-Instance & Baseline Prompt
+**User Value:** Users can create multiple instances from the same repo with clean, user-friendly names, see which repo each instance belongs to, and choose their container configuration preference.
+
+Focused on the naming/workspace refactor plus baseline config prompt. No migration code — negligible existing instances.
+
+**What it delivers:**
+- Multiple instances from same repo with user-chosen names
+- Nested workspace layout: `~/.agent-env/workspaces/<repo-slug>/<instance>/`
+- Repo slug derivation and compression for long names (>39 chars)
+- Two-phase repo resolution (repo context from `--repo`/cwd, then instance lookup)
+- Source repo visible in `list` output
+- Updated state schema (`name` → `instance`, adds `repoSlug`, `repoUrl`)
+- Baseline config prompt for repos with `.devcontainer/` (+ `--baseline`/`--no-baseline` flags)
+
+**FRs covered:** FR43, FR45, FR27 (revision)
+
+**Architecture Decisions (from ADR review):**
+- **No migration code.** Negligible existing instances. Old flat-layout workspaces are NOT detected by the new code. This is intentional — documented as such in code comments and epic description. Users recreate instances if needed.
+- **Two-phase resolution edge case matrix in ACs:** no remote, multiple remotes, fork remote, subdirectory of git repo, no .git directory, bare repo, remote URL mismatch.
+- **AGENT_ENV_INSTANCE updates:** When Epic 7 lands, the env var value changes from compound name to short instance name. Non-breaking — consumers treat it as opaque per ADR-E6-2.
+- **Baseline prompt stories:** (1) prompt logic when repo has `.devcontainer/`, (2) `--baseline`/`--no-baseline` flag handling. Three states: force-baseline, force-repo-config, ask-user (default when repo has `.devcontainer/`).
+
+**UX Decisions (from War Room):**
+- **Baseline prompt default:** When user presses Enter without choosing, default to "use repo config" (respect repo authors' intent). `--baseline` flag exists for users who know they want agent-env's setup.
+- **First story is scanning refactor:** Story 7.1 updates workspace scanning from flat (`workspaces/*/`) to nested (`workspaces/*/*/`) and updates ALL consumers: `list-instances.ts`, `attach-instance.ts`, `remove-instance.ts`, `purpose-instance.ts`, `interactive-menu.ts`, `commands/list.ts`, and any others. This is the foundation — subsequent stories add new features (slug compression, two-phase resolution, baseline prompt) on top.
+
+**Dependencies:** Requires Epics 1-5 (complete). Independent of Epics 6 and 8.
+
+#### Story 7.1: Refactor workspace scanning and state schema for nested layout
+
+As a developer,
+I want workspaces organized by repository in a nested layout,
+So that multiple instances from the same repo are cleanly organized.
+
+**Acceptance Criteria:**
+
+**Given** I create an instance "auth" for repo `bmad-orchestrator`
+**When** the workspace is created
+**Then** it exists at `~/.agent-env/workspaces/bmad-orchestrator/auth/`
+**And** state.json contains `"instance": "auth"`, `"repoSlug": "bmad-orchestrator"`, `"repoUrl": "<full URL>"`
+
+**Given** workspaces exist at `~/.agent-env/workspaces/bmad-orch/auth/` and `~/.agent-env/workspaces/awesome-cli/bugfix/`
+**When** `scanWorkspaces()` is called
+**Then** both instances are returned with their repo slug and instance name
+
+**Given** old flat-layout workspaces exist at `~/.agent-env/workspaces/bmad-orch-auth/`
+**When** `scanWorkspaces()` is called
+**Then** the old flat workspaces are NOT detected
+**And** this is documented in code comments as intentional
+
+**Given** I run `agent-env list`
+**When** instances exist across multiple repos
+**Then** all instances are listed correctly with updated field names
+
+**Given** I run `agent-env attach auth`
+**When** the instance exists
+**Then** attach works with the new workspace path structure
+
+**Given** I run `agent-env remove auth`
+**When** the instance passes safety checks
+**Then** remove works with the new workspace path structure
+
+**Given** I run `agent-env purpose auth "new purpose"`
+**When** the instance exists
+**Then** purpose command works with the new workspace path structure
+
+**Technical Requirements:**
+- Update `lib/workspace.ts`: scanning from `workspaces/*/` to `workspaces/*/*/`, `createWorkspace()` creates nested structure
+- Update `lib/state.ts`: schema change (`name` → `instance`, add `repoSlug`, `repoUrl`)
+- Update `lib/types.ts`: `InstanceState` interface reflects new fields
+- Update ALL consumers: `list-instances.ts`, `attach-instance.ts`, `remove-instance.ts`, `purpose-instance.ts`, `interactive-menu.ts`, `commands/list.ts`
+- Update test fixtures to new state schema
+- All existing tests must pass after refactor (adapt to new schema)
+- FR43 (partially — workspace structure), FR45 (partially — state has repo info)
+
+---
+
+#### Story 7.2: Repo slug derivation, compression, and instance name validation
+
+As a user,
+I want instance names to be short and user-chosen,
+So that I can type quick names like `auth` instead of `bmad-orchestrator-auth`.
+
+**Acceptance Criteria:**
+
+**Given** a repo URL `https://github.com/user/bmad-orchestrator.git`
+**When** the slug is derived
+**Then** it is `bmad-orchestrator` (last path segment, minus `.git`)
+
+**Given** a repo URL `https://github.com/user/bmad-orchestrator` (no `.git`)
+**When** the slug is derived
+**Then** it is `bmad-orchestrator`
+
+**Given** a repo slug longer than 39 characters (e.g., `my-extremely-long-repository-name-that-exceeds-limit`)
+**When** the slug is compressed
+**Then** it becomes `my-extremely-lo_<6-char SHA-256>_ceeds-limit` (38 chars max)
+**And** compression is deterministic (same input → same output)
+
+**Given** I run `agent-env create auth --repo <url>`
+**When** the instance name "auth" is 20 characters or fewer
+**Then** the instance is created successfully
+
+**Given** I run `agent-env create this-name-is-way-too-long --repo <url>`
+**When** the instance name exceeds 20 characters
+**Then** I get a clear error: "Instance name must be 20 characters or fewer"
+**And** no workspace is created
+
+**Given** I run `agent-env create auth --repo <url>` and instance "auth" already exists for that repo
+**When** the create is attempted
+**Then** I get error "Instance 'auth' already exists for repo 'bmad-orchestrator'"
+
+**Given** the container is created
+**When** the container name is generated
+**Then** it follows the pattern `ae-<repo-slug>-<instance>` (max 63 chars)
+
+**Technical Requirements:**
+- Create `deriveRepoSlug(url: string): string` in `lib/workspace.ts`
+- Create `compressSlug(slug: string): string` with SHA-256 deterministic compression
+- Add instance name validation: max 20 chars, reject with clear error
+- Update `createWorkspace()` to use slug derivation
+- Container naming: `ae-${repoSlug}-${instance}`
+- Comprehensive unit tests: various URL formats (HTTPS, SSH, with/without .git), slug compression edge cases, name validation
+- FR43 covered.
+
+---
+
+#### Story 7.3: Two-phase repo resolution for commands
+
+As a user,
+I want commands to resolve instance names intelligently,
+So that I can type `agent-env attach auth` without specifying the repo every time.
+
+**Acceptance Criteria:**
+
+**Given** I'm in a directory with git remote `bmad-orchestrator` and instance "auth" exists for that repo
+**When** I run `agent-env attach auth`
+**Then** it resolves to the `bmad-orchestrator/auth` workspace (cwd provides repo context)
+
+**Given** I run `agent-env attach auth --repo bmad-orchestrator`
+**When** instance "auth" exists for that repo
+**Then** it resolves directly (explicit repo takes priority over cwd)
+
+**Given** I'm NOT in a git directory and instance "auth" exists for exactly one repo
+**When** I run `agent-env attach auth`
+**Then** it resolves to the single match (unambiguous global lookup)
+
+**Given** instance "auth" exists for both `bmad-orchestrator` and `awesome-cli`
+**When** I run `agent-env attach auth` without `--repo` and not in either repo's directory
+**Then** I get error: "Multiple instances named 'auth' exist. Specify --repo."
+
+**Given** I'm in the `awesome-cli` directory but "auth" only exists under `bmad-orchestrator`
+**When** I run `agent-env attach auth`
+**Then** it resolves to `bmad-orchestrator/auth` (cwd narrows scope but doesn't block resolution)
+
+**Given** I'm in a subdirectory of a git repo
+**When** I run `agent-env attach auth`
+**Then** repo context is detected from the parent git root (not just the current directory)
+
+**Given** I'm in a directory with no git remote (no origin)
+**When** I run `agent-env create feature --repo .`
+**Then** I get error: "No git remote found in current directory"
+
+**Given** I'm in a directory with multiple git remotes
+**When** repo context is inferred
+**Then** `origin` is used as the default remote
+
+**Technical Requirements:**
+- Create `resolveInstance(name: string, opts: { repo?: string }): ResolvedInstance` in `lib/workspace.ts`
+- Phase 1: resolve repo from `--repo` flag (explicit) → cwd git remote (implicit) → none
+- Phase 2: resolve instance scoped to repo → fallback to global unambiguous search → error on ambiguity
+- Apply resolution to all commands: `attach`, `remove`, `purpose`, `list --repo` filter
+- Edge case test matrix: no remote, multiple remotes, fork remote, subdirectory, no .git, bare repo, remote URL mismatch
+- Unit tests for each resolution scenario
+
+---
+
+#### Story 7.4: Source repo in list output
+
+As a user,
+I want to see which repo each instance belongs to in the list output,
+So that I can distinguish instances from different repos at a glance.
+
+**Acceptance Criteria:**
+
+**Given** instances exist across multiple repos
+**When** I run `agent-env list`
+**Then** each instance shows its repo slug in a "Repo" column
+
+**Given** I run `agent-env list --json`
+**When** instances exist
+**Then** each instance object includes `"repoSlug": "..."` and `"repoUrl": "..."`
+
+**Given** I run `agent-env list --repo bmad-orchestrator`
+**When** instances exist for that repo and others
+**Then** only instances for `bmad-orchestrator` are shown
+
+**Technical Requirements:**
+- Update `components/InstanceList.tsx`: add Repo column
+- Update `commands/list.ts`: add `--repo` filter option
+- Update JSON output to include `repoSlug` and `repoUrl`
+- FR45 covered.
+
+---
+
+#### Story 7.5: Baseline config prompt with flag overrides
+
+As a user,
+I want to choose whether to use a repo's devcontainer config or agent-env's baseline,
+So that I get the right environment for each use case.
+
+**Acceptance Criteria:**
+
+**Given** I create an instance from a repo WITHOUT `.devcontainer/`
+**When** the create command runs
+**Then** agent-env baseline is applied automatically (no prompt)
+
+**Given** I create an instance from a repo WITH `.devcontainer/`
+**When** the create command runs without `--baseline` or `--no-baseline`
+**Then** I'm prompted: "This repo has a .devcontainer/ config. Use repo config or agent-env baseline?"
+**And** pressing Enter without choosing defaults to "use repo config"
+
+**Given** I run `agent-env create auth --repo <url> --baseline`
+**When** the repo has its own `.devcontainer/`
+**Then** agent-env baseline overrides the repo config without prompting
+
+**Given** I run `agent-env create auth --repo <url> --no-baseline`
+**When** the repo has its own `.devcontainer/`
+**Then** the repo's config is used without prompting
+
+**Given** I pass both `--baseline` and `--no-baseline`
+**When** the command parses arguments
+**Then** I get an error: "Cannot specify both --baseline and --no-baseline"
+
+**Technical Requirements:**
+- Add `--baseline` and `--no-baseline` mutually exclusive flags to create command
+- Detect `.devcontainer/` in cloned repo before applying config
+- Interactive prompt using Ink Select component
+- Default selection: "Use repo config" (first option, selected on Enter)
+- Three states: force-baseline, force-repo-config, ask-user
+- FR27 (revision) covered.
+
+---
+
+### Epic 8: Growth — Repo Registry & VS Code Purpose
+**User Value:** Users can quickly spin up new instances from known repos without re-entering URLs, and see instance purpose in VS Code window titles.
+
+**What it delivers:**
+- `agent-env repos` command lists tracked repositories
+- Repo registry derived from existing workspaces (no separate file)
+- Create from registered repo without re-entering URL
+- VS Code window title shows purpose via `better-status-bar` extension integration
+
+**FRs covered:** FR51, FR52, FR53, FR54
+
+**VS Code integration (proven pattern, ADR-E8-1):**
+1. User installs `RobertOstermann.better-status-bar` VS Code extension — reads `.vscode/statusBar.json` and renders status bar items
+2. Baseline ships a default `.vscode/statusBar.template.json` with `{{PURPOSE}}` placeholder following the better-status-bar schema (repos can customize)
+3. Purpose value lives in `state.json` (single source of truth)
+4. `agent-env purpose` command (already inside container via Epic 6) reads purpose, does string replacement of `{{PURPOSE}}` in template, writes result to `.vscode/statusBar.json`
+5. Regeneration is conditional — if `.vscode/statusBar.template.json` exists, regenerate. If not, skip silently.
+6. `.vscode/statusBar.json` is gitignored (generated file). Template is checked in.
+7. No file watchers — deliberate regeneration triggered by purpose command only.
+
+**Confirmed:** By end of Epic 8, `agent-env purpose <name> "text"` inside container:
+1. Updates `/etc/agent-env/state.json` (atomic write)
+2. Regenerates `.vscode/statusBar.json` from template if template exists
+3. tmux picks up the change on next 15s refresh
+
+#### Story 8.1: Repo registry command
+
+As a user,
+I want to see which repositories I've used before,
+So that I can quickly create new instances from known repos without re-entering URLs.
+
+**Acceptance Criteria:**
+
+**Given** I have instances for repos `bmad-orchestrator` and `awesome-cli`
+**When** I run `agent-env repos`
+**Then** I see a list showing each repo slug and its full URL
+
+**Given** I have no instances
+**When** I run `agent-env repos`
+**Then** I see "No repositories tracked. Create an instance with: agent-env create <name> --repo <url>"
+
+**Given** I remove all instances for `awesome-cli`
+**When** I run `agent-env repos`
+**Then** `awesome-cli` no longer appears (registry derived from existing workspaces)
+
+**Given** I run `agent-env repos --json`
+**When** repos exist
+**Then** I get JSON output: `{ "ok": true, "data": [{ "slug": "...", "url": "...", "instanceCount": N }], "error": null }`
+
+**Technical Requirements:**
+- Create `commands/repos.ts`
+- Scan `~/.agent-env/workspaces/*/` directory names for repo slugs
+- Cross-reference with `state.json` in each instance for full URLs
+- Display: repo slug, full URL, number of instances
+- `--json` flag for scripted output
+- FR51, FR52 covered.
+
+---
+
+#### Story 8.2: Create from registered repo
+
+As a user,
+I want to create instances from known repos by slug instead of full URL,
+So that I can spin up new environments faster.
+
+**Acceptance Criteria:**
+
+**Given** I previously created an instance from `https://github.com/user/bmad-orchestrator`
+**When** I run `agent-env create feature --repo bmad-orchestrator`
+**Then** the repo slug is recognized and the full URL is resolved from the registry
+**And** the instance is created normally
+
+**Given** I run `agent-env create feature --repo unknown-repo`
+**When** the slug matches no tracked repository
+**Then** I get error: "Repository 'unknown-repo' not found. Use a full URL or run `agent-env repos` to see tracked repos."
+
+**Given** I run `agent-env create feature --repo https://github.com/user/new-repo`
+**When** the value looks like a URL (contains `://` or starts with `git@`)
+**Then** it's treated as a URL directly (not a slug lookup)
+
+**Technical Requirements:**
+- Update create command to detect slug vs URL input
+- URL detection: contains `://` or starts with `git@`
+- Slug resolution: scan workspace directories, find matching repo slug, read state.json for full URL
+- FR53 covered.
+
+---
+
+#### Story 8.3: VS Code purpose visibility via better-status-bar
+
+As a user,
+I want to see my instance purpose in the VS Code status bar,
+So that I know which workstream I'm in when using VS Code.
+
+**Acceptance Criteria:**
+
+**Given** a `.vscode/statusBar.template.json` exists in the workspace with `{{PURPOSE}}` placeholder
+**When** I run `agent-env purpose auth "JWT authentication"`
+**Then** `.vscode/statusBar.json` is generated with `{{PURPOSE}}` replaced by `JWT authentication`
+
+**Given** NO `.vscode/statusBar.template.json` exists in the workspace
+**When** I run `agent-env purpose auth "JWT authentication"`
+**Then** no `.vscode/statusBar.json` is generated (skipped silently)
+**And** state.json is still updated normally
+
+**Given** the baseline devcontainer config
+**When** a new instance is created
+**Then** a default `.vscode/statusBar.template.json` is included with purpose display following the better-status-bar schema
+
+**Given** `agent-env purpose auth "OAuth"` is run inside the container
+**When** the purpose command completes
+**Then** both state.json AND statusBar.json are updated atomically
+
+**Given** the `.vscode/statusBar.json` file
+**When** I check `.gitignore`
+**Then** `.vscode/statusBar.json` is gitignored (generated file)
+
+**Given** the better-status-bar extension is installed in VS Code
+**When** `.vscode/statusBar.json` is regenerated
+**Then** the VS Code status bar updates to show the new purpose
+
+**Technical Requirements:**
+- Update purpose command pipeline: after writing state.json, check for `.vscode/statusBar.template.json` in workspace root
+- If template exists: read template, replace all `{{PURPOSE}}` occurrences, write to `.vscode/statusBar.json`
+- Ship default template in baseline config based on the `statusBarTemplate.example` pattern
+- Add `.vscode/statusBar.json` to baseline `.gitignore`
+- Works from both host and inside container (same code path — template is in workspace, accessible from both)
+- FR54 covered.
+
+---
+
+**Deferrability:** System is fully functional without Epic 8. Repo registry is a convenience — `--repo .` covers most cases without re-entering URLs. VS Code purpose is polish for users who work in VS Code alongside tmux. Neither feature is a hidden dependency for Epics 6 or 7.
+
+**Dependencies:** Requires Epic 7 (repo registry needs nested workspace structure for scanning). VS Code purpose story requires Epic 6 (purpose in state.json + CLI inside container).
+
+---
+
 ## Epic Dependencies
 
 ```
+Epics 1-5 (Complete)
+    ↓
 Epic 1 (Foundation)
     ↓
 Epic 2 (Create) ──→ Epic 3 (List/Git) ──→ Epic 5 (Remove)
                           ↓
                     Epic 4 (Access)
+
+    ↓ (All complete)
+
+    ├── Epic 6 (Purpose & Tmux)  ─────┐
+    │                                  ├──→ Epic 8 (Growth)
+    └── Epic 7 (Naming & Baseline) ───┘
 ```
 
-**Dependency Notes:**
+**Dependency Notes (Epics 1-5, unchanged):**
 - Epic 1 must complete first (project infrastructure)
 - Epic 2 can proceed independently after Epic 1
 - Epic 3 depends on Epic 2 (needs instances to list)
@@ -1263,7 +1916,13 @@ Epic 2 (Create) ──→ Epic 3 (List/Git) ──→ Epic 5 (Remove)
 - Epic 5 depends on Epic 3 (uses `git.ts` module)
 - Epics 3 and 4 can be developed in parallel after Epic 2
 
-**Standalone Guarantee:** Each epic delivers complete, usable functionality. Epic 2 works without needing list/remove. Epic 3 works without attach. Epic 4 works without remove.
+**Dependency Notes (Epics 6-8, new):**
+- Epics 6 and 7 can be done in any order (no mutual dependency)
+- Epic 8 requires both Epic 6 (purpose pipeline + CLI inside container) and Epic 7 (nested workspaces for repo scanning)
+- Recommended order: Epic 6 first (most user-visible, immediate daily value), then Epic 7 (architectural improvement), then Epic 8 (Growth polish)
+- Epics 6 and 7 both touch the create command — if developed concurrently, expect merge conflicts
+
+**Standalone Guarantee:** Each epic delivers complete, usable functionality. Epic 2 works without needing list/remove. Epic 3 works without attach. Epic 4 works without remove. Epic 6 works without naming refactor. Epic 7 works without purpose propagation.
 
 ## Cross-Cutting Concerns
 

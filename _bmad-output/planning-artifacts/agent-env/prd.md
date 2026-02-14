@@ -12,6 +12,14 @@ documentCounts:
 workflowType: 'prd'
 lastStep: 11
 status: complete
+lastEdited: '2026-02-14'
+editHistory:
+  - date: '2026-02-14'
+    changes: 'Added 6 features: forced baseline config, multi-instance per repo, repo management (Growth), current directory creation, in-instance purpose tracking, purpose visibility in tmux/VS Code'
+  - date: '2026-02-14'
+    changes: 'Post-validation fixes: tightened 5 subjective NFRs, fixed 2 vague FRs, removed NFR9 implementation leakage, resolved 3 orphan FRs, reclassified status indicators to MVP, added core abstraction and target user profile sections'
+  - date: '2026-02-14'
+    changes: 'Architecture review fixes: (1) Changed forced baseline to opt-in — baseline auto-applies when repo has no .devcontainer/, user opts in to override repos with their own config. (2) Removed "Environments, not containers" abstraction paragraph — tool manages containers via devcontainer spec, future backends remain in Vision only.'
 ---
 
 # Product Requirements Document - agent-env
@@ -37,7 +45,11 @@ agent-env is a CLI for creating isolated, AI-ready development environments that
 
 **Agent-agnostic by design.** Works with Claude Code, Gemini CLI, Aider, or any future AI agent CLI. No assumptions baked in.
 
-**Zero-config for external repos.** Fork a repo, spin up an instance, start working. Baseline config provides full AI tooling without commits to the external repo.
+**Baseline config with opt-in override.** Repos without a `.devcontainer/` get agent-env's productive baseline automatically—Claude Code, git signing, SSH, tmux, all ready. Repos with their own `.devcontainer/` use their config by default; users can opt in to the agent-env baseline instead when they prefer consistent AI tooling over repo-specific setup.
+
+**Multi-instance per repo.** Same repo, multiple isolated workstreams. Instance names are user-chosen, decoupled from repo names. Run a refactor, a bugfix, and an experiment against the same codebase without conflict.
+
+**Purpose as context.** Instance purpose surfaces inside the running environment—tmux status bar and VS Code window title show what you're working on without leaving your editor.
 
 ### Non-Negotiables
 
@@ -46,6 +58,14 @@ agent-env is a CLI for creating isolated, AI-ready development environments that
 **Zero data loss. Ever.** Safety checks cover staged, unstaged, untracked, stashed, and unpushed commits on ALL branches. One incident kills trust.
 
 **External repos are first-class.** 95%+ should work with baseline alone. If zero-config requires constant config, it's not zero-config.
+
+### Target User Profile
+
+**Primary:** Expert-level developer running multiple AI agent workstreams simultaneously. Comfortable with containers, terminal-first workflow, runs agents in YOLO mode where isolation is the safety net. Mental model: one instance per logical workstream, not per task. Instances are long-lived and repurposed, not ephemeral.
+
+**Secondary:** Any developer wanting AI agent isolation. Beginners benefit more from isolation—they're more likely to cause accidental damage. Expert features available; safe defaults for everyone.
+
+**Interface honesty:** Terminal-first tool. VS Code integration is seamless, but CLI and tmux are the primary design targets.
 
 ## Project Classification
 
@@ -89,8 +109,10 @@ agent-env is a CLI for creating isolated, AI-ready development environments that
 
 - Time-to-productive: < 5 seconds from attach to first command
 - Data loss incidents: 0 forever (non-negotiable)
-- External repo success rate: 95%+ work first-try with baseline
+- External repo success rate: 95%+ repos build and are productive with agent-env baseline
 - Config issues after initial setup: 0 per week
+- Purpose visible in tmux status bar within 1 second of attach
+- Purpose changes reflected live in tmux within 30 seconds
 
 ## Product Scope
 
@@ -98,14 +120,19 @@ agent-env is a CLI for creating isolated, AI-ready development environments that
 
 What must work for this to be useful:
 
-- `create <name> [--repo] [--attach]` - Clone repo, spin up container, optionally attach immediately
+- `create <name> --repo <url|.> [--attach] [--purpose <text>]` - Clone repo, spin up container, optionally attach immediately
 - `list` / `ps` - Show all instances with status and purpose
 - `attach <name>` - Terminal attach via tmux
 - `remove [--force] <name>` - Delete with comprehensive safety checks
 - `purpose <name> [value]` - Get/set mutable purpose
 - Interactive menu (no args) - Simple numbered prompts for MVP
 - Productive baseline - Claude Code, git signing, SSH agent, tmux, shell configured
+- Baseline config - agent-env applies its baseline for repos without `.devcontainer/`; users can opt in to the baseline for repos that have their own config
+- Purpose visibility - purpose exposed as env var inside container and displayed in tmux status bar
+- Multi-instance per repo - instance names are user-chosen, multiple instances can target the same repo
+- Current-directory creation - `--repo .` detects git remote from the working directory
 - Comprehensive safety checks - staged, unstaged, untracked, stashed, unpushed on ALL branches
+- Status indicators in `list` - ✓ clean, ● uncommitted, ↑ unpushed
 
 ### Growth Features (Post-MVP)
 
@@ -114,10 +141,11 @@ What makes it pleasant to live in:
 - `run <name> <command>` - Execute command in instance (orchestrator contract)
 - `show <name>` - Detailed instance info
 - `dashboard` - tmux overview of all instances
-- Status indicators in `list` - ✓ clean, ● uncommitted, ↑ unpushed
 - Full Ink TUI for interactive menu (replacing numbered prompts)
-- Config composition - baseline + `.agent-env/` repo overrides
+- Config layering - `.agent-env/` repo-level overrides extend the baseline with repo-specific packages, env vars, or scripts
 - `rebuild` command for updating instances without recreating
+- Repo registry - `agent-env repos` command lists tracked repos, fast path for spinning up new instances from known repos
+- Purpose visible in VS Code window title when attached via VS Code
 
 ### Vision (Future)
 
@@ -134,7 +162,7 @@ The dream version:
 
 ### Journey 1: Node - The Morning Standup Flow
 
-Node starts his day with three agent-env instances from yesterday—one finished a BMAD story overnight, one is mid-implementation on a different epic, and one he spun up for a quick fix to an external dependency. He opens his terminal and types `agent-env`.
+Node starts his day with three agent-env instances—two from the bmad-orchestrator repo (different epics) and one for a quick fix to an external dependency. He opens his terminal and types `agent-env`.
 
 The interactive menu shows:
 
@@ -148,13 +176,13 @@ agent-env instances:
 [1-3] attach  [c] create  [q] quit
 ```
 
-At a glance: instance 1 is git-clean (ready for new work or teardown). Instance 2 has uncommitted changes (agent paused or still working—he'll check). Instance 3 has unpushed commits—that PR he meant to submit yesterday.
+At a glance: instances 1 and 2 are both bmad-orchestrator—different names, different workstreams, fully isolated. Instance 1 is git-clean (ready for new work or teardown). Instance 2 has uncommitted changes (agent paused or still working—he'll check). Instance 3 has unpushed commits—that PR he meant to submit yesterday.
 
 *Note: The timestamp shows last-attached time. Whether the agent succeeded, failed, or is stuck isn't visible here—agent-env tracks git state, not agent state. Agent status visibility is a future orchestrator concern, not MVP scope.*
 
 He hits `3` to attach, pushes the branch, opens the PR on his phone while making coffee, then returns and types `agent-env remove external-cli-fix`. Clean. No lingering state on his host machine.
 
-Back to the menu. Instance 1 is done—he could repurpose it for the next story or tear it down. He decides to keep it, updates the purpose: `agent-env purpose bmad-orch-auth "Epic 2 - user sessions"`, attaches, and starts the next BMAD story.
+Back to the menu. He hits `1` to attach to bmad-orch-auth. The tmux status bar reads `bmad-orch-auth | JWT authentication`—immediate confirmation he's in the right workstream. The auth epic is done, so he updates the purpose: `agent-env purpose bmad-orch-auth "Epic 2 - user sessions"`, and starts the next BMAD story.
 
 By the time he finishes his coffee, he's triaged all three instances, submitted a PR, and started new work. Total context switches between projects: zero. Everything isolated, everything visible.
 
@@ -168,9 +196,9 @@ Now he runs:
 agent-env create cli-bugfix --repo https://github.com/someuser/awesome-cli --attach
 ```
 
-A couple minutes later—first-time setup pulls the base image and configures the environment—he's inside a fully configured instance. Claude Code is authenticated. Git signing works (SSH agent forwarded from host). The repo is cloned. He didn't configure anything—the baseline handled it.
+A couple minutes later—first-time setup pulls the base image and configures the environment—he's inside a fully configured instance. The repo didn't have a `.devcontainer/` directory, so agent-env applied the baseline config automatically. Claude Code is authenticated. Git signing works (SSH agent forwarded from host). The repo is cloned. He didn't configure anything—the baseline handled it.
 
-*Note: The baseline is optimized for TypeScript/Node repos. For repos needing different runtimes (Python 3.11, Go, Rust), the baseline may not have everything. MVP targets 95%+ success rate for common repos; edge cases may need future multi-stack baselines or repo-specific config overrides.*
+*Note: The baseline is optimized for TypeScript/Node repos. For repos needing different runtimes (Python 3.11, Go, Rust), the baseline may not have everything. MVP targets 95%+ success rate for common repos; edge cases may need future multi-stack baselines. Repos needing repo-specific tooling on top of the baseline can use `.agent-env/` additive overrides (Growth).*
 
 He spends an hour with Claude Code tracking down the bug, writes a fix, runs their test suite (inside the container, not touching his host), and commits. The agent-env status shows `↑ unpushed`. He pushes, opens a PR, and tears down the instance:
 
@@ -210,6 +238,28 @@ He attaches, commits the WIP, pushes both branches, clears the stash, and *then*
 
 He sleeps well, confident that agent-env won't let him shoot himself in the foot.
 
+### Journey 4: Node - Quick Instance from Current Project
+
+Node is inside a project directory on his host, deep in a refactor that's getting risky. He wants an isolated sandbox to try an experimental approach without polluting his working tree.
+
+He runs:
+
+```bash
+agent-env create risky-refactor --repo . --attach --purpose "Experimental API redesign"
+```
+
+agent-env detects the git remote from the current directory, creates the instance with the baseline config, clones the repo, and attaches. The tmux status bar immediately reads `risky-refactor | Experimental API redesign`. He's productive in seconds, with full isolation from his host checkout.
+
+Later, when he needs another instance of the same repo for a different experiment, he doesn't need to re-enter the URL—the repo is already tracked.
+
+### Journey 5: Node - Purpose as Context While Working
+
+Node is juggling three instances of the same repo—different epics. He attaches to one, and the tmux status bar reads `bmad-orch-auth | JWT authentication`. He switches to another—`bmad-orch-api | API layer refactor`. No confusion about which workstream he's in, even though all three are the same codebase.
+
+He updates the purpose mid-session via `agent-env purpose bmad-orch-api "API v2 migration"` and the tmux bar updates live within seconds. The `$AGENT_ENV_PURPOSE` environment variable inside the container reflects the change too—scripts and agents can read it.
+
+When he opens an instance in VS Code, the window title includes the purpose. Three VS Code windows, three different labels. No guessing which window is which.
+
 ### Journey Requirements Summary
 
 | Capability | Revealed By |
@@ -226,6 +276,18 @@ He sleeps well, confident that agent-env won't let him shoot himself in the foot
 | **Comprehensive safety checks** | Journey 3 - all branches (including never-pushed), stash, staged, unstaged |
 | **Clear blocker messaging** | Journey 3 - knows exactly what's at risk |
 | **Force override with warning** | Journey 3 - escape hatch, but makes consequences clear |
+| **Baseline config (opt-in override)** | Journey 2 - baseline applied when no repo config exists; opt-in for repos with their own |
+| **Multi-instance per repo** | Journey 1 - two instances for same repo |
+| **Create from current directory** | Journey 4 - `--repo .` quick path |
+| **Repo registry** | Journey 4 - known repos for fast re-creation (Growth) |
+| **Purpose visible in tmux** | Journey 1, 5 - status bar shows purpose |
+| **Purpose visible in VS Code** | Journey 5 - window title includes purpose (Growth) |
+| **Purpose as env var** | Journey 5 - `$AGENT_ENV_PURPOSE` available |
+| **Purpose set at creation** | Journey 4 - `--purpose` flag on create |
+| **Live purpose updates** | Journey 5 - tmux bar updates within seconds |
+| **Instance naming** | Journey 1, 4 - user-chosen names for all instances (implicit in all create flows) |
+| **Creation timestamp tracking** | Journey 1 - implicit in last-attached display and instance lifecycle |
+| **Instance name as env var** | Journey 5 - `$AGENT_ENV_INSTANCE` counterpart to `$AGENT_ENV_PURPOSE` |
 
 ### Scope Boundaries (From Journeys)
 
@@ -234,7 +296,10 @@ He sleeps well, confident that agent-env won't let him shoot himself in the foot
 | **Git state visibility** | MVP - agent-env tracks this |
 | **Agent execution status** | Future - orchestrator concern, not agent-env |
 | **Multi-stack baselines** | Post-MVP - start with TypeScript, expand later |
-| **Repo-specific config overrides** | Post-MVP - baseline-only for MVP |
+| **Additive repo overrides via `.agent-env/`** | Post-MVP - `.agent-env/` overrides extend the baseline with repo-specific needs |
+| **Repo registry** | Growth - track repos for fast instance creation |
+| **In-instance purpose visibility** | MVP - env var + tmux status bar |
+| **VS Code purpose visibility** | Growth - window title integration |
 
 ## CLI + Developer Tool Requirements
 
@@ -254,11 +319,14 @@ agent-env is a CLI tool with developer tool characteristics:
 | **Scriptable** | Direct commands with `--json` output for automation |
 
 **Core Commands (MVP):**
-- `create <name> [--repo] [--attach]` - Create and optionally attach
+- `create <name> --repo <url|.> [--attach] [--purpose <text>]` - Create and optionally attach. `--repo` accepts a git URL or `.` to detect the current directory's git remote.
 - `list` / `ps` - Show all instances with status
 - `attach <name>` - Terminal attach via tmux
 - `remove [--force] <name>` - Delete with safety checks
 - `purpose <name> [value]` - Get/set mutable purpose
+
+**Growth Commands:**
+- `repos` - List tracked repositories (Growth)
 
 ### Output Formats
 
@@ -272,8 +340,8 @@ agent-env is a CLI tool with developer tool characteristics:
 
 | Phase | Approach |
 |-------|----------|
-| **MVP** | Baseline config only - ships with agent-env, versioned with releases |
-| **Post-MVP** | Baseline + `.agent-env/config.json` repo overrides |
+| **MVP** | Baseline config applied automatically for repos without `.devcontainer/`; repos with their own config use it by default. User can opt in to agent-env's baseline to override repo config when preferred. |
+| **Post-MVP** | Baseline + `.agent-env/` additive overrides - repos can layer additional packages, env vars, or scripts on top of the baseline |
 
 Baseline config location: `<agent-env-install>/config/baseline/`
 
@@ -310,10 +378,11 @@ pnpm add -g @zookanalytics/agent-env
 
 - FR1: User can create a new instance with a specified name
 - FR2: User can create an instance from a git repository URL
-- FR3: User can create an instance from the current directory's git remote
+- FR3: User can create an instance from the current directory's git remote by specifying `--repo .`
 - FR4: User can create an instance and immediately attach in one command
 - FR5: User can remove an instance that passes safety checks
 - FR6: User can force-remove an instance, bypassing safety checks with explicit warning
+- FR43: User can create multiple instances from the same repository, each with a distinct user-chosen name
 
 ### Instance Discovery & Status
 
@@ -322,6 +391,7 @@ pnpm add -g @zookanalytics/agent-env
 - FR9: User can see the last-attached timestamp for each instance
 - FR10: User can see the purpose/label for each instance
 - FR11: System can detect instances with never-pushed branches
+- FR45: User can see the source repository for each instance in list output
 
 ### Instance Access
 
@@ -335,6 +405,11 @@ pnpm add -g @zookanalytics/agent-env
 - FR16: User can set/update the purpose of an instance
 - FR17: System tracks instance creation timestamp
 - FR18: System tracks last-attached timestamp per instance
+- FR46: User can set instance purpose at creation time via `--purpose` flag
+- FR47: System exposes instance name as `$AGENT_ENV_INSTANCE` environment variable inside the container
+- FR48: System exposes instance purpose as `$AGENT_ENV_PURPOSE` environment variable inside the container
+- FR49: System displays instance name and purpose in the tmux status bar inside the container
+- FR50: System updates tmux status bar purpose live when purpose changes externally (within 30 seconds)
 
 ### Safety & Data Protection
 
@@ -349,7 +424,7 @@ pnpm add -g @zookanalytics/agent-env
 
 ### Configuration & Environment
 
-- FR27: System provides a baseline devcontainer configuration
+- FR27: System applies agent-env baseline devcontainer configuration to new instances when the cloned repository has no `.devcontainer/` directory; user can opt in to use the baseline for repos that have their own config
 - FR28: Baseline includes Claude Code CLI authenticated and ready
 - FR29: Baseline includes git signing configured
 - FR30: Baseline includes SSH agent forwarded from host
@@ -360,10 +435,10 @@ pnpm add -g @zookanalytics/agent-env
 ### CLI Interface
 
 - FR34: User can launch interactive menu by running agent-env with no arguments
-- FR35: User can run scriptable commands directly with arguments
+- FR35: User can run all core commands (create, list, attach, remove, purpose) non-interactively with explicit arguments
 - FR36: User can get JSON output from list command for scripting/orchestration
 - FR37: User can install shell completion for bash/zsh
-- FR38: System provides human-readable colored output by default
+- FR38: System provides structured terminal output with ANSI color codes for status indicators and section headers
 
 ### Installation & Platform
 
@@ -371,6 +446,16 @@ pnpm add -g @zookanalytics/agent-env
 - FR40: System runs on macOS (Intel and Apple Silicon)
 - FR41: System runs on Linux
 - FR42: System requires Docker for container operations
+
+### Repo Management (Growth)
+
+- FR51: System tracks repositories used for instance creation in a local registry
+- FR52: User can list tracked repositories
+- FR53: User can create a new instance from a registered repository without re-entering the URL
+
+### Purpose Visibility (Growth)
+
+- FR54: System displays instance purpose in VS Code window title when attached via VS Code
 
 ## Non-Functional Requirements
 
@@ -381,29 +466,31 @@ pnpm add -g @zookanalytics/agent-env
 - NFR3: Create with cached base image completes within 30 seconds
 - NFR4: First command after attach executes within 5 seconds (time-to-productive)
 - NFR5: Safety check analysis completes within 3 seconds
+- NFR22: Purpose displayed in tmux status bar within 1 second of attach
+- NFR23: Live purpose updates reflected in tmux status bar within 30 seconds of change
 
 ### Reliability
 
-- NFR6: Safety checks have zero false negatives (never miss unsafe state)
-- NFR7: False positive rate for safety checks is acceptable (may block when technically safe)
+- NFR6: Safety checks detect 100% of unsafe scenarios defined in the test suite
+- NFR7: Safety checks false positive rate below 5% across test scenarios
 - NFR8: tmux sessions persist across attach/detach cycles without data loss
-- NFR9: Instance state survives host machine restart (Docker volumes persist)
+- NFR9: Instance state survives host machine restart
 - NFR10: Partial failures (one instance unreachable) do not block operations on other instances
 
 ### Integration & Compatibility
 
 - NFR11: Works with Docker Engine 20.10+
-- NFR12: Compatible with devcontainer.json specification
+- NFR12: Agent-env baseline devcontainer configuration conforms to the devcontainer.json specification
 - NFR13: JSON output parseable by standard tools (jq, orchestrator)
 - NFR14: Git operations work with any remote (GitHub, GitLab, Bitbucket, etc.)
 - NFR15: SSH agent forwarding works with standard SSH configurations
 - NFR16: Works in tmux, screen, and bare terminal environments
+- NFR24: tmux status bar integration does not interfere with user's tmux configuration outside agent-env instances
 
 ### Maintainability
 
-- NFR17: Codebase understandable without extensive documentation
+- NFR17: Codebase organized into modules with clear boundaries: CLI layer, container lifecycle, safety checks, configuration, git operations
 - NFR18: Clear separation between CLI, container lifecycle, and git operations
-- NFR19: Test coverage sufficient for confidence in changes
+- NFR19: Core modules (lifecycle, safety, configuration) have 80% or higher branch coverage
 - NFR20: No external runtime dependencies beyond Node.js and Docker
-- NFR21: Configuration schema is self-documenting
-
+- NFR21: Configuration includes JSON Schema with descriptions for all fields

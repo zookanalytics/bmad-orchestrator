@@ -1,0 +1,43 @@
+{
+  "$schema": "https://raw.githubusercontent.com/RobertOstermann/vscode-action-buttons/master/src/schema/statusBar.schema.json",
+  "betterStatusBar.reloadButton": null,
+  "betterStatusBar.commands": [
+    {
+      "id": "claude-purpose",
+      "label": "$(sparkle) {{PURPOSE}}",
+      "tooltip": "Click to set session purpose",
+      "command": "./scripts/claude-instance prompt",
+      "useVsCodeApi": false,
+      "terminal": {
+        "name": "Claude Purpose",
+        "focus": true,
+        "singleInstance": true,
+        "clear": true
+      },
+      "color": "#a78bfa",
+      "priority": 100,
+      "alignment": 1
+    },
+    {
+      "id": "run-app",
+      "label": "$(play)",
+      "tooltip": "Start servers + seed DB",
+      "command": "workbench.action.tasks.runTask",
+      "args": ["Run App"],
+      "useVsCodeApi": true,
+      "priority": 90,
+      "alignment": 1
+    },
+    {
+      "id": "open-app",
+      "label": "$(globe)",
+      "tooltip": "Open app in browser",
+      "command": "workbench.action.tasks.runTask",
+      "args": ["Open App"],
+      "useVsCodeApi": true,
+      "priority": 89,
+      "alignment": 1
+    }
+  ]
+}
+

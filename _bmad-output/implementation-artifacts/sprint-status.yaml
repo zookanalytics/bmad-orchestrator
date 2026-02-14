@@ -1,7 +1,7 @@
 # Unified Sprint Status - bmad-orchestrator Monorepo
 # Tracks all components: orchestrator CLI, agent-env, and release infrastructure
 #
-# generated: 2026-02-06
+# generated: 2026-02-14
 # project: BMAD Orchestrator
 # tracking_system: file-system
 # story_location: _bmad-output/implementation-artifacts
@@ -35,7 +35,7 @@
 # - SM typically creates next story after previous one is 'done' to incorporate learnings
 # - Dev moves story to 'review', then runs code-review (fresh context, different LLM recommended)
 
-generated: 2026-02-06
+generated: 2026-02-14
 project: BMAD Orchestrator
 tracking_system: file-system
 story_location: _bmad-output/implementation-artifacts
@@ -142,6 +142,38 @@ development_status:
   env-5-3-implement-force-remove: done
   env-epic-5-retrospective: done
 
+  # ─── agent-env Epic 6: In-Container Purpose & Tmux Visibility ───
+  # Purpose propagation into containers: env vars, tmux status bar, CLI inside containers.
+  # Dependencies: Requires Epics 1-5 (complete). Independent of Epics 7 and 8.
+  # PRD revision 2026-02-14: FR46-FR50, NFR22-NFR24
+  env-epic-6: backlog
+  env-6-1-baseline-devcontainer-updates-for-purpose-infrastructure: backlog
+  env-6-2-purpose-flag-on-create-and-agent-env-purpose-env-var: backlog
+  env-6-3-agent-env-cli-inside-containers-with-live-purpose-updates: backlog
+  env-epic-6-retrospective: optional
+
+  # ─── agent-env Epic 7: Naming Model, Multi-Instance & Baseline Prompt ───
+  # Nested workspace layout, multi-instance per repo, user-chosen names, baseline config prompt.
+  # Dependencies: Requires Epics 1-5 (complete). Independent of Epics 6 and 8.
+  # PRD revision 2026-02-14: FR43, FR45, FR27 (revision)
+  env-epic-7: backlog
+  env-7-1-refactor-workspace-scanning-and-state-schema-for-nested-layout: backlog
+  env-7-2-repo-slug-derivation-compression-and-instance-name-validation: backlog
+  env-7-3-two-phase-repo-resolution-for-commands: backlog
+  env-7-4-source-repo-in-list-output: backlog
+  env-7-5-baseline-config-prompt-with-flag-overrides: backlog
+  env-epic-7-retrospective: optional
+
+  # ─── agent-env Epic 8: Growth — Repo Registry & VS Code Purpose ───
+  # Convenience features: repo registry, create from slug, VS Code purpose display.
+  # Dependencies: Requires Epic 6 (purpose pipeline + CLI inside container) AND Epic 7 (nested workspaces).
+  # PRD revision 2026-02-14: FR51-FR54
+  env-epic-8: backlog
+  env-8-1-repo-registry-command: backlog
+  env-8-2-create-from-registered-repo: backlog
+  env-8-3-vs-code-purpose-visibility-via-better-status-bar: backlog
+  env-epic-8-retrospective: optional
+
 # ══════════════════════════════════════════════════════════════════════════════
 # COMPONENT: Release Infrastructure (rel-)
 # ══════════════════════════════════════════════════════════════════════════════
@@ -216,6 +248,15 @@ cross_dependencies:
     blocked: rel-epic-3
     note: "Automated publish requires changesets versioning to be configured"
 
+  # agent-env Epics 6-8 dependency chain (PRD revision 2026-02-14)
+  - blocker: env-epic-6
+    blocked: env-epic-8
+    note: "Epic 8 requires purpose pipeline + CLI inside container from Epic 6"
+
+  - blocker: env-epic-7
+    blocked: env-epic-8
+    note: "Epic 8 requires nested workspace structure from Epic 7 for repo scanning"
+
 # ══════════════════════════════════════════════════════════════════════════════
 # NOTES
 # ══════════════════════════════════════════════════════════════════════════════
@@ -228,6 +269,10 @@ cross_dependencies:
 # - rel-epic-1 and rel-epic-2 can be worked in parallel
 # - rel-epic-3 depends on both rel-epic-1 and rel-epic-2
 # - rel-epic-4 dissolved (Story 4.1 superseded by OIDC, Story 4.2 merged into Epic 3 as Story 3.4)
+# - agent-env Epics 6-8 added (PRD revision 2026-02-14): purpose propagation, naming model, growth features
+# - Recommended order: Epic 6 first (most user-visible), then Epic 7 (architectural), then Epic 8 (Growth polish)
+# - Epics 6 and 7 are independent of each other but both touch create command — sequential recommended to avoid merge conflicts
+# - Epic 8 depends on both Epic 6 and Epic 7
 # - Update cross_dependencies as new blockers are discovered
 
 # ══════════════════════════════════════════════════════════════════════════════

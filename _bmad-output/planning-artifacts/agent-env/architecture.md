@@ -2,7 +2,7 @@
 stepsCompleted: [1, 2, 3, 4, 5, 6, 7, 8]
 workflowComplete: true
 completedAt: '2026-01-27'
-lastUpdated: '2026-02-06'
+lastUpdated: '2026-02-14'
 inputDocuments:
   - '_bmad-output/planning-artifacts/agent-env/prd.md'
   - '_bmad-output/planning-artifacts/agent-env/product-brief.md'
@@ -12,6 +12,10 @@ workflowType: 'architecture'
 project_name: 'agent-env'
 user_name: 'Node'
 date: '2026-01-27'
+revisions:
+  - date: '2026-02-14'
+    trigger: 'PRD revision (6 new features, validation fixes)'
+    changes: 'Revised naming model, baseline config prompt, purpose propagation, CLI inside container, slug compression, repo registry'
 ---
 
 # Architecture Decision Document
@@ -1304,4 +1308,246 @@ This section tracks actual implementation against the architecture to identify d
 
 **Audit Log:**
 - [x] `~/.agent-env/audit.log` - JSON Lines format tracking: timestamp, action, instanceName, gitState, confirmationMethod
+
+## Architecture Update: PRD Revision (2026-02-14)
+
+This section documents architectural decisions made in response to the 2026-02-14 PRD revision. These decisions supersede conflicting statements in earlier sections.
+
+### PRD Deviations Identified
+
+| PRD Statement | Architecture Decision | Action |
+|---|---|---|
+| FR27: Baseline "always" overrides repo `.devcontainer/` | Baseline override is opt-in via prompt or flag, not forced | PRD update required |
+| "Environments, not containers" framing | Unintended by product owner. Tool manages containers. | PRD update required |
+
+### Decision: Instance Naming Model (Revised)
+
+**Supersedes:** "Naming Convention" in Project Context Analysis section.
+
+**Previous model:** Compound name `<repo>-<instance>` as flat workspace identifier. User must type full compound name for all commands.
+
+**New model:** Instance name is user-chosen, scoped to a repository. The unique key is `(repo-slug, instance-name)`.
+
+**Workspace folder structure:**
+```
+~/.agent-env/workspaces/
+├── bmad-orch/
+│   ├── auth/
+│   │   └── .agent-env/state.json
+│   └── api/
+│       └── .agent-env/state.json
+└── awesome-cli/
+    └── bugfix/
+        └── .agent-env/state.json
+```
+
+**Repo slug derivation:** Last path segment of git remote URL, minus `.git`. Example: `https://github.com/user/bmad-orchestrator.git` → `bmad-orchestrator`.
+
+**Repo slug compression:** If the derived slug exceeds 39 characters, apply deterministic compression:
+
+```typescript
+function compressSlug(slug: string): string {
+  if (slug.length <= 39) return slug;
+  const hash = createHash('sha256').update(slug).digest('hex').slice(0, 6);
+  return `${slug.slice(0, 15)}_${hash}_${slug.slice(-15)}`;
+}
+```
+
+Format: `<first 15 chars>_<6 char SHA-256 hex>_<last 15 chars>` = 38 characters max. Deterministic — same input always produces the same compressed slug. Underscores stand out visually against typical hyphenated repo names.
+
+**Instance name constraints:** Maximum 20 characters. Validated at create time — reject with clear error if exceeded.
+
+**Container naming:** `ae-<repo-slug>-<instance>` (flat string, internal only — user never types this). Maximum 63 characters enforced by Docker: `ae-` (3) + repo slug (≤39) + `-` (1) + instance (≤20) = 63.
+
+**Known limitation:** Slug compression can theoretically collide if two repos share the same first 15 and last 15 characters but differ in the middle. Extremely unlikely for a single-user tool. Documented, not mitigated.
+
+**Repo resolution for commands (two-phase):**
+
+Phase 1 — Resolve repo context:
+
+| Priority | Context | Resolution |
+|---|---|---|
+| 1 | `--repo` provided | Explicit — use provided repo |
+| 2 | cwd is a git repo | Implicit — detect from `git remote get-url origin` |
+| 3 | Neither | No repo context — proceed to phase 2 without scoping |
+
+Phase 2 — Resolve instance:
+
+| Repo Context | Instance Found | Result |
+|---|---|---|
+| Known (from phase 1) | Exists for that repo | Resolve directly |
+| Known (from phase 1) | Not found for that repo | Fall through to global search |
+| None or fell through | Unambiguous across all repos | Resolve to single match |
+| None or fell through | Ambiguous (multiple repos) | Error: "Multiple instances named '<name>' exist. Specify --repo." |
+
+**Key behavior:** cwd narrows the search scope but does not block resolution. If you're in the `awesome-cli` directory but `auth` only exists under `bmad-orch`, it resolves correctly.
+
+**Command examples:**
+```bash
+# In a git repo directory
+agent-env create auth                     # repo from cwd
+agent-env attach auth                     # scoped to cwd repo
+agent-env purpose auth "JWT work"         # scoped to cwd repo
+
+# Explicit repo
+agent-env create auth --repo https://...  # explicit URL
+agent-env attach auth --repo bmad-orch    # explicit repo slug
+
+# Not in a repo directory
+agent-env attach auth                     # works if unambiguous
+agent-env attach auth --repo bmad-orch    # explicit when ambiguous
+```
+
+**`list` behavior:** Always shows all instances across all repos. `--repo` flag available to filter.
+
+**Instance scanning:** Scan `~/.agent-env/workspaces/*/` for repo-slug directories, then `~/.agent-env/workspaces/*/*/` for instance directories containing `.agent-env/state.json`.
+
+### Decision: Baseline Config (Prompt with Flag Override)
+
+**Supersedes:** FR27 interpretation in existing architecture ("copy if not exists").
+
+**Behavior:**
+- If cloned repo has **no** `.devcontainer/`: Apply agent-env baseline automatically (default, unchanged)
+- If cloned repo **has** `.devcontainer/` and no flag provided: Prompt user — "This repo has a .devcontainer/ config. Use it, or apply agent-env baseline? [repo/baseline]"
+- `--baseline` flag: Override repo config with agent-env baseline, no prompt
+- `--no-baseline` flag: Use repo's config, no prompt
+- When baseline is applied: Overwrite the repo's `.devcontainer/` contents. No backup.
+
+**Create command signature update:**
+```
+agent-env create <name> [--repo <url|.>] [--attach] [--purpose <text>] [--baseline | --no-baseline]
+```
+
+Three states: force-baseline, force-repo-config, ask-user (default when repo has `.devcontainer/`).
+
+### Decision: Purpose Propagation into Container
+
+**New capability for:** FR47, FR48, FR49, FR50, NFR22, NFR23.
+
+**Mechanism:** Bind-mount the workspace's `.agent-env/` directory to `/etc/agent-env/` inside the container (read-write).
+
+**Single source of truth:** `/etc/agent-env/state.json` — the same `state.json` already managed by the host-side CLI. No duplicate files.
+
+**Mount is read-write:** Purpose can be updated from both host and inside the container. Last-write-wins with atomic writes (tmp + rename). Concurrent write collisions are near-zero probability for a single-user tool with infrequent writes. Documented as known constraint.
+
+**Devcontainer mount config:**
+```json
+{
+  "mounts": [
+    "source=${localWorkspaceFolder}/.agent-env,target=/etc/agent-env,type=bind"
+  ]
+}
+```
+
+**Container environment variables (set in devcontainer.json at creation):**
+```json
+{
+  "containerEnv": {
+    "AGENT_ENV_CONTAINER": "true",
+    "AGENT_ENV_INSTANCE": "<instance-name>",
+    "AGENT_ENV_REPO": "<repo-slug>"
+  }
+}
+```
+
+These env vars enable the CLI to detect it's running inside a container and resolve paths accordingly. The same env vars could technically be set on the host but have no expected use case there today.
+
+**tmux status bar integration:**
+- Reads instance name and purpose from `/etc/agent-env/state.json`
+- Parsing method is a baseline config implementation detail (jq, helper script, or Node.js one-liner — all viable since Node.js is guaranteed in the container)
+- tmux `status-interval` set to 15s to meet NFR23's 30-second requirement with margin
+
+**Double-mount acknowledgment:** The `.agent-env/` directory is visible both within the workspace mount and at `/etc/agent-env/`. Intentional — the fixed path provides predictable access regardless of workspace folder nesting.
+
+### Decision: agent-env CLI Inside Container
+
+**Rationale:** Purpose updates involve a multi-step pipeline (state.json write + VS Code template processing). Maintaining two implementations (host script + in-container script) guarantees drift. One CLI, environment-aware.
+
+**Installation:** `pnpm add -g @zookanalytics/agent-env` in baseline `post-create.sh`.
+
+**Environment detection:**
+```typescript
+function isInsideContainer(): boolean {
+  return process.env.AGENT_ENV_CONTAINER === 'true';
+}
+
+function resolveStatePath(): string {
+  if (isInsideContainer()) {
+    return '/etc/agent-env/state.json';
+  }
+  // Host path resolution via workspaces directory
+  return path.join(homedir(), '.agent-env/workspaces', repoSlug, instance, '.agent-env/state.json');
+}
+```
+
+**Purpose update pipeline (same logic on host and in container):**
+
+```
+agent-env purpose <name> "text"
+  ├── 1. Update .agent-env/state.json (purpose field, atomic write)
+  ├── 2. If .vscode/statusBar.template.json exists in workspace:
+  │      Read template → replace {{PURPOSE}} → write .vscode/statusBar.json
+  └── 3. tmux picks up state.json change on next status-interval refresh
+        VS Code extension picks up statusBar.json change via file watcher
+```
+
+**VS Code template processing:**
+- `.vscode/statusBar.template.json` is repo-specific content (checked in) — contains project-specific buttons, tasks, and `{{PURPOSE}}` placeholder
+- `.vscode/statusBar.json` is generated output (gitignored) — VS Code extension watches this file
+- Template varies per project; agent-env only performs the `{{PURPOSE}}` substitution
+- If no template exists, this step is skipped silently
+
+### Decision: Repo Registry (Growth — FR51-53)
+
+**Approach:** Derive from existing workspaces. No separate registry file.
+
+`agent-env repos` scans `~/.agent-env/workspaces/*/` directory names and cross-references with `state.json` for full URLs.
+
+**Implication:** Once all instances for a repo are removed, that repo disappears from the list. Acceptable — the registry is a convenience shortcut, not a persistent record.
+
+### Updated State Model
+
+**InstanceState schema update:**
+```typescript
+interface InstanceState {
+  instance: string;       // "auth" (user-chosen name, max 20 chars)
+  repoSlug: string;       // "bmad-orch" (derived from URL, max 39 chars)
+  repoUrl: string;        // Full git remote URL
+  createdAt: string;      // ISO 8601
+  lastAttached: string;   // ISO 8601
+  purpose: string | null; // User-provided description
+  containerName: string;  // "ae-bmad-orch-auth" (internal, max 63 chars)
+}
+```
+
+**Instance states remain unchanged:**
+
+| State | Workspace Dir | Container | Meaning |
+|---|---|---|---|
+| running | Exists | Running | Active development |
+| stopped | Exists | Stopped | Work preserved, not running |
+| orphaned | Exists | Missing | Container removed, workspace intact |
+
+### Impact on Existing Architecture Sections
+
+| Section | Impact |
+|---|---|
+| Instance Model / Naming Convention | Superseded by revised naming model above |
+| Devcontainer Integration Architecture | Step 2 updated: baseline application depends on prompt/flag; mount is read-write |
+| Container Management Dependencies | agent-env CLI now installed inside container via post-create |
+| Project Structure (commands/) | `create.ts` gains `--baseline`/`--no-baseline` flag handling and prompt logic |
+| Project Structure (lib/) | `workspace.ts` scanning changes from flat to nested; `compressSlug()` added |
+| FR to Structure Mapping | FR3, FR43, FR46-50 mapped to updated modules |
+| CLI Naming Convention | Superseded — instance name is no longer compound |
+| State File Schema | Updated with revised field names and constraints |
+
+### Architecture Update Validation (2026-02-14)
+
+**Coherence:** All new decisions are compatible with existing architecture and with each other. Superseded sections clearly documented.
+
+**Requirements Coverage:** 53/54 FRs fully covered. FR48 (`$AGENT_ENV_PURPOSE` env var) addressed via baseline shell init — implementation detail, no architectural change needed. All 24 NFRs covered.
+
+**Gap Resolution:** FR48 resolved by adding `export AGENT_ENV_PURPOSE=...` to baseline shell init scripts. Purpose env var is set fresh per shell session from state.json.
+
+**Implementation Readiness:** Update introduces 7 new architectural decisions, all with clear rationale, examples, and impact analysis. AI agents can implement from this document.
 
