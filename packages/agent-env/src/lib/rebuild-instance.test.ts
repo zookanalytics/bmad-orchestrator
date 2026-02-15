@@ -1,6 +1,7 @@
 import type { ExecuteResult } from '@zookanalytics/shared';
 
 import {
+  cp,
   mkdir,
   readdir,
   readFile,
@@ -18,6 +19,7 @@ import type {
   ContainerLifecycle,
   ContainerRemoveResult,
   ContainerStopResult,
+  DockerPullResult,
 } from './container.js';
 import type { RebuildInstanceDeps } from './rebuild-instance.js';
 import type { InstanceState } from './types.js';
@@ -46,7 +48,7 @@ afterEach(async () => {
 async function createTestWorkspace(
   workspaceName: string,
   state: InstanceState,
-  options?: { devcontainerFiles?: string[] }
+  options?: { devcontainerFiles?: string[]; dockerfileContent?: string }
 ): Promise<void> {
   const wsRoot = join(tempDir, AGENT_ENV_DIR, WORKSPACES_DIR, workspaceName);
   const agentEnvDir = join(wsRoot, AGENT_ENV_DIR);
@@ -60,7 +62,21 @@ async function createTestWorkspace(
     const devcontainerDir = join(wsRoot, '.devcontainer');
     await mkdir(devcontainerDir, { recursive: true });
     for (const file of options.devcontainerFiles) {
-      await writeFile(join(devcontainerDir, file), `# ${file}`, 'utf-8');
+      if (file === 'devcontainer.json') {
+        await writeFile(
+          join(devcontainerDir, file),
+          JSON.stringify({ build: { dockerfile: 'Dockerfile' } }),
+          'utf-8'
+        );
+      } else if (file === 'Dockerfile') {
+        await writeFile(
+          join(devcontainerDir, file),
+          options.dockerfileContent ?? 'FROM node:22-bookworm-slim\n',
+          'utf-8'
+        );
+      } else {
+        await writeFile(join(devcontainerDir, file), `# ${file}`, 'utf-8');
+      }
     }
   }
 }
@@ -95,6 +111,7 @@ function createMockContainer(overrides: Partial<ContainerLifecycle> = {}): Conta
       status: 'running',
       containerId: 'new123',
     }),
+    dockerPull: vi.fn().mockResolvedValue({ ok: true } satisfies DockerPullResult),
     containerStop: vi.fn().mockResolvedValue({ ok: true } satisfies ContainerStopResult),
     containerRemove: vi.fn().mockResolvedValue({ ok: true } satisfies ContainerRemoveResult),
     ...overrides,
@@ -102,8 +119,9 @@ function createMockContainer(overrides: Partial<ContainerLifecycle> = {}): Conta
 }
 
 /**
- * Create devcontainer stat mock that allows baseline path through and
- * returns configurable results for workspace paths.
+ * Create devcontainer stat mock that allows baseline path and real workspace paths through.
+ * Falls back to real stat for paths under tempDir (workspace files created by tests).
+ * Only synthesizes a directory-like result for the `.devcontainer` directory itself.
  */
 function createDevcontainerStatMock(hasExistingDevcontainer: boolean) {
   const baselinePath = getBaselineConfigPath();
@@ -111,7 +129,14 @@ function createDevcontainerStatMock(hasExistingDevcontainer: boolean) {
     if (path.startsWith(baselinePath) || path === baselinePath) {
       return stat(path);
     }
-    if (hasExistingDevcontainer && path.includes('.devcontainer')) {
+    // Let real filesystem handle workspace paths (includes devcontainer.json, Dockerfile, etc.)
+    try {
+      return await stat(path);
+    } catch {
+      // Fall through to mock behavior
+    }
+    // Only synthesize a result for the .devcontainer directory itself (not files inside it)
+    if (hasExistingDevcontainer && path.endsWith('.devcontainer')) {
       return { isDirectory: () => true, isFile: () => false };
     }
     throw Object.assign(new Error('ENOENT'), { code: 'ENOENT' });
@@ -143,12 +168,12 @@ function createTestDeps(overrides: Partial<RebuildInstanceDeps> = {}): RebuildIn
       appendFile: vi.fn().mockImplementation(appendFile),
     },
     devcontainerFsDeps: {
-      cp: vi.fn().mockResolvedValue(undefined),
+      cp: vi.fn().mockImplementation(cp),
       mkdir: vi.fn().mockImplementation(mkdir),
       readdir: vi.fn().mockImplementation(readdir),
-      readFile: vi.fn().mockResolvedValue('{}'),
+      readFile: vi.fn().mockImplementation(readFile),
       stat: createDevcontainerStatMock(true),
-      writeFile: vi.fn().mockResolvedValue(undefined),
+      writeFile: vi.fn().mockImplementation(writeFile),
     },
     rm: vi.fn().mockImplementation(rm),
     rename: vi.fn().mockImplementation(rename),
@@ -214,7 +239,11 @@ describe('rebuildInstance', () => {
     await rebuildInstance('auth', deps);
 
     const wsRoot = join(tempDir, AGENT_ENV_DIR, WORKSPACES_DIR, 'repo-auth');
-    expect(mockContainer.devcontainerUp).toHaveBeenCalledWith(wsRoot, 'ae-repo-auth');
+    expect(mockContainer.devcontainerUp).toHaveBeenCalledWith(
+      wsRoot,
+      'ae-repo-auth',
+      expect.any(Object)
+    );
   });
 
   it('preserves workspace files during rebuild', async () => {
@@ -342,7 +371,7 @@ describe('rebuildInstance', () => {
     const deps = createTestDeps();
 
     // Override to 'repo' — should NOT refresh baseline config
-    await rebuildInstance('auth', deps, false, 'repo');
+    await rebuildInstance('auth', deps, { force: false, configSource: 'repo' });
 
     expect(deps.devcontainerFsDeps.cp).not.toHaveBeenCalled();
   });
@@ -657,7 +686,7 @@ describe('rebuildInstance', () => {
     });
     const deps = createTestDeps({ container: mockContainer });
 
-    const result = await rebuildInstance('auth', deps, true);
+    const result = await rebuildInstance('auth', deps, { force: true });
 
     expect(result.ok).toBe(true);
     if (!result.ok) throw new Error('Expected success');
@@ -932,10 +961,214 @@ describe('rebuildInstance', () => {
       }),
     });
 
-    const result = await rebuildInstance('auth', deps, true);
+    const result = await rebuildInstance('auth', deps, { force: true });
 
     expect(result.ok).toBe(false);
     if (result.ok) throw new Error('Expected failure');
     expect(result.wasRunning).toBe(true);
+  });
+
+  // ─── Pull behavior ──────────────────────────────────────────────────────
+
+  it('default rebuild calls dockerPull for each FROM image found in Dockerfile', async () => {
+    const state = createTestState('repo-auth', { configSource: 'baseline' });
+    await createTestWorkspace('repo-auth', state, {
+      devcontainerFiles: ['devcontainer.json', 'Dockerfile', 'init-host.sh', 'post-create.sh'],
+      dockerfileContent: 'FROM node:22-bookworm-slim\n',
+    });
+    const mockContainer = createMockContainer();
+    const deps = createTestDeps({ container: mockContainer });
+
+    await rebuildInstance('auth', deps);
+
+    expect(mockContainer.dockerPull).toHaveBeenCalledWith('node:22-bookworm-slim');
+  });
+
+  it('skips pull entirely when pull is false', async () => {
+    const state = createTestState('repo-auth', { configSource: 'baseline' });
+    await createTestWorkspace('repo-auth', state, {
+      devcontainerFiles: ['devcontainer.json', 'Dockerfile', 'init-host.sh', 'post-create.sh'],
+    });
+    const mockContainer = createMockContainer();
+    const deps = createTestDeps({ container: mockContainer });
+
+    await rebuildInstance('auth', deps, { pull: false });
+
+    expect(mockContainer.dockerPull).not.toHaveBeenCalled();
+  });
+
+  it('returns IMAGE_PULL_FAILED error and does NOT stop/remove container on pull failure', async () => {
+    const state = createTestState('repo-auth', { configSource: 'baseline' });
+    await createTestWorkspace('repo-auth', state, {
+      devcontainerFiles: ['devcontainer.json', 'Dockerfile', 'init-host.sh', 'post-create.sh'],
+    });
+    const mockContainer = createMockContainer({
+      dockerPull: vi.fn().mockResolvedValue({
+        ok: false,
+        error: {
+          code: 'IMAGE_PULL_FAILED',
+          message: "Failed to pull 'node:22-bookworm-slim': network error",
+          suggestion: 'Use --no-pull to skip pulling.',
+        },
+      }),
+    });
+    const deps = createTestDeps({ container: mockContainer });
+
+    const result = await rebuildInstance('auth', deps);
+
+    expect(result.ok).toBe(false);
+    if (result.ok) throw new Error('Expected failure');
+    expect(result.error.code).toBe('IMAGE_PULL_FAILED');
+    expect(mockContainer.containerStop).not.toHaveBeenCalled();
+    expect(mockContainer.containerRemove).not.toHaveBeenCalled();
+  });
+
+  it('skips pull with info log when no Dockerfile found', async () => {
+    const state = createTestState('repo-auth', { configSource: 'repo' });
+    await createTestWorkspace('repo-auth', state);
+    // Create a .devcontainer/ with only devcontainer.json (image-based, no Dockerfile)
+    const wsRoot = join(tempDir, AGENT_ENV_DIR, WORKSPACES_DIR, 'repo-auth');
+    const devcontainerDir = join(wsRoot, '.devcontainer');
+    await mkdir(devcontainerDir, { recursive: true });
+    await writeFile(
+      join(devcontainerDir, 'devcontainer.json'),
+      JSON.stringify({ image: 'mcr.microsoft.com/devcontainers/base:bookworm' })
+    );
+    const mockContainer = createMockContainer();
+    const deps = createTestDeps({ container: mockContainer });
+
+    const result = await rebuildInstance('auth', deps);
+
+    expect(result.ok).toBe(true);
+    expect(mockContainer.dockerPull).not.toHaveBeenCalled();
+    expect(deps.logger?.info).toHaveBeenCalledWith(expect.stringContaining('No Dockerfile found'));
+  });
+
+  it('skips parameterized FROM lines with logger.warn', async () => {
+    const state = createTestState('repo-auth', { configSource: 'repo' });
+    await createTestWorkspace('repo-auth', state, {
+      devcontainerFiles: ['devcontainer.json', 'Dockerfile'],
+      dockerfileContent: 'FROM node:22\nFROM ${BASE_IMAGE}\n',
+    });
+    const mockContainer = createMockContainer();
+    const deps = createTestDeps({ container: mockContainer });
+
+    await rebuildInstance('auth', deps);
+
+    expect(mockContainer.dockerPull).toHaveBeenCalledWith('node:22');
+    expect(mockContainer.dockerPull).toHaveBeenCalledTimes(1);
+    expect(deps.logger?.warn).toHaveBeenCalledWith(
+      expect.stringContaining('Skipping parameterized FROM')
+    );
+  });
+
+  // ─── noCache behavior ──────────────────────────────────────────────────
+
+  it('default rebuild passes buildNoCache true to devcontainerUp', async () => {
+    const state = createTestState('repo-auth', { configSource: 'baseline' });
+    await createTestWorkspace('repo-auth', state, {
+      devcontainerFiles: ['devcontainer.json', 'Dockerfile', 'init-host.sh', 'post-create.sh'],
+    });
+    const mockContainer = createMockContainer();
+    const deps = createTestDeps({ container: mockContainer });
+
+    await rebuildInstance('auth', deps);
+
+    expect(mockContainer.devcontainerUp).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.any(String),
+      { buildNoCache: true }
+    );
+  });
+
+  it('pull false still passes buildNoCache true (flags are independent)', async () => {
+    const state = createTestState('repo-auth', { configSource: 'baseline' });
+    await createTestWorkspace('repo-auth', state, {
+      devcontainerFiles: ['devcontainer.json', 'Dockerfile', 'init-host.sh', 'post-create.sh'],
+    });
+    const mockContainer = createMockContainer();
+    const deps = createTestDeps({ container: mockContainer });
+
+    await rebuildInstance('auth', deps, { pull: false });
+
+    expect(mockContainer.dockerPull).not.toHaveBeenCalled();
+    expect(mockContainer.devcontainerUp).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.any(String),
+      { buildNoCache: true }
+    );
+  });
+
+  it('passes buildNoCache false when noCache is false', async () => {
+    const state = createTestState('repo-auth', { configSource: 'baseline' });
+    await createTestWorkspace('repo-auth', state, {
+      devcontainerFiles: ['devcontainer.json', 'Dockerfile', 'init-host.sh', 'post-create.sh'],
+    });
+    const mockContainer = createMockContainer();
+    const deps = createTestDeps({ container: mockContainer });
+
+    await rebuildInstance('auth', deps, { noCache: false });
+
+    expect(mockContainer.devcontainerUp).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.any(String),
+      { buildNoCache: false }
+    );
+  });
+
+  it('does not pass buildNoCache when no Dockerfile exists (image-based config)', async () => {
+    const state = createTestState('repo-auth', { configSource: 'repo' });
+    await createTestWorkspace('repo-auth', state);
+    const wsRoot = join(tempDir, AGENT_ENV_DIR, WORKSPACES_DIR, 'repo-auth');
+    const devcontainerDir = join(wsRoot, '.devcontainer');
+    await mkdir(devcontainerDir, { recursive: true });
+    await writeFile(
+      join(devcontainerDir, 'devcontainer.json'),
+      JSON.stringify({ image: 'node:22' })
+    );
+    const mockContainer = createMockContainer();
+    const deps = createTestDeps({ container: mockContainer });
+
+    await rebuildInstance('auth', deps);
+
+    expect(mockContainer.devcontainerUp).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.any(String),
+      { buildNoCache: false }
+    );
+  });
+
+  // ─── Pull ordering verification ────────────────────────────────────────
+
+  it('pull step runs after config refresh but before container stop', async () => {
+    const state = createTestState('repo-auth', { configSource: 'baseline' });
+    await createTestWorkspace('repo-auth', state, {
+      devcontainerFiles: ['devcontainer.json', 'Dockerfile', 'init-host.sh', 'post-create.sh'],
+    });
+
+    const callOrder: string[] = [];
+    const mockContainer = createMockContainer({
+      dockerPull: vi.fn().mockImplementation(async () => {
+        callOrder.push('docker_pull');
+        return {
+          ok: false,
+          error: {
+            code: 'IMAGE_PULL_FAILED',
+            message: 'pull failed',
+          },
+        };
+      }),
+      containerStop: vi.fn().mockImplementation(async () => {
+        callOrder.push('container_stop');
+        return { ok: true };
+      }),
+    });
+    const deps = createTestDeps({ container: mockContainer });
+
+    await rebuildInstance('auth', deps);
+
+    expect(callOrder).toContain('docker_pull');
+    expect(callOrder).not.toContain('container_stop');
+    expect(mockContainer.containerStop).not.toHaveBeenCalled();
   });
 });

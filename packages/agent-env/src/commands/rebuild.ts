@@ -3,6 +3,8 @@ import chalk from 'chalk';
 import { Command } from 'commander';
 import { createInterface } from 'node:readline';
 
+import type { RebuildOptions } from '../lib/rebuild-instance.js';
+
 import { createRebuildDefaultDeps, rebuildInstance } from '../lib/rebuild-instance.js';
 
 /**
@@ -35,46 +37,59 @@ export const rebuildCommand = new Command('rebuild')
   .argument('<name>', 'Instance name to rebuild')
   .option('--force', 'Rebuild even if the container is currently running')
   .option('--yes', 'Skip confirmation prompt')
-  .action(async (name: string, options: { force?: boolean; yes?: boolean }) => {
-    const deps = createRebuildDefaultDeps();
+  .option('--no-pull', 'Skip pulling fresh base images')
+  .option('--use-cache', 'Allow Docker build layer cache reuse')
+  .action(
+    async (
+      name: string,
+      options: { force?: boolean; yes?: boolean; pull?: boolean; useCache?: boolean }
+    ) => {
+      const deps = createRebuildDefaultDeps();
 
-    // --yes implies --force and skips prompt; --force also skips prompt
-    let confirmed = false;
-    if (!options.yes && !options.force && process.stdin.isTTY) {
-      confirmed = await promptForConfirmation(name);
-      if (!confirmed) {
-        console.log('Rebuild cancelled');
+      // --yes implies --force and skips prompt; --force also skips prompt
+      let confirmed = false;
+      if (!options.yes && !options.force && process.stdin.isTTY) {
+        confirmed = await promptForConfirmation(name);
+        if (!confirmed) {
+          console.log('Rebuild cancelled');
+          return;
+        }
+      }
+
+      const force = options.force || options.yes || confirmed;
+
+      const rebuildOptions: RebuildOptions = {
+        force,
+        pull: options.pull,
+        noCache: !options.useCache,
+      };
+
+      if (force) {
+        console.log(`Force-rebuilding instance '${name}'...`);
+      } else {
+        console.log(`Rebuilding instance '${name}'...`);
+      }
+
+      const result = await rebuildInstance(name, deps, rebuildOptions);
+
+      if (!result.ok) {
+        if (result.error.code === 'CONTAINER_RUNNING') {
+          console.error('');
+          console.error(
+            chalk.yellow('Container is currently running.') +
+              ' Active sessions will be terminated during rebuild.'
+          );
+          console.error('');
+          console.error(`Use ${chalk.bold('--force')} to rebuild anyway.`);
+        } else {
+          const { code, message, suggestion } = result.error;
+          console.error(formatError(createError(code, message, suggestion)));
+        }
+        process.exit(1);
         return;
       }
+
+      console.log(`\x1b[32m✓\x1b[0m Instance '${name}' rebuilt successfully`);
+      console.log(`  Container: ${result.containerName}`);
     }
-
-    const force = options.force || options.yes || confirmed;
-
-    if (force) {
-      console.log(`Force-rebuilding instance '${name}'...`);
-    } else {
-      console.log(`Rebuilding instance '${name}'...`);
-    }
-
-    const result = await rebuildInstance(name, deps, force);
-
-    if (!result.ok) {
-      if (result.error.code === 'CONTAINER_RUNNING') {
-        console.error('');
-        console.error(
-          chalk.yellow('Container is currently running.') +
-            ' Active sessions will be terminated during rebuild.'
-        );
-        console.error('');
-        console.error(`Use ${chalk.bold('--force')} to rebuild anyway.`);
-      } else {
-        const { code, message, suggestion } = result.error;
-        console.error(formatError(createError(code, message, suggestion)));
-      }
-      process.exit(1);
-      return;
-    }
-
-    console.log(`\x1b[32m✓\x1b[0m Instance '${name}' rebuilt successfully`);
-    console.log(`  Container: ${result.containerName}`);
-  });
+  );

@@ -1,4 +1,4 @@
-import { mkdir, readdir, readFile, rm, stat } from 'node:fs/promises';
+import { mkdir, readdir, readFile, rm, stat, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
@@ -9,6 +9,8 @@ import {
   copyBaselineConfig,
   listBaselineFiles,
   patchContainerName,
+  resolveDockerfilePath,
+  parseDockerfileImages,
 } from './devcontainer.js';
 
 // ─── Constants ──────────────────────────────────────────────────────────────
@@ -329,5 +331,183 @@ describe('Dockerfile content', () => {
 
   it('sets zsh as default shell', () => {
     expect(content).toContain('chsh -s /usr/bin/zsh node');
+  });
+});
+
+// ─── resolveDockerfilePath ───────────────────────────────────────────────
+
+describe('resolveDockerfilePath', () => {
+  const fsDeps = { readFile, stat };
+
+  it('returns path when build.dockerfile is set in devcontainer.json', async () => {
+    const devcontainerDir = join(tempDir, '.devcontainer');
+    await mkdir(devcontainerDir, { recursive: true });
+    await writeFile(
+      join(devcontainerDir, 'devcontainer.json'),
+      JSON.stringify({ build: { dockerfile: 'Dockerfile.dev' } })
+    );
+
+    const result = await resolveDockerfilePath(tempDir, fsDeps);
+    expect(result).toBe(join(devcontainerDir, 'Dockerfile.dev'));
+  });
+
+  it('returns path when top-level dockerfile field is set (shorthand form)', async () => {
+    const devcontainerDir = join(tempDir, '.devcontainer');
+    await mkdir(devcontainerDir, { recursive: true });
+    await writeFile(
+      join(devcontainerDir, 'devcontainer.json'),
+      JSON.stringify({ dockerfile: 'Dockerfile.custom' })
+    );
+
+    const result = await resolveDockerfilePath(tempDir, fsDeps);
+    expect(result).toBe(join(devcontainerDir, 'Dockerfile.custom'));
+  });
+
+  it('prefers build.dockerfile over top-level dockerfile field', async () => {
+    const devcontainerDir = join(tempDir, '.devcontainer');
+    await mkdir(devcontainerDir, { recursive: true });
+    await writeFile(
+      join(devcontainerDir, 'devcontainer.json'),
+      JSON.stringify({ build: { dockerfile: 'Dockerfile.build' }, dockerfile: 'Dockerfile.top' })
+    );
+
+    const result = await resolveDockerfilePath(tempDir, fsDeps);
+    expect(result).toBe(join(devcontainerDir, 'Dockerfile.build'));
+  });
+
+  it('returns default Dockerfile path when build.dockerfile absent but Dockerfile exists', async () => {
+    const devcontainerDir = join(tempDir, '.devcontainer');
+    await mkdir(devcontainerDir, { recursive: true });
+    await writeFile(join(devcontainerDir, 'devcontainer.json'), JSON.stringify({ image: 'node' }));
+    await writeFile(join(devcontainerDir, 'Dockerfile'), 'FROM node:22');
+
+    const result = await resolveDockerfilePath(tempDir, fsDeps);
+    expect(result).toBe(join(devcontainerDir, 'Dockerfile'));
+  });
+
+  it('returns null when no Dockerfile exists (image-based config)', async () => {
+    const devcontainerDir = join(tempDir, '.devcontainer');
+    await mkdir(devcontainerDir, { recursive: true });
+    await writeFile(
+      join(devcontainerDir, 'devcontainer.json'),
+      JSON.stringify({ image: 'mcr.microsoft.com/devcontainers/base:bookworm' })
+    );
+
+    const result = await resolveDockerfilePath(tempDir, fsDeps);
+    expect(result).toBeNull();
+  });
+
+  it('returns null when devcontainer.json is missing', async () => {
+    const result = await resolveDockerfilePath(tempDir, fsDeps);
+    expect(result).toBeNull();
+  });
+
+  it('returns the configured path even when build.dockerfile references a non-existent file', async () => {
+    const devcontainerDir = join(tempDir, '.devcontainer');
+    await mkdir(devcontainerDir, { recursive: true });
+    await writeFile(
+      join(devcontainerDir, 'devcontainer.json'),
+      JSON.stringify({ build: { dockerfile: 'NonExistent.dockerfile' } })
+    );
+    // Do NOT create the Dockerfile — should still return the path
+
+    const result = await resolveDockerfilePath(tempDir, fsDeps);
+    expect(result).toBe(join(devcontainerDir, 'NonExistent.dockerfile'));
+  });
+
+  it('parses JSONC devcontainer.json correctly (comments, trailing commas)', async () => {
+    const devcontainerDir = join(tempDir, '.devcontainer');
+    await mkdir(devcontainerDir, { recursive: true });
+    const jsoncContent = `{
+  // This is a comment
+  "build": {
+    "dockerfile": "Dockerfile",
+    /* block comment */
+    "context": "."
+  },
+  "image": "ghcr.io/user/repo", // inline comment with //
+}`;
+    await writeFile(join(devcontainerDir, 'devcontainer.json'), jsoncContent);
+
+    const result = await resolveDockerfilePath(tempDir, fsDeps);
+    expect(result).toBe(join(devcontainerDir, 'Dockerfile'));
+  });
+
+  it('finds root-level devcontainer.json when .devcontainer/ dir does not exist', async () => {
+    await writeFile(
+      join(tempDir, 'devcontainer.json'),
+      JSON.stringify({ build: { dockerfile: 'Dockerfile' } })
+    );
+    await writeFile(join(tempDir, 'Dockerfile'), 'FROM node:22');
+
+    const result = await resolveDockerfilePath(tempDir, fsDeps);
+    expect(result).toBe(join(tempDir, 'Dockerfile'));
+  });
+
+  it('throws error when devcontainer.json contains invalid JSON', async () => {
+    const devcontainerDir = join(tempDir, '.devcontainer');
+    await mkdir(devcontainerDir, { recursive: true });
+    await writeFile(join(devcontainerDir, 'devcontainer.json'), '{ invalid json');
+
+    await expect(resolveDockerfilePath(tempDir, fsDeps)).rejects.toThrow(
+      'Failed to parse devcontainer config'
+    );
+  });
+});
+
+// ─── parseDockerfileImages ──────────────────────────────────────────────
+
+describe('parseDockerfileImages', () => {
+  it('extracts single FROM image', () => {
+    const result = parseDockerfileImages('FROM node:22-bookworm-slim');
+    expect(result).toEqual(['node:22-bookworm-slim']);
+  });
+
+  it('extracts multiple FROM images and deduplicates', () => {
+    const content = `FROM node:22-bookworm-slim AS builder
+FROM node:22-bookworm-slim AS runner
+FROM nginx:alpine`;
+    const result = parseDockerfileImages(content);
+    expect(result).toEqual(['node:22-bookworm-slim', 'nginx:alpine']);
+  });
+
+  it('handles FROM --platform=... image', () => {
+    const result = parseDockerfileImages('FROM --platform=linux/amd64 node:22');
+    expect(result).toEqual(['node:22']);
+  });
+
+  it('handles FROM image AS stage', () => {
+    const result = parseDockerfileImages('FROM node:22 AS builder');
+    expect(result).toEqual(['node:22']);
+  });
+
+  it('skips FROM scratch', () => {
+    const content = `FROM node:22 AS builder
+FROM scratch`;
+    const result = parseDockerfileImages(content);
+    expect(result).toEqual(['node:22']);
+  });
+
+  it('skips parameterized FROM ${VAR} and calls logger.warn', () => {
+    const logger = { warn: vi.fn() };
+    const content = `FROM node:22
+FROM \${BASE_IMAGE}`;
+    const result = parseDockerfileImages(content, logger);
+    expect(result).toEqual(['node:22']);
+    expect(logger.warn).toHaveBeenCalledWith(
+      expect.stringContaining('Skipping parameterized FROM')
+    );
+  });
+
+  it('ignores comment lines', () => {
+    const content = `# FROM fake:image
+FROM node:22`;
+    const result = parseDockerfileImages(content);
+    expect(result).toEqual(['node:22']);
+  });
+
+  it('returns empty array for empty/no-FROM content', () => {
+    expect(parseDockerfileImages('')).toEqual([]);
+    expect(parseDockerfileImages('RUN echo hello')).toEqual([]);
   });
 });

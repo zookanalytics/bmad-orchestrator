@@ -14,8 +14,14 @@ import type { ContainerResult, ContainerStatus } from './types.js';
 
 // ─── Constants ───────────────────────────────────────────────────────────────
 
-/** Timeout for devcontainer up operation (120 seconds) */
+/** Timeout for devcontainer up operation (120 seconds for cached builds) */
 export const DEVCONTAINER_UP_TIMEOUT = 120_000;
+
+/** Timeout for devcontainer up with --build-no-cache (300 seconds — full rebuilds are slow) */
+export const DEVCONTAINER_UP_NO_CACHE_TIMEOUT = 300_000;
+
+/** Timeout for docker pull operation (300 seconds — large images can take minutes) */
+export const DOCKER_PULL_TIMEOUT = 300_000;
 
 /** Timeout for docker inspect operation (10 seconds) */
 export const DOCKER_INSPECT_TIMEOUT = 10_000;
@@ -42,20 +48,48 @@ export interface ContainerLifecycle {
   containerStatus(containerName: string): Promise<ContainerResult>;
   getContainerNameById(containerId: string): Promise<string | null>;
   findContainerByWorkspaceLabel(workspacePath: string): Promise<string | null>;
-  devcontainerUp(workspacePath: string, containerName: string): Promise<ContainerResult>;
+  devcontainerUp(
+    workspacePath: string,
+    containerName: string,
+    options?: { buildNoCache?: boolean }
+  ): Promise<ContainerResult>;
+  dockerPull(image: string): Promise<DockerPullResult>;
   containerStop(containerName: string): Promise<ContainerStopResult>;
   containerRemove(containerName: string): Promise<ContainerRemoveResult>;
 }
 
-/** Result from a container stop operation */
-export type ContainerStopResult =
+/** Result from a Docker CLI operation (stop, remove, pull) */
+export type DockerOperationResult =
   | { ok: true }
   | { ok: false; error: { code: string; message: string; suggestion?: string } };
 
-/** Result from a container remove operation */
-export type ContainerRemoveResult =
-  | { ok: true }
-  | { ok: false; error: { code: string; message: string; suggestion?: string } };
+export type ContainerStopResult = DockerOperationResult;
+export type ContainerRemoveResult = DockerOperationResult;
+export type DockerPullResult = DockerOperationResult;
+
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+
+/** Parse JSON from devcontainer CLI stdout, trying last line if full parse fails */
+function parseDevcontainerOutput(stdout: string): {
+  outcome?: string;
+  containerId?: string;
+  message?: string;
+  description?: string;
+} | null {
+  try {
+    return JSON.parse(stdout);
+  } catch {
+    const lines = stdout.trim().split('\n');
+    for (let i = lines.length - 1; i >= 0; i--) {
+      try {
+        return JSON.parse(lines[i]);
+      } catch {
+        // not JSON, try previous line
+      }
+    }
+  }
+  return null;
+}
 
 // ─── Factory ─────────────────────────────────────────────────────────────────
 
@@ -216,7 +250,8 @@ export function createContainerLifecycle(executor: Execute = createExecutor()): 
    */
   async function devcontainerUp(
     workspacePath: string,
-    containerName: string
+    containerName: string,
+    options?: { buildNoCache?: boolean }
   ): Promise<ContainerResult> {
     // Check Docker availability first
     const dockerOk = await isDockerAvailable();
@@ -234,33 +269,20 @@ export function createContainerLifecycle(executor: Execute = createExecutor()): 
     }
 
     // Run devcontainer up
-    const result = await executor('devcontainer', ['up', '--workspace-folder', workspacePath], {
-      timeout: DEVCONTAINER_UP_TIMEOUT,
+    const buildNoCache = options?.buildNoCache === true;
+    const args = [
+      'up',
+      '--workspace-folder',
+      workspacePath,
+      ...(buildNoCache ? ['--build-no-cache'] : []),
+    ];
+    const result = await executor('devcontainer', args, {
+      timeout: buildNoCache ? DEVCONTAINER_UP_NO_CACHE_TIMEOUT : DEVCONTAINER_UP_TIMEOUT,
     });
 
     // Parse devcontainer up JSON output (it outputs JSON with outcome and containerId)
     // We parse stdout regardless of success/failure since error details are in stdout JSON.
-    // The CLI may prepend log lines before the JSON, so try the last line if full parse fails.
-    let parsedOutput: {
-      outcome?: string;
-      containerId?: string;
-      message?: string;
-      description?: string;
-    } | null = null;
-    try {
-      parsedOutput = JSON.parse(result.stdout);
-    } catch {
-      // stdout may have log lines before JSON — try parsing the last non-empty line
-      const lines = result.stdout.trim().split('\n');
-      for (let i = lines.length - 1; i >= 0; i--) {
-        try {
-          parsedOutput = JSON.parse(lines[i]);
-          break;
-        } catch {
-          // not JSON, try previous line
-        }
-      }
-    }
+    const parsedOutput = parseDevcontainerOutput(result.stdout);
 
     if (!result.ok) {
       // Build detailed error message from all available sources
@@ -371,12 +393,39 @@ export function createContainerLifecycle(executor: Execute = createExecutor()): 
     };
   }
 
+  /**
+   * Pull a Docker image from a registry.
+   *
+   * @param image - Image reference (e.g., "node:22-bookworm-slim")
+   * @returns DockerPullResult with success/failure info
+   */
+  async function dockerPull(image: string): Promise<DockerPullResult> {
+    const result = await executor('docker', ['pull', image], {
+      timeout: DOCKER_PULL_TIMEOUT,
+    });
+
+    if (result.ok) {
+      return { ok: true };
+    }
+
+    return {
+      ok: false,
+      error: {
+        code: 'IMAGE_PULL_FAILED',
+        message: `Failed to pull '${image}': ${result.stderr}`,
+        suggestion:
+          'Check network connectivity and image name. Use --no-pull to skip pulling and use cached images.',
+      },
+    };
+  }
+
   return {
     isDockerAvailable,
     containerStatus,
     getContainerNameById,
     findContainerByWorkspaceLabel,
     devcontainerUp,
+    dockerPull,
     containerStop,
     containerRemove,
   };

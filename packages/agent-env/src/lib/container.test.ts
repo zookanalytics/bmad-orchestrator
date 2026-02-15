@@ -5,8 +5,10 @@ import { describe, it, expect, vi } from 'vitest';
 import {
   createContainerLifecycle,
   DEVCONTAINER_UP_TIMEOUT,
+  DEVCONTAINER_UP_NO_CACHE_TIMEOUT,
   DOCKER_INFO_TIMEOUT,
   DOCKER_INSPECT_TIMEOUT,
+  DOCKER_PULL_TIMEOUT,
   DOCKER_RM_TIMEOUT,
   DOCKER_STOP_TIMEOUT,
 } from './container.js';
@@ -719,6 +721,117 @@ describe('containerStop', () => {
     if (result.ok) throw new Error('Expected failure');
     expect(result.error.code).toBe('CONTAINER_STOP_TIMEOUT');
     expect(result.error.suggestion).toContain('docker rm -f');
+  });
+});
+
+// ─── dockerPull ──────────────────────────────────────────────────────────
+
+describe('dockerPull', () => {
+  it('returns success when docker pull succeeds', async () => {
+    const executor = mockExecutor({
+      'docker pull': successResult,
+    });
+    const lifecycle = createContainerLifecycle(executor);
+
+    const result = await lifecycle.dockerPull('node:22-bookworm-slim');
+    expect(result.ok).toBe(true);
+  });
+
+  it('calls docker pull with image name and correct timeout', async () => {
+    const executor = mockExecutor({
+      'docker pull': successResult,
+    });
+    const lifecycle = createContainerLifecycle(executor);
+
+    await lifecycle.dockerPull('node:22-bookworm-slim');
+    expect(executor).toHaveBeenCalledWith(
+      'docker',
+      ['pull', 'node:22-bookworm-slim'],
+      expect.objectContaining({ timeout: DOCKER_PULL_TIMEOUT })
+    );
+  });
+
+  it('returns IMAGE_PULL_FAILED error with suggestion on failure', async () => {
+    const executor = mockExecutor({
+      'docker pull': {
+        ok: false,
+        stdout: '',
+        stderr: 'Error: pull access denied',
+        exitCode: 1,
+      },
+    });
+    const lifecycle = createContainerLifecycle(executor);
+
+    const result = await lifecycle.dockerPull('private-registry.io/image:latest');
+    expect(result.ok).toBe(false);
+    if (result.ok) throw new Error('Expected failure');
+    expect(result.error.code).toBe('IMAGE_PULL_FAILED');
+    expect(result.error.message).toContain('private-registry.io/image:latest');
+    expect(result.error.suggestion).toContain('--no-pull');
+  });
+});
+
+// ─── devcontainerUp build options ───────────────────────────────────────
+
+describe('devcontainerUp build options', () => {
+  it('passes --build-no-cache when buildNoCache is true', async () => {
+    const executor = mockExecutor({
+      'docker info': successResult,
+      'devcontainer up': {
+        ok: true,
+        stdout: JSON.stringify({ outcome: 'success', containerId: 'x' }),
+        stderr: '',
+        exitCode: 0,
+      },
+    });
+    const lifecycle = createContainerLifecycle(executor);
+
+    await lifecycle.devcontainerUp('/workspace', 'ae-test', { buildNoCache: true });
+    expect(executor).toHaveBeenCalledWith(
+      'devcontainer',
+      expect.arrayContaining(['up', '--workspace-folder', '/workspace', '--build-no-cache']),
+      expect.objectContaining({ timeout: DEVCONTAINER_UP_NO_CACHE_TIMEOUT })
+    );
+  });
+
+  it('does not pass --build-no-cache when option omitted', async () => {
+    const executor = mockExecutor({
+      'docker info': successResult,
+      'devcontainer up': {
+        ok: true,
+        stdout: JSON.stringify({ outcome: 'success', containerId: 'x' }),
+        stderr: '',
+        exitCode: 0,
+      },
+    });
+    const lifecycle = createContainerLifecycle(executor);
+
+    await lifecycle.devcontainerUp('/workspace', 'ae-test');
+    const devcontainerCall = executor.mock.calls.find(
+      (call: unknown[]) => call[0] === 'devcontainer'
+    );
+    expect(devcontainerCall).toBeDefined();
+    expect((devcontainerCall as unknown[])[1]).not.toContain('--build-no-cache');
+  });
+
+  it('does not pass --build-no-cache when buildNoCache is false', async () => {
+    const executor = mockExecutor({
+      'docker info': successResult,
+      'devcontainer up': {
+        ok: true,
+        stdout: JSON.stringify({ outcome: 'success', containerId: 'x' }),
+        stderr: '',
+        exitCode: 0,
+      },
+    });
+    const lifecycle = createContainerLifecycle(executor);
+
+    await lifecycle.devcontainerUp('/workspace', 'ae-test', { buildNoCache: false });
+    const devcontainerCall = executor.mock.calls.find(
+      (call: unknown[]) => call[0] === 'devcontainer'
+    );
+    expect(devcontainerCall).toBeDefined();
+    expect((devcontainerCall as unknown[])[1]).not.toContain('--build-no-cache');
   });
 });
 

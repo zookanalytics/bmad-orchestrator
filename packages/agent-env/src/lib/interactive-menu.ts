@@ -9,7 +9,7 @@
 import type { InstanceAction } from '../components/InteractiveMenu.js';
 import type { AttachResult, AttachInstanceDeps } from './attach-instance.js';
 import type { Instance, ListResult } from './list-instances.js';
-import type { RebuildInstanceDeps, RebuildResult } from './rebuild-instance.js';
+import type { RebuildInstanceDeps, RebuildOptions, RebuildResult } from './rebuild-instance.js';
 import type { RemoveInstanceDeps, RemoveResult } from './remove-instance.js';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
@@ -29,7 +29,7 @@ export interface InteractiveMenuDeps {
   rebuildInstance: (
     name: string,
     deps: RebuildInstanceDeps,
-    force: boolean
+    options?: RebuildOptions
   ) => Promise<RebuildResult>;
   removeInstance: (name: string, deps: RemoveInstanceDeps, force: boolean) => Promise<RemoveResult>;
   createAttachDeps: () => AttachInstanceDeps;
@@ -115,7 +115,7 @@ export async function launchInteractiveMenu(deps: InteractiveMenuDeps): Promise<
       // Interactive menu selection IS the user's confirmation — pass force: true
       // so running containers can be rebuilt without a dead-end.
       const rebuildDeps = deps.createRebuildDeps();
-      const rebuildResult = await deps.rebuildInstance(name, rebuildDeps, true);
+      const rebuildResult = await deps.rebuildInstance(name, rebuildDeps, { force: true });
       if (!rebuildResult.ok) return { ok: false, error: rebuildResult.error };
       return { ok: true, action: 'rebuilt', instanceName: name };
     }

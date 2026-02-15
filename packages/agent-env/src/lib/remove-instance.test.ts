@@ -91,6 +91,7 @@ function createMockContainer(overrides: Partial<ContainerLifecycle> = {}): Conta
       status: 'running',
       containerId: 'abc123',
     }),
+    dockerPull: vi.fn().mockResolvedValue({ ok: true }),
     containerStop: vi.fn().mockResolvedValue({ ok: true } satisfies ContainerStopResult),
     containerRemove: vi.fn().mockResolvedValue({ ok: true } satisfies ContainerRemoveResult),
     ...overrides,

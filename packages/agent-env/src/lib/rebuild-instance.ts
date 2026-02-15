@@ -27,6 +27,7 @@ import { join } from 'node:path';
 import type { ContainerLifecycle } from './container.js';
 import type { DevcontainerFsDeps } from './devcontainer.js';
 import type { StateFsDeps } from './state.js';
+import type { ContainerResult, InstanceState, WorkspacePath } from './types.js';
 import type { FsDeps } from './workspace.js';
 
 import { findWorkspaceByName } from './attach-instance.js';
@@ -35,7 +36,9 @@ import {
   getBaselineConfigPath,
   hasDevcontainerConfig,
   listBaselineFiles,
+  parseDockerfileImages,
   patchContainerName,
+  resolveDockerfilePath,
 } from './devcontainer.js';
 import { readState, writeStateAtomic } from './state.js';
 import { getWorkspacePathByName } from './workspace.js';
@@ -59,6 +62,13 @@ export type RebuildResult =
       error: { code: string; message: string; suggestion?: string };
       wasRunning?: boolean;
     };
+
+export interface RebuildOptions {
+  force?: boolean;
+  configSource?: 'baseline' | 'repo';
+  pull?: boolean;
+  noCache?: boolean;
+}
 
 export interface RebuildInstanceDeps {
   executor: Execute;
@@ -193,38 +203,16 @@ async function refreshConfig(
   return { ok: true };
 }
 
-// ─── Rebuild Orchestration ───────────────────────────────────────────────────
+// ─── Workspace Lookup ────────────────────────────────────────────────────
 
-/**
- * Rebuild an instance by destroying and recreating its container.
- *
- * Orchestration flow:
- * 1. Find workspace by instance name
- * 2. Read state to get container name
- * 3. Check Docker availability
- * 4. Refresh devcontainer config (if baseline) — before teardown
- * 5. Check container status — if running and not forced, return error
- * 6. Stop container (if exists)
- * 7. Remove container (if exists)
- * 8. Start fresh container via devcontainer up
- * 9. Discover actual container name and update state
- *
- * The workspace (git repo, files) is preserved.
- * Only the container is destroyed and recreated.
- *
- * @param instanceName - User-provided instance name (e.g., "auth")
- * @param deps - Injectable dependencies
- * @param force - If true, rebuild even if the container is currently running
- * @param overrideConfigSource - Explicit config source, used when state lacks configSource
- * @returns RebuildResult with success/failure info
- */
-export async function rebuildInstance(
+type WorkspaceLookupResult =
+  | { ok: true; wsPath: WorkspacePath; state: InstanceState }
+  | { ok: false; error: { code: string; message: string; suggestion?: string } };
+
+async function lookupWorkspace(
   instanceName: string,
-  deps: RebuildInstanceDeps,
-  force: boolean = false,
-  overrideConfigSource?: 'baseline' | 'repo'
-): Promise<RebuildResult> {
-  // Step 1: Find workspace
+  deps: Pick<RebuildInstanceDeps, 'workspaceFsDeps' | 'stateFsDeps'>
+): Promise<WorkspaceLookupResult> {
   const lookup = await findWorkspaceByName(instanceName, deps.workspaceFsDeps);
 
   if (!lookup.found) {
@@ -250,6 +238,169 @@ export async function rebuildInstance(
 
   const wsPath = getWorkspacePathByName(lookup.workspaceName, deps.workspaceFsDeps);
   const state = await readState(wsPath, deps.stateFsDeps);
+  return { ok: true, wsPath, state };
+}
+
+// ─── Pull Step ───────────────────────────────────────────────────────────
+
+type PullStepResult =
+  | { ok: true; hasDockerfile: boolean }
+  | { ok: false; error: { code: string; message: string; suggestion?: string } };
+
+/**
+ * Resolve Dockerfile, parse FROM images, and pull base images.
+ *
+ * Returns hasDockerfile for use by buildNoCache logic.
+ * When pull is false, still resolves the Dockerfile path but skips pulling.
+ */
+async function executePullStep(
+  wsRoot: string,
+  pull: boolean,
+  deps: Pick<RebuildInstanceDeps, 'devcontainerFsDeps' | 'container' | 'logger'>
+): Promise<PullStepResult> {
+  let dockerfilePath: string | null;
+  try {
+    dockerfilePath = await resolveDockerfilePath(wsRoot, deps.devcontainerFsDeps);
+  } catch (err) {
+    return {
+      ok: false,
+      error: {
+        code: 'CONFIG_PARSE_FAILED',
+        message: err instanceof Error ? err.message : String(err),
+        suggestion: 'Check that your devcontainer.json is valid JSON or JSONC.',
+      },
+    };
+  }
+
+  const hasDockerfile = dockerfilePath !== null;
+
+  if (!pull) {
+    return { ok: true, hasDockerfile };
+  }
+
+  if (dockerfilePath === null) {
+    deps.logger?.info('No Dockerfile found — skipping image pull.');
+    return { ok: true, hasDockerfile: false };
+  }
+
+  let dockerfileContent: string;
+  try {
+    dockerfileContent = await deps.devcontainerFsDeps.readFile(dockerfilePath, 'utf-8');
+  } catch {
+    return {
+      ok: false,
+      error: {
+        code: 'DOCKERFILE_MISSING',
+        message: `Dockerfile not found at ${dockerfilePath}`,
+        suggestion:
+          'Ensure the Dockerfile exists at the configured path, or use --no-pull to skip.',
+      },
+    };
+  }
+
+  const images = parseDockerfileImages(dockerfileContent, deps.logger);
+  if (images.length === 0) {
+    deps.logger?.info('No pullable FROM images found.');
+    return { ok: true, hasDockerfile };
+  }
+
+  // Pull images in parallel for better performance
+  const pullPromises = images.map(async (image) => {
+    deps.logger?.info(`Pulling ${image}...`);
+    const pullResult = await deps.container.dockerPull(image);
+    if (!pullResult.ok) {
+      throw pullResult.error;
+    }
+    deps.logger?.info(`Pulled ${image}`);
+  });
+
+  try {
+    await Promise.all(pullPromises);
+  } catch (err) {
+    return {
+      ok: false,
+      error: err as { code: string; message: string; suggestion?: string },
+    };
+  }
+
+  return { ok: true, hasDockerfile };
+}
+
+// ─── Container Teardown ──────────────────────────────────────────────────
+
+type TeardownResult =
+  | { ok: true }
+  | { ok: false; error: { code: string; message: string; suggestion?: string } };
+
+/**
+ * Stop and remove an existing container if it exists.
+ * Skips both operations if the container is not found.
+ */
+async function teardownContainer(
+  containerName: string,
+  container: ContainerLifecycle,
+  statusResult: ContainerResult
+): Promise<TeardownResult> {
+  if (!statusResult.ok || statusResult.status === 'not-found') {
+    return { ok: true };
+  }
+
+  const stopResult = await container.containerStop(containerName);
+  if (!stopResult.ok) {
+    return { ok: false, error: stopResult.error };
+  }
+
+  const removeResult = await container.containerRemove(containerName);
+  if (!removeResult.ok) {
+    return { ok: false, error: removeResult.error };
+  }
+
+  return { ok: true };
+}
+
+// ─── Rebuild Orchestration ───────────────────────────────────────────────────
+
+/**
+ * Rebuild an instance by destroying and recreating its container.
+ *
+ * Orchestration flow:
+ *  1. Find workspace by instance name
+ *  2. Read state to get container name
+ *  3. Check Docker availability
+ *  4. Refresh devcontainer config (if baseline) — before teardown
+ *  5. Parse Dockerfile + pull base images (if pull enabled)
+ *  6. Check container status — if running and not forced, return error
+ *  7. Stop container (if exists)
+ *  8. Remove container (if exists)
+ *  9. Start fresh container via devcontainer up (with --build-no-cache if noCache)
+ * 10. Discover actual container name and update state
+ *
+ * The workspace (git repo, files) is preserved.
+ * Only the container is destroyed and recreated.
+ *
+ * @param instanceName - User-provided instance name (e.g., "auth")
+ * @param deps - Injectable dependencies
+ * @param options - Rebuild options (force, pull, noCache, configSource)
+ * @returns RebuildResult with success/failure info
+ */
+export async function rebuildInstance(
+  instanceName: string,
+  deps: RebuildInstanceDeps,
+  options?: RebuildOptions
+): Promise<RebuildResult> {
+  const {
+    force = false,
+    configSource: overrideConfigSource,
+    pull = true,
+    noCache = true,
+  } = options ?? {};
+
+  // Step 1: Find workspace
+  const wsLookup = await lookupWorkspace(instanceName, deps);
+  if (!wsLookup.ok) {
+    return { ok: false, error: wsLookup.error };
+  }
+  const { wsPath, state } = wsLookup;
   const containerName = state.containerName;
 
   // Step 2: Check Docker availability
@@ -283,7 +434,14 @@ export async function rebuildInstance(
     return { ok: false, error: configResult.error };
   }
 
-  // Step 4: Check container status
+  // Step 4: Parse Dockerfile + pull base images
+  const pullStepResult = await executePullStep(wsPath.root, pull, deps);
+  if (!pullStepResult.ok) {
+    return { ok: false, error: pullStepResult.error };
+  }
+  const { hasDockerfile } = pullStepResult;
+
+  // Step 5: Check container status
   const statusResult = await deps.container.containerStatus(containerName);
   const wasRunning = statusResult.ok && statusResult.status === 'running';
 
@@ -300,32 +458,17 @@ export async function rebuildInstance(
     };
   }
 
-  // Step 5: Stop container (if it exists and is running)
-  if (statusResult.ok && statusResult.status !== 'not-found') {
-    const stopResult = await deps.container.containerStop(containerName);
-    if (!stopResult.ok) {
-      return {
-        ok: false,
-        error: stopResult.error,
-        wasRunning,
-      };
-    }
+  // Step 6-7: Stop and remove container
+  const teardownResult = await teardownContainer(containerName, deps.container, statusResult);
+  if (!teardownResult.ok) {
+    return { ok: false, error: teardownResult.error, wasRunning };
   }
 
-  // Step 6: Remove container (if it exists)
-  if (statusResult.ok && statusResult.status !== 'not-found') {
-    const removeResult = await deps.container.containerRemove(containerName);
-    if (!removeResult.ok) {
-      return {
-        ok: false,
-        error: removeResult.error,
-        wasRunning,
-      };
-    }
-  }
-
-  // Step 7: Start fresh container via devcontainer up
-  const containerResult = await deps.container.devcontainerUp(wsPath.root, containerName);
+  // Step 8: Start fresh container via devcontainer up
+  const buildNoCache = noCache && hasDockerfile;
+  const containerResult = await deps.container.devcontainerUp(wsPath.root, containerName, {
+    buildNoCache,
+  });
   if (!containerResult.ok) {
     return {
       ok: false,
@@ -334,7 +477,7 @@ export async function rebuildInstance(
     };
   }
 
-  // Step 8: Discover actual container name
+  // Step 9: Discover actual container name
   let actualContainerName = containerName;
   if (containerResult.containerId) {
     const discovered = await deps.container.getContainerNameById(containerResult.containerId);
@@ -343,7 +486,7 @@ export async function rebuildInstance(
     }
   }
 
-  // Step 9: Update state with actual name and rebuild timestamp
+  // Step 10: Update state with actual name and rebuild timestamp
   const updatedState = {
     ...state,
     containerName: actualContainerName,
