@@ -1,5 +1,13 @@
 # @zookanalytics/agent-env
 
+## 0.3.0
+
+### Minor Changes
+
+- [#18](https://github.com/zookanalytics/bmad-orchestrator/pull/18) [`66e3574`](https://github.com/zookanalytics/bmad-orchestrator/commit/66e3574aaf54269907f29717a4dc684ecae41349) Thanks [@johnzook](https://github.com/johnzook)! - feat(agent-env): add SSH server support to baseline devcontainer
+
+  Install and configure openssh-server in baseline config with hardened key-only authentication. Host public keys are staged (private keys never enter the container) and per-container host keys are generated and persisted in the workspace. Containers are accessible via `ssh node@ae-<instance>.orb.local` on OrbStack. Existing instances require rebuild.
+
 ## 0.2.0
 
 ### Minor Changes
