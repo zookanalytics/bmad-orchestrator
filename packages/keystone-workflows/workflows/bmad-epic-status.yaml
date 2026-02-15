@@ -18,12 +18,16 @@ inputs:
     type: number
     default: 0
     description: "Internal counter for recursion tracking"
+  use_tea:
+    type: boolean
+    default: false
+    description: "Enable TEA (Test-Evidence-Architecture) steps in story workflows"
 
 outputs:
   stories_processed: ${{ inputs.current_count + 1 }}
 
 steps:
-  # Step 1: Query BMAD for next ready-for-dev story in this epic
+  # getNextStory - Query BMAD for next ready-for-dev story in this epic
   - id: getNextStory
     type: shell
     allowInsecure: true
@@ -32,7 +36,7 @@ steps:
 
       # Use Claude to query BMAD workflow-status for next story
       # This invokes the BMAD sprint-status workflow to find the next actionable story
-      RESULT=$(claude -p "Using /bmad:bmm:workflows:sprint-status, find the next story in epic $EPIC_ID that has status 'ready-for-dev' or 'backlog'. Return ONLY the story ID (e.g., '3c-1-story-name') or 'NONE' if no stories are available." --dangerously-skip-permissions --output-format text 2>/dev/null)
+      RESULT=$(claude -p "Using /bmad-bmm-sprint-status, find the next story in epic $EPIC_ID that has status 'ready-for-dev' or 'backlog'. Return ONLY the story ID (e.g., '3c-1-story-name') or 'NONE' if no stories are available." --dangerously-skip-permissions --output-format text 2>/dev/null)
 
       # Clean up the result - extract just the story ID
       STORY_ID=$(echo "$RESULT" | grep -oE "${EPIC_ID}-[0-9]+-[a-zA-Z0-9-]+" | head -1)
@@ -44,8 +48,7 @@ steps:
       fi
     timeout: 300000
 
-  # Step 2: Check if we have a story to process
-  # Use printf to avoid trailing newline that breaks string comparison
+  # checkNext - Check if we have a story to process
   - id: checkNext
     type: shell
     needs: [getNextStory]
@@ -57,7 +60,7 @@ steps:
         printf "has_story"
       fi
 
-  # Step 3: Process the story (if found)
+  # processStory - Process the story (if found)
   - id: processStory
     type: workflow
     needs: [checkNext]
@@ -66,13 +69,14 @@ steps:
     inputs:
       story_id: ${{ steps.getNextStory.output }}
       require_approval: ${{ inputs.require_approval }}
+      use_tea: ${{ inputs.use_tea }}
     outputMapping:
       success: success
       story_id: story_id
       commit_hash: commit_hash
       error_step: error_step
 
-  # Step 4: Check if we should continue iterating
+  # shouldContinue - Check if we should continue iterating
   - id: shouldContinue
     type: shell
     needs: [processStory]
@@ -91,7 +95,7 @@ steps:
         printf "continue"
       fi
 
-  # Step 5: Recursive call to process next story
+  # iterate - Recursive call to process next story
   - id: iterate
     type: workflow
     needs: [shouldContinue]
@@ -102,13 +106,13 @@ steps:
       require_approval: ${{ inputs.require_approval }}
       max_stories: ${{ inputs.max_stories }}
       current_count: ${{ inputs.current_count + 1 }}
+      use_tea: ${{ inputs.use_tea }}
     outputMapping:
       completed_stories: completed_stories
       stories_processed: stories_processed
       stopped_reason: stopped_reason
 
-  # Step 6: Final summary (only on termination - when no recursion happens)
-  # Only needs checkNext since other steps are conditional and may not run
+  # finalSummary - Final summary (only on termination)
   - id: finalSummary
     type: human
     needs: [checkNext]

@@ -10,12 +10,16 @@ inputs:
     type: string
     default: "_bmad-output/implementation-artifacts/sprint-status.yaml"
     description: "Path to sprint-status.yaml file"
+  use_tea:
+    type: boolean
+    default: false
+    description: "Enable TEA (Test-Evidence-Architecture) steps in story workflows"
 
 outputs:
   result: ${{ steps.summary.output }}
 
 steps:
-  # Step 1: Parse sprint-status.yaml and output JSON array using shell
+  # parseStories - Parse sprint-status.yaml and output JSON array
   - id: parseStories
     type: shell
     allowInsecure: true
@@ -24,20 +28,24 @@ steps:
       SPRINT_STATUS="${{ inputs.sprint_status_path }}"
 
       if [ ! -f "$SPRINT_STATUS" ]; then
-        echo "Error: Sprint status file not found at $SPRINT_STATUS" >&2
+        printf "Error: Sprint status file not found at %s\n" "$SPRINT_STATUS" >&2
         exit 1
       fi
 
       # Extract story IDs and write to temp file for script to read
-      STORIES=$(grep -E "^  ${EPIC_ID}-[0-9]+" "$SPRINT_STATUS" 2>/dev/null | sed 's/:.*//' | tr -d ' ')
+      STORIES=$(grep -E "^  ${EPIC_ID}-[0-9]+" "$SPRINT_STATUS" 2>/dev/null | grep -vE ': done(\s|$)' | sed 's/:.*//' | tr -d ' ')
 
       if [ -z "$STORIES" ]; then
-        echo "Error: No stories found for epic $EPIC_ID in $SPRINT_STATUS" >&2
+        printf "Error: No stories found for epic %s in %s\n" "$EPIC_ID" "$SPRINT_STATUS" >&2
         exit 1
       fi
 
-      # Write as JSON array to well-known temp file
-      TMPFILE="/tmp/keystone-epic-stories.json"
+      # Write as JSON array to dynamic temp file
+      TMPFILE=$(mktemp /tmp/keystone-stories.XXXXXX.json)
+      if [ -z "$TMPFILE" ]; then
+        printf "Error: Failed to create temporary file\n" >&2
+        exit 1
+      fi
       printf '[' > "$TMPFILE"
       FIRST=true
       printf '%s\n' "$STORIES" | while IFS= read -r story; do
@@ -53,18 +61,32 @@ steps:
       # Output the temp file path
       printf '%s' "$TMPFILE"
 
-  # Step 2: Read the JSON and return as array
+  # loadStories - Read the JSON and return as array
   - id: loadStories
     type: script
     allowInsecure: true
     needs: [parseStories]
     run: |
-      const tmpFile = "/tmp/keystone-epic-stories.json";
-      const content = require("fs").readFileSync(tmpFile, "utf8");
-      require("fs").unlinkSync(tmpFile);
-      return JSON.parse(content);
+      const fs = require("fs");
+      const tmpFile = "${{ steps.parseStories.output }}";
 
-  # Step 3: Confirm before processing
+      try {
+        if (!fs.existsSync(tmpFile)) {
+          throw new Error("Temp file not found: " + tmpFile);
+        }
+        const content = fs.readFileSync(tmpFile, "utf8");
+        const result = JSON.parse(content);
+        fs.unlinkSync(tmpFile);
+        return result;
+      } catch (error) {
+        // Ensure cleanup even on error
+        if (fs.existsSync(tmpFile)) {
+          fs.unlinkSync(tmpFile);
+        }
+        throw error;
+      }
+
+  # confirmStart - Confirm before processing
   - id: confirmStart
     type: human
     needs: [loadStories]
@@ -77,36 +99,144 @@ steps:
       Start processing?
     inputType: confirm
 
-  # Step 4: Process each story using native foreach (sequential)
+  # promptArchitectureValidation - Validate architecture (optional)
+  - id: promptArchitectureValidation
+    type: human
+    needs: [confirmStart]
+    if: ${{ steps.confirmStart.output == true }}
+    message: |
+      Validate architecture document against current codebase?
+
+      This will:
+      - Check for drift between documented architecture and implementation
+      - Update the architecture doc if needed
+
+      Run architecture validation?
+    inputType: confirm
+
+  # architectureValidation - Run architecture validation
+  - id: architectureValidation
+    type: shell
+    needs: [promptArchitectureValidation]
+    if: ${{ steps.promptArchitectureValidation.output == true }}
+    allowInsecure: true
+    run: |
+      claude -p "/bmad-bmm-create-architecture - Validate the current architecture document against the actual codebase for epic ${{ inputs.epic_id }}. Identify any drift between documented architecture and implementation. Update the architecture doc if needed. Do not ask questions." --dangerously-skip-permissions
+
+  # promptImplementationReadiness - Implementation readiness check (optional)
+  - id: promptImplementationReadiness
+    type: human
+    needs: [promptArchitectureValidation]
+    if: ${{ steps.confirmStart.output == true }}
+    message: |
+      Run implementation readiness check?
+
+      This validates that the PRD, epics, and UX design are properly aligned
+      before starting story implementation.
+    inputType: confirm
+
+  # implementationReadiness - Run implementation readiness check
+  - id: implementationReadiness
+    type: human
+    needs: [promptImplementationReadiness]
+    if: ${{ steps.promptImplementationReadiness.output == true }}
+    message: |
+      Please run the implementation readiness check in another terminal:
+        claude "/bmad-bmm-check-implementation-readiness"
+
+      Review the output and confirm when complete.
+    inputType: confirm
+
+  # promptCourseCorrection - Course correction (optional)
+  - id: promptCourseCorrection
+    type: human
+    needs: [promptImplementationReadiness]
+    if: ${{ steps.confirmStart.output == true }}
+    message: |
+      Run course correction before proceeding to stories?
+
+      This helps identify and fix misalignments discovered during readiness checks.
+    inputType: confirm
+
+  # courseCorrection - Run course correction
+  - id: courseCorrection
+    type: human
+    needs: [promptCourseCorrection]
+    if: ${{ steps.promptCourseCorrection.output == true }}
+    message: |
+      Please run course correction in another terminal:
+        claude "/bmad-bmm-correct-course"
+
+      Review the output, apply any recommended changes, and confirm when complete.
+    inputType: confirm
+
+  # processStory - Process each story using native foreach
   - id: processStory
     type: workflow
-    needs: [confirmStart]
+    needs: [promptCourseCorrection]
+    if: ${{ steps.confirmStart.output == true }}
     foreach: ${{ steps.loadStories.output }}
     concurrency: 1
     path: bmad-story.yaml
     inputs:
       story_id: ${{ item }}
+      use_tea: ${{ inputs.use_tea }}
 
-  # Step 5: Prepare summary data (shell step for template interpolation)
+  # promptArchitectureRefresh - Architecture refresh (optional)
+  - id: promptArchitectureRefresh
+    type: human
+    needs: [processStory]
+    if: ${{ steps.confirmStart.output == true }}
+    message: |
+      All stories for Epic ${{ inputs.epic_id }} have been processed.
+
+      Refresh the architecture document to reflect changes made during the epic?
+    inputType: confirm
+
+  # architectureRefresh - Refresh architecture document
+  - id: architectureRefresh
+    type: human
+    needs: [promptArchitectureRefresh]
+    if: ${{ steps.promptArchitectureRefresh.output == true }}
+    message: |
+      Please refresh the architecture document in another terminal:
+        claude "/bmad-bmm-create-architecture"
+
+      This ensures the architecture doc reflects all changes made during the epic.
+      Confirm when complete.
+    inputType: confirm
+
+  # prepareSummaryData - Prepare summary data
   - id: prepareSummaryData
     type: shell
-    needs: [processStory]
+    needs: [promptArchitectureRefresh]
+    if: ${{ steps.confirmStart.output == true }}
     allowInsecure: true
     run: |
-      cat > /tmp/keystone-summary-data.json << 'JSONEOF'
+      TMPFILE=$(mktemp /tmp/keystone-summary.XXXXXX.json)
+      if [ -z "$TMPFILE" ]; then
+        printf "Error: Failed to create temporary file\n" >&2
+        exit 1
+      fi
+      cat > "$TMPFILE" << 'JSONEOF'
       {"results": ${{ steps.processStory.output }}, "stories": ${{ steps.loadStories.output }}}
       JSONEOF
-      echo "/tmp/keystone-summary-data.json"
+      printf '%s' "$TMPFILE"
 
-  # Step 6: Generate summary report
+  # generateSummary - Generate summary report
   - id: generateSummary
     type: script
     needs: [prepareSummaryData]
+    if: ${{ steps.confirmStart.output == true }}
     allowInsecure: true
     run: |
       const fs = require("fs");
-      const data = JSON.parse(fs.readFileSync("/tmp/keystone-summary-data.json", "utf8"));
-      fs.unlinkSync("/tmp/keystone-summary-data.json");
+      const tmpFile = "${{ steps.prepareSummaryData.output }}";
+      if (!fs.existsSync(tmpFile)) {
+        return { total: 0, successful: 0, failed: 0, details: "Summary data not found." };
+      }
+      const data = JSON.parse(fs.readFileSync(tmpFile, "utf8"));
+      fs.unlinkSync(tmpFile);
       const results = data.results || [];
       const stories = data.stories || [];
 
@@ -135,10 +265,11 @@ steps:
         details: details.join('\n')
       };
 
-  # Step 7: Display summary and confirm
+  # summary - Display summary and confirm
   - id: summary
     type: human
     needs: [generateSummary]
+    if: ${{ steps.confirmStart.output == true }}
     message: |
       ══════════════════════════════════════════════════════════════
       Epic ${{ inputs.epic_id }} Processing Complete
@@ -156,37 +287,16 @@ steps:
       Continue to retrospective?
     inputType: confirm
 
-  # Step 8: Retrospective (manual - user runs interactively)
+  # retrospective - Retrospective (user runs interactively)
   - id: retrospective
     type: human
     needs: [summary]
+    if: ${{ steps.summary.output == true }}
     message: |
       Time for Epic ${{ inputs.epic_id }} retrospective.
 
       Please run in another terminal:
-        claude "/bmad:bmm:workflows:retrospective - Epic ${{ inputs.epic_id }}"
+        claude "/bmad-bmm-retrospective - Epic ${{ inputs.epic_id }}"
 
       Confirm when complete.
-    inputType: confirm
-
-  # Step 9: Final Evaluation/Synopsis
-  - id: evaluation
-    type: shell
-    needs: [retrospective]
-    allowInsecure: true
-    run: |
-      claude -p "Perform final evaluation synopsis for Epic ${{ inputs.epic_id }}. Do not ask questions. Checklist: 1) Deliverables Check - list files created/modified, compare against planned deliverables, identify missing items. 2) Deviation Analysis - compare implementation vs tech spec, document deviations and scope changes. 3) Quality Gates - verify tests pass, check for TODO/FIXME comments, confirm docs updated. 4) Integration Verification - confirm proper integration, check for breaking changes. Save report to _bmad-output/implementation-artifacts/evaluations/epic-${{ inputs.epic_id }}-evaluation.md with ✅/⚠️/❌ format and final PASS/NEEDS_ATTENTION/FAIL status." --dangerously-skip-permissions
-    timeout: 1800000
-
-  # Step 10: Final sign-off
-  - id: finalSignoff
-    type: human
-    needs: [evaluation]
-    message: |
-      Epic ${{ inputs.epic_id }} Completion Checks Finished
-
-      Review the evaluation report at:
-      _bmad-output/implementation-artifacts/evaluations/epic-${{ inputs.epic_id }}-evaluation.md
-
-      Mark epic as complete?
     inputType: confirm
