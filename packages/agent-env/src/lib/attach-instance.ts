@@ -10,6 +10,7 @@ import type { ExecuteResult } from '@zookanalytics/shared';
 import { createExecutor } from '@zookanalytics/shared';
 import { appendFile, mkdir, readdir, readFile, rename, stat, writeFile } from 'node:fs/promises';
 import { homedir } from 'node:os';
+import { join } from 'node:path';
 
 import type { ContainerLifecycle } from './container.js';
 import type { StateFsDeps } from './state.js';
@@ -18,6 +19,7 @@ import type { FsDeps } from './workspace.js';
 import { createContainerLifecycle } from './container.js';
 import { attachToInstance } from './create-instance.js';
 import { readState, writeStateAtomic } from './state.js';
+import { AGENT_ENV_DIR } from './types.js';
 import { getWorkspacePathByName, scanWorkspaces } from './workspace.js';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
@@ -181,8 +183,15 @@ export async function attachInstance(
   if (statusResult.status === 'stopped' || statusResult.status === 'not-found') {
     onContainerStarting?.();
 
+    // For baseline configs, pass --config to point at .agent-env/devcontainer.json
+    const configSource = state.configSource ?? 'baseline';
+    const baselineConfigPath =
+      configSource === 'baseline'
+        ? join(wsPath.root, AGENT_ENV_DIR, 'devcontainer.json')
+        : undefined;
     const startResult = await deps.container.devcontainerUp(wsPath.root, containerName, {
       remoteEnv: { AGENT_INSTANCE: wsPath.name },
+      configPath: baselineConfigPath,
     });
 
     if (!startResult.ok) {

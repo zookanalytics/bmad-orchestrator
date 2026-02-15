@@ -51,7 +51,7 @@ export interface ContainerLifecycle {
   devcontainerUp(
     workspacePath: string,
     containerName: string,
-    options?: { buildNoCache?: boolean; remoteEnv?: Record<string, string> }
+    options?: { buildNoCache?: boolean; remoteEnv?: Record<string, string>; configPath?: string }
   ): Promise<ContainerResult>;
   dockerPull(image: string): Promise<DockerPullResult>;
   containerStop(containerName: string): Promise<ContainerStopResult>;
@@ -317,7 +317,7 @@ export function createContainerLifecycle(executor: Execute = createExecutor()): 
   async function devcontainerUp(
     workspacePath: string,
     containerName: string,
-    options?: { buildNoCache?: boolean; remoteEnv?: Record<string, string> }
+    options?: { buildNoCache?: boolean; remoteEnv?: Record<string, string>; configPath?: string }
   ): Promise<ContainerResult> {
     // Check Docker availability first
     const dockerOk = await isDockerAvailable();
@@ -345,10 +345,12 @@ export function createContainerLifecycle(executor: Execute = createExecutor()): 
       '--remote-env',
       `${key}=${value}`,
     ]);
+    const configArgs = options?.configPath ? ['--config', options.configPath] : [];
     const args = [
       'up',
       '--workspace-folder',
       workspacePath,
+      ...configArgs,
       '--log-level',
       'debug',
       ...remoteEnvArgs,

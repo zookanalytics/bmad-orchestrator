@@ -61,7 +61,7 @@ RUN SNIPPET="export PROMPT_COMMAND='history -a' && export HISTFILE=/commandhisto
 # Set DEVCONTAINER environment variable
 ENV DEVCONTAINER=true
 
-RUN mkdir -p /workspaces && \
+RUN mkdir -p /workspaces/.pnpm-store && \
   chown -R node:node /workspaces
 
 WORKDIR /workspaces

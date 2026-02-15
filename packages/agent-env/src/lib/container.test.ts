@@ -909,6 +909,52 @@ describe('devcontainerUp remoteEnv options', () => {
   });
 });
 
+// ─── devcontainerUp configPath options ───────────────────────────────────
+
+describe('devcontainerUp configPath options', () => {
+  it('passes --config when configPath is provided', async () => {
+    const executor = mockExecutor({
+      'docker info': successResult,
+      'devcontainer up': {
+        ok: true,
+        stdout: JSON.stringify({ outcome: 'success', containerId: 'x' }),
+        stderr: '',
+        exitCode: 0,
+      },
+    });
+    const lifecycle = createContainerLifecycle(executor);
+
+    await lifecycle.devcontainerUp('/workspace', 'ae-test', {
+      configPath: '/workspace/.agent-env/devcontainer.json',
+    });
+    expect(executor).toHaveBeenCalledWith(
+      'devcontainer',
+      expect.arrayContaining(['--config', '/workspace/.agent-env/devcontainer.json']),
+      expect.any(Object)
+    );
+  });
+
+  it('does not pass --config when configPath is omitted', async () => {
+    const executor = mockExecutor({
+      'docker info': successResult,
+      'devcontainer up': {
+        ok: true,
+        stdout: JSON.stringify({ outcome: 'success', containerId: 'x' }),
+        stderr: '',
+        exitCode: 0,
+      },
+    });
+    const lifecycle = createContainerLifecycle(executor);
+
+    await lifecycle.devcontainerUp('/workspace', 'ae-test');
+    const devcontainerCall = executor.mock.calls.find(
+      (call: unknown[]) => call[0] === 'devcontainer'
+    );
+    expect(devcontainerCall).toBeDefined();
+    expect((devcontainerCall as unknown[])[1]).not.toContain('--config');
+  });
+});
+
 // ─── devcontainerUp build options ───────────────────────────────────────
 
 describe('devcontainerUp build options', () => {

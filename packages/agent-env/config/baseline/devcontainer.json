@@ -1,4 +1,4 @@
 {
   "image": "ghcr.io/zookanalytics/bmad-orchestrator/devcontainer:latest",
-  "initializeCommand": "bash .devcontainer/init-host.sh"
+  "initializeCommand": "bash .agent-env/init-host.sh"
 }

@@ -44,7 +44,11 @@ afterEach(async () => {
   await rm(tempDir, { recursive: true, force: true });
 });
 
-/** Create a workspace directory with state.json and optionally a .devcontainer/ directory */
+/** Create a workspace directory with state.json and optionally devcontainer config files.
+ *
+ * For baseline configs: files go into `.agent-env/` (the baseline config directory).
+ * For repo configs: files go into `.devcontainer/` (the standard devcontainer directory).
+ */
 async function createTestWorkspace(
   workspaceName: string,
   state: InstanceState,
@@ -57,25 +61,27 @@ async function createTestWorkspace(
   await mkdir(agentEnvDir, { recursive: true });
   await writeFile(stateFile, JSON.stringify(state, null, 2), 'utf-8');
 
-  // Create .devcontainer/ with files if specified
+  // Create devcontainer config files if specified
   if (options?.devcontainerFiles) {
-    const devcontainerDir = join(wsRoot, '.devcontainer');
-    await mkdir(devcontainerDir, { recursive: true });
+    // Baseline configs go to .agent-env/, repo configs go to .devcontainer/
+    const configDir =
+      state.configSource === 'baseline' ? agentEnvDir : join(wsRoot, '.devcontainer');
+    await mkdir(configDir, { recursive: true });
     for (const file of options.devcontainerFiles) {
       if (file === 'devcontainer.json') {
         await writeFile(
-          join(devcontainerDir, file),
+          join(configDir, file),
           JSON.stringify({ build: { dockerfile: 'Dockerfile' } }),
           'utf-8'
         );
       } else if (file === 'Dockerfile') {
         await writeFile(
-          join(devcontainerDir, file),
+          join(configDir, file),
           options.dockerfileContent ?? 'FROM node:22-bookworm-slim\n',
           'utf-8'
         );
       } else {
-        await writeFile(join(devcontainerDir, file), `# ${file}`, 'utf-8');
+        await writeFile(join(configDir, file), `# ${file}`, 'utf-8');
       }
     }
   }
@@ -242,7 +248,9 @@ describe('rebuildInstance', () => {
     expect(mockContainer.devcontainerUp).toHaveBeenCalledWith(
       wsRoot,
       'ae-repo-auth',
-      expect.any(Object)
+      expect.objectContaining({
+        configPath: join(wsRoot, AGENT_ENV_DIR, 'devcontainer.json'),
+      })
     );
   });
 
@@ -290,7 +298,7 @@ describe('rebuildInstance', () => {
 
   // ─── Config refresh: baseline ──────────────────────────────────────────────
 
-  it('refreshes baseline config: copies to temp, patches, then swaps', async () => {
+  it('refreshes baseline config: copies into .agent-env/ and patches there', async () => {
     const state = createTestState('repo-auth', { configSource: 'baseline' });
     await createTestWorkspace('repo-auth', state, {
       devcontainerFiles: ['devcontainer.json', 'init-host.sh'],
@@ -300,27 +308,16 @@ describe('rebuildInstance', () => {
     await rebuildInstance('auth', deps);
 
     const wsRoot = join(tempDir, AGENT_ENV_DIR, WORKSPACES_DIR, 'repo-auth');
-    const devcontainerDir = join(wsRoot, '.devcontainer');
-    const tempDevcontainerDir = join(wsRoot, '.devcontainer.new');
+    const agentEnvDir = join(wsRoot, AGENT_ENV_DIR);
 
-    // Should have deleted temp dir first (cleanup from previous runs)
-    expect(deps.rm).toHaveBeenCalledWith(tempDevcontainerDir, { recursive: true, force: true });
-    // Should have created temp dir
-    expect(deps.devcontainerFsDeps.mkdir).toHaveBeenCalledWith(tempDevcontainerDir, {
+    // Should have ensured .agent-env/ exists
+    expect(deps.devcontainerFsDeps.mkdir).toHaveBeenCalledWith(agentEnvDir, {
       recursive: true,
     });
-    // Should have copied baseline to temp dir
-    expect(deps.devcontainerFsDeps.cp).toHaveBeenCalledWith(
-      expect.any(String),
-      tempDevcontainerDir,
-      {
-        recursive: true,
-      }
-    );
-    // Should have deleted old .devcontainer/ before rename
-    expect(deps.rm).toHaveBeenCalledWith(devcontainerDir, { recursive: true, force: true });
-    // Should have renamed temp dir to .devcontainer
-    expect(deps.rename).toHaveBeenCalledWith(tempDevcontainerDir, devcontainerDir);
+    // Should have copied baseline files into .agent-env/
+    expect(deps.devcontainerFsDeps.cp).toHaveBeenCalledWith(expect.any(String), agentEnvDir, {
+      recursive: true,
+    });
   });
 
   it('updates state with lastRebuilt timestamp', async () => {
@@ -376,7 +373,7 @@ describe('rebuildInstance', () => {
     expect(deps.devcontainerFsDeps.cp).not.toHaveBeenCalled();
   });
 
-  it('logs extra files in .devcontainer/ before deletion', async () => {
+  it('does not warn about extra files during baseline refresh (copies directly into .agent-env/)', async () => {
     const state = createTestState('repo-auth', { configSource: 'baseline' });
     await createTestWorkspace('repo-auth', state, {
       devcontainerFiles: ['devcontainer.json', 'init-host.sh', 'custom-script.sh'],
@@ -385,16 +382,12 @@ describe('rebuildInstance', () => {
 
     await rebuildInstance('auth', deps);
 
+    // Baseline refresh now copies directly into .agent-env/ — no extra files detection
     const warnCalls = (deps.logger?.warn as ReturnType<typeof vi.fn>).mock.calls;
-    const extraFilesWarning = warnCalls.find(
+    const extraFilesWarnings = warnCalls.filter(
       (call: string[]) => typeof call[0] === 'string' && call[0].includes('Extra files')
     );
-    expect(extraFilesWarning).toBeDefined();
-    const warningMessage = (extraFilesWarning as string[])[0];
-    expect(warningMessage).toContain('custom-script.sh');
-    // Verify only custom-script.sh is reported as extra (not baseline files)
-    expect(warningMessage).not.toContain('Dockerfile');
-    expect(warningMessage).not.toContain('post-create.sh');
+    expect(extraFilesWarnings).toHaveLength(0);
   });
 
   it('does not log when no extra files exist', async () => {
@@ -426,12 +419,8 @@ describe('rebuildInstance', () => {
 
     await rebuildInstance('auth', deps);
 
-    // Should NOT delete or re-copy (except potential cleanup of temp dir)
+    // Should NOT copy baseline files when configSource is 'repo'
     expect(deps.devcontainerFsDeps.cp).not.toHaveBeenCalled();
-    // Top-level rename should NOT be called for config swap
-    const renameCalls = (deps.rename as ReturnType<typeof vi.fn>).mock.calls;
-    const configSwapCalls = renameCalls.filter((call: string[]) => call[0].endsWith('.new'));
-    expect(configSwapCalls).toHaveLength(0);
   });
 
   it('returns CONFIG_MISSING when repo config is absent on disk', async () => {
@@ -582,13 +571,10 @@ describe('rebuildInstance', () => {
 
     const deps = createTestDeps({
       container: mockContainer,
-      rm: vi.fn().mockImplementation(async (path: string) => {
-        if (path.endsWith('.new')) callOrder.push('temp_cleanup');
-        if (path.endsWith('.devcontainer')) callOrder.push('config_delete');
-        return rm(path, { recursive: true, force: true });
+      rm: vi.fn().mockImplementation(async (path: string, opts?: unknown) => {
+        return rm(path, opts as Parameters<typeof rm>[1]);
       }),
-      rename: vi.fn().mockImplementation(async (from: string) => {
-        if (from.endsWith('.new')) callOrder.push('config_swap');
+      rename: vi.fn().mockImplementation(async () => {
         return Promise.resolve();
       }),
       stateFsDeps: {
@@ -616,10 +602,7 @@ describe('rebuildInstance', () => {
     await rebuildInstance('auth', deps);
 
     expect(callOrder).toEqual([
-      'temp_cleanup',
       'config_copy',
-      'config_delete',
-      'config_swap',
       'status_check',
       'container_stop',
       'container_remove',
@@ -1112,10 +1095,14 @@ describe('rebuildInstance', () => {
 
     await rebuildInstance('auth', deps, { noCache: false });
 
+    const wsRoot = join(tempDir, AGENT_ENV_DIR, WORKSPACES_DIR, 'repo-auth');
     expect(mockContainer.devcontainerUp).toHaveBeenCalledWith(
       expect.any(String),
       expect.any(String),
-      expect.objectContaining({ buildNoCache: false })
+      expect.objectContaining({
+        buildNoCache: false,
+        configPath: join(wsRoot, AGENT_ENV_DIR, 'devcontainer.json'),
+      })
     );
   });
 
@@ -1129,10 +1116,14 @@ describe('rebuildInstance', () => {
 
     await rebuildInstance('auth', deps);
 
+    const wsRoot = join(tempDir, AGENT_ENV_DIR, WORKSPACES_DIR, 'repo-auth');
     expect(mockContainer.devcontainerUp).toHaveBeenCalledWith(
       expect.any(String),
       expect.any(String),
-      expect.objectContaining({ buildNoCache: false })
+      expect.objectContaining({
+        buildNoCache: false,
+        configPath: join(wsRoot, AGENT_ENV_DIR, 'devcontainer.json'),
+      })
     );
   });
 

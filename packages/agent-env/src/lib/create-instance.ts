@@ -20,7 +20,7 @@ import {
   writeFile,
 } from 'node:fs/promises';
 import { homedir } from 'node:os';
-import { dirname } from 'node:path';
+import { dirname, join } from 'node:path';
 
 import type { ContainerLifecycle } from './container.js';
 import type { DevcontainerFsDeps } from './devcontainer.js';
@@ -31,6 +31,7 @@ import type { FsDeps } from './workspace.js';
 import { createContainerLifecycle } from './container.js';
 import { copyBaselineConfig, hasDevcontainerConfig, patchContainerName } from './devcontainer.js';
 import { createInitialState, ensureGitExclude, writeStateAtomic } from './state.js';
+import { AGENT_ENV_DIR } from './types.js';
 import { deriveContainerName, getWorkspacePath, workspaceExists } from './workspace.js';
 
 // ─── Constants ───────────────────────────────────────────────────────────────
@@ -353,7 +354,7 @@ export async function createInstance(
     // Only done for baseline configs we control (valid JSON). Repo-provided
     // configs may use JSONC (comments/trailing commas) and shouldn't be modified.
     try {
-      await patchContainerName(wsPath.root, containerName, deps.devcontainerFsDeps);
+      await patchContainerName(wsPath.root, containerName, deps.devcontainerFsDeps, AGENT_ENV_DIR);
     } catch (err) {
       await safeRollback(wsPath.root, deps.rm, deps.logger);
       return {
@@ -385,8 +386,13 @@ export async function createInstance(
   // Step 6: Start container
   // Pass AGENT_INSTANCE so the image's postCreateCommand can set up per-instance
   // isolation (shared credentials + per-instance history/state).
+  // For baseline configs (in .agent-env/), pass --config so the devcontainer CLI
+  // finds the config instead of looking in the default .devcontainer/ location.
+  const baselineConfigPath =
+    configSource === 'baseline' ? join(wsPath.root, AGENT_ENV_DIR, 'devcontainer.json') : undefined;
   const containerResult = await deps.container.devcontainerUp(wsPath.root, containerName, {
     remoteEnv: { AGENT_INSTANCE: wsPath.name },
+    configPath: baselineConfigPath,
   });
   if (!containerResult.ok) {
     return rollbackContainerFailure(containerName, wsPath, containerResult, deps);

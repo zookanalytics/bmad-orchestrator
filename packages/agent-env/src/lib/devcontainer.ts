@@ -10,6 +10,8 @@ import { access, cp, mkdir, readdir, readFile, stat, writeFile } from 'node:fs/p
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+import { AGENT_ENV_DIR } from './types.js';
+
 // ─── Types for dependency injection ──────────────────────────────────────────
 
 export interface DevcontainerFsDeps {
@@ -99,8 +101,12 @@ export async function hasDevcontainerConfig(
 /**
  * Copy baseline devcontainer config to a workspace.
  *
- * Creates `.devcontainer/` directory in the workspace and copies all
- * baseline config files into it.
+ * Copies baseline config files into `.agent-env/` so they don't conflict
+ * with repos that have their own `.devcontainer/`. The `.agent-env/`
+ * directory is already git-excluded, so the config won't show as untracked.
+ *
+ * When using baseline config, callers must pass `--config .agent-env/devcontainer.json`
+ * to the devcontainer CLI (via the `configPath` option on `devcontainerUp`).
  *
  * @param workspacePath - Absolute path to the workspace root
  * @throws If baseline config directory is not found
@@ -118,12 +124,12 @@ export async function copyBaselineConfig(
     throw new Error(`Baseline config not found at ${baselinePath}. Package may be corrupted.`);
   }
 
-  const targetDir = join(workspacePath, DEVCONTAINER_DIR);
+  const targetDir = join(workspacePath, AGENT_ENV_DIR);
 
-  // Create .devcontainer/ directory
+  // Create .agent-env/ directory (may already exist for state.json)
   await deps.mkdir(targetDir, { recursive: true });
 
-  // Copy all baseline files
+  // Copy all baseline files (merges into existing .agent-env/, preserving state.json)
   await deps.cp(baselinePath, targetDir, { recursive: true });
 }
 

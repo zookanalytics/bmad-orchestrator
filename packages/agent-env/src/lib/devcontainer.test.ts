@@ -94,37 +94,37 @@ describe('hasDevcontainerConfig', () => {
 // ─── copyBaselineConfig ──────────────────────────────────────────────────────
 
 describe('copyBaselineConfig', () => {
-  it('creates .devcontainer/ directory in workspace', async () => {
+  it('creates .agent-env/ directory in workspace', async () => {
     await copyBaselineConfig(tempDir);
-    const stats = await stat(join(tempDir, '.devcontainer'));
+    const stats = await stat(join(tempDir, '.agent-env'));
     expect(stats.isDirectory()).toBe(true);
   });
 
   it('copies devcontainer.json to workspace', async () => {
     await copyBaselineConfig(tempDir);
-    const stats = await stat(join(tempDir, '.devcontainer', 'devcontainer.json'));
+    const stats = await stat(join(tempDir, '.agent-env', 'devcontainer.json'));
     expect(stats.isFile()).toBe(true);
   });
 
   it('copies init-host.sh to workspace', async () => {
     await copyBaselineConfig(tempDir);
-    const stats = await stat(join(tempDir, '.devcontainer', 'init-host.sh'));
+    const stats = await stat(join(tempDir, '.agent-env', 'init-host.sh'));
     expect(stats.isFile()).toBe(true);
   });
 
-  it('creates .devcontainer/ even if parent dirs are missing', async () => {
+  it('creates .agent-env/ even if parent dirs are missing', async () => {
     const deepPath = join(tempDir, 'nested', 'workspace');
     await mkdir(deepPath, { recursive: true });
     await copyBaselineConfig(deepPath);
 
-    const stats = await stat(join(deepPath, '.devcontainer', 'devcontainer.json'));
+    const stats = await stat(join(deepPath, '.agent-env', 'devcontainer.json'));
     expect(stats.isFile()).toBe(true);
   });
 
-  it('workspace is detected by hasDevcontainerConfig after copy', async () => {
+  it('workspace is not detected by hasDevcontainerConfig after copy (config is in .agent-env/)', async () => {
     expect(await hasDevcontainerConfig(tempDir)).toBe(false);
     await copyBaselineConfig(tempDir);
-    expect(await hasDevcontainerConfig(tempDir)).toBe(true);
+    expect(await hasDevcontainerConfig(tempDir)).toBe(false);
   });
 });
 
@@ -182,9 +182,9 @@ describe('devcontainer.json content', () => {
     expect(config.mounts).toBeUndefined();
   });
 
-  it('has initializeCommand referencing init-host.sh', () => {
+  it('has initializeCommand referencing .agent-env/init-host.sh', () => {
     expect(config.initializeCommand).toBeDefined();
-    expect(config.initializeCommand as string).toContain('init-host.sh');
+    expect(config.initializeCommand as string).toContain('.agent-env/init-host.sh');
   });
 
   it('does not define customizations (provided by image LABEL metadata)', () => {
@@ -197,18 +197,18 @@ describe('devcontainer.json content', () => {
 describe('patchContainerName', () => {
   it('adds runArgs with --name to devcontainer.json', async () => {
     await copyBaselineConfig(tempDir);
-    await patchContainerName(tempDir, 'ae-my-project-auth');
+    await patchContainerName(tempDir, 'ae-my-project-auth', undefined, '.agent-env');
 
-    const content = await readFile(join(tempDir, '.devcontainer', 'devcontainer.json'), 'utf-8');
+    const content = await readFile(join(tempDir, '.agent-env', 'devcontainer.json'), 'utf-8');
     const config = JSON.parse(content);
     expect(config.runArgs).toContain('--name=ae-my-project-auth');
   });
 
   it('preserves existing devcontainer.json properties', async () => {
     await copyBaselineConfig(tempDir);
-    await patchContainerName(tempDir, 'ae-test');
+    await patchContainerName(tempDir, 'ae-test', undefined, '.agent-env');
 
-    const content = await readFile(join(tempDir, '.devcontainer', 'devcontainer.json'), 'utf-8');
+    const content = await readFile(join(tempDir, '.agent-env', 'devcontainer.json'), 'utf-8');
     const config = JSON.parse(content);
     expect(config.image).toBe('ghcr.io/zookanalytics/bmad-orchestrator/devcontainer:latest');
     expect(config.initializeCommand).toContain('init-host.sh');

@@ -235,6 +235,7 @@ describe('createInstance', () => {
       'ae-bmad-orch-auth',
       expect.objectContaining({
         remoteEnv: { AGENT_INSTANCE: 'bmad-orch-auth' },
+        configPath: expect.stringContaining(join('.agent-env', 'devcontainer.json')),
       })
     );
   });
@@ -538,15 +539,15 @@ describe('createInstance', () => {
 
     await createInstance('auth', 'https://github.com/user/bmad-orch.git', deps);
 
-    // Should have read the devcontainer.json
+    // Should have read the devcontainer.json from .agent-env/ (baseline config dir)
     expect(deps.devcontainerFsDeps.readFile).toHaveBeenCalledWith(
-      expect.stringContaining('.devcontainer/devcontainer.json'),
+      expect.stringContaining('.agent-env/devcontainer.json'),
       'utf-8'
     );
 
     // Should have written back with --name runArg
     expect(deps.devcontainerFsDeps.writeFile).toHaveBeenCalledWith(
-      expect.stringContaining('.devcontainer/devcontainer.json'),
+      expect.stringContaining('.agent-env/devcontainer.json'),
       expect.stringContaining('"--name=ae-bmad-orch-auth"')
     );
   });

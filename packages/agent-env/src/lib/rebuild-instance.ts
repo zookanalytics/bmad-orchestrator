@@ -35,12 +35,12 @@ import { createContainerLifecycle } from './container.js';
 import {
   getBaselineConfigPath,
   hasDevcontainerConfig,
-  listBaselineFiles,
   parseDockerfileImages,
   patchContainerName,
   resolveDockerfilePath,
 } from './devcontainer.js';
 import { readState, writeStateAtomic } from './state.js';
+import { AGENT_ENV_DIR } from './types.js';
 import { getWorkspacePathByName } from './workspace.js';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
@@ -113,7 +113,8 @@ type ConfigRefreshResult =
 /**
  * Refresh devcontainer config before container teardown.
  *
- * For baseline configs: copies to a temp dir, patches, then swaps to ensure atomicity.
+ * For baseline configs: copies fresh baseline files into .agent-env/ and patches
+ * the container name. Uses fs.cp merge semantics to preserve state.json.
  * For repo configs: verifies the config still exists on disk.
  */
 async function refreshConfig(
@@ -122,40 +123,18 @@ async function refreshConfig(
   configSource: 'baseline' | 'repo',
   deps: Pick<RebuildInstanceDeps, 'devcontainerFsDeps' | 'rm' | 'rename' | 'logger'>
 ): Promise<ConfigRefreshResult> {
-  const devcontainerDir = join(wsRoot, '.devcontainer');
-  const tempDevcontainerDir = join(wsRoot, '.devcontainer.new');
-
   if (configSource === 'baseline') {
+    const agentEnvDir = join(wsRoot, AGENT_ENV_DIR);
     try {
-      // 1. Check for extra files in existing dir (informational)
-      try {
-        const currentFiles = await deps.devcontainerFsDeps.readdir(devcontainerDir);
-        const baselineFiles = await listBaselineFiles(deps.devcontainerFsDeps);
-        const baselineSet = new Set(baselineFiles);
-        const extras = currentFiles.filter((f) => !baselineSet.has(f));
-        if (extras.length > 0) {
-          deps.logger?.warn(`Extra files in .devcontainer/ will be deleted: ${extras.join(', ')}`);
-        }
-      } catch {
-        // .devcontainer/ doesn't exist — fine, we'll create it
-      }
-
-      // 2. Copy fresh baseline to temp directory
-      await deps.rm(tempDevcontainerDir, { recursive: true, force: true });
-      await deps.devcontainerFsDeps.mkdir(tempDevcontainerDir, { recursive: true });
-      await deps.devcontainerFsDeps.cp(getBaselineConfigPath(), tempDevcontainerDir, {
+      // Copy fresh baseline files into .agent-env/ (merges, preserves state.json)
+      await deps.devcontainerFsDeps.mkdir(agentEnvDir, { recursive: true });
+      await deps.devcontainerFsDeps.cp(getBaselineConfigPath(), agentEnvDir, {
         recursive: true,
       });
 
-      // 3. Patch container name in temp directory (reuses shared patchContainerName)
-      await patchContainerName(wsRoot, containerName, deps.devcontainerFsDeps, '.devcontainer.new');
-
-      // 4. Atomic swap (as atomic as it gets: rm then rename)
-      await deps.rm(devcontainerDir, { recursive: true, force: true });
-      await deps.rename(tempDevcontainerDir, devcontainerDir);
+      // Patch container name
+      await patchContainerName(wsRoot, containerName, deps.devcontainerFsDeps, AGENT_ENV_DIR);
     } catch (err) {
-      // Clean up temp dir if it exists
-      await deps.rm(tempDevcontainerDir, { recursive: true, force: true });
       return {
         ok: false,
         error: {
@@ -182,6 +161,7 @@ async function refreshConfig(
 
     // If .devcontainer/ dir exists, verify it contains devcontainer.json
     // (hasDevcontainerConfig returns true for an empty .devcontainer/ dir)
+    const devcontainerDir = join(wsRoot, '.devcontainer');
     const dirExists = await deps.devcontainerFsDeps.stat(devcontainerDir).catch(() => null);
     if (dirExists) {
       const jsonExists = await deps.devcontainerFsDeps
@@ -467,9 +447,12 @@ export async function rebuildInstance(
 
   // Step 8: Start fresh container via devcontainer up
   const buildNoCache = noCache && hasDockerfile;
+  const baselineConfigPath =
+    configSource === 'baseline' ? join(wsPath.root, AGENT_ENV_DIR, 'devcontainer.json') : undefined;
   const containerResult = await deps.container.devcontainerUp(wsPath.root, containerName, {
     buildNoCache,
     remoteEnv: { AGENT_INSTANCE: wsPath.name },
+    configPath: baselineConfigPath,
   });
   if (!containerResult.ok) {
     return {
