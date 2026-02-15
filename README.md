@@ -10,6 +10,7 @@ Monorepo for BMAD workflow tooling: orchestrator CLI and agent-env instance mana
 | Package | Description |
 |---------|-------------|
 | [`@zookanalytics/agent-env`](packages/agent-env) | CLI for creating isolated, AI-ready development environments |
+| [`@zookanalytics/keystone-workflows`](packages/keystone-workflows) | Declarative automation workflows for AI-assisted development on keystone-cli |
 | [`@zookanalytics/orchestrator`](packages/orchestrator) | CLI for managing BMAD workflow across multiple agent-env instances |
 
 ## Development
