@@ -1,0 +1,10 @@
+git status
+npm install
+cd /workspace
+ls -la
+pnpm build
+git add .
+git commit -m "Initial commit"
+npm test
+docker build -t myapp .
+kubectl get pods

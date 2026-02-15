@@ -1,0 +1,2 @@
+{"timestamp": 1705800000000, "type": "user", "message": {"content": "This is a valid entry"}}
+{not valid json at all - this line should be skipped

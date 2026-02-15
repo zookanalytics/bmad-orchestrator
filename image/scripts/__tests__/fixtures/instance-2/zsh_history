@@ -1,0 +1,5 @@
+npm install lodash
+git checkout -b feature/bugfix
+vim src/utils.js
+npm test
+npm run fix the bug

@@ -1,0 +1,67 @@
+{
+  "permissions": {
+    "defaultMode": "bypassPermissions"
+  },
+  "extraKnownMarketplaces": {
+    "claude-devcontainer": {
+      "source": {
+        "source": "git",
+        "url": "git@github.com:zookanalytics/claude-devcontainer.git"
+      }
+    },
+    "superpowers-dev": {
+      "source": {
+        "source": "git",
+        "url": "git@github.com:zookanalytics/superpowers.git"
+      }
+    }
+  },
+  "enabledPlugins": {
+    "git-workflow@claude-devcontainer": true,
+    "superpowers@superpowers-dev": true
+  },
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "/etc/claude-code/hooks/prevent-main-push.sh",
+            "timeout": 10
+          },
+          {
+            "type": "command",
+            "command": "/etc/claude-code/hooks/prevent-no-verify.sh",
+            "timeout": 10
+          },
+          {
+            "type": "command",
+            "command": "/etc/claude-code/hooks/prevent-admin-flag.sh",
+            "timeout": 10
+          },
+          {
+            "type": "command",
+            "command": "/etc/claude-code/hooks/prevent-env-leakage.py",
+            "timeout": 10
+          },
+          {
+            "type": "command",
+            "command": "/etc/claude-code/hooks/prevent-bash-sensitive-args.py",
+            "timeout": 10
+          }
+        ]
+      },
+      {
+        "matcher": "Read|Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "/etc/claude-code/hooks/prevent-sensitive-files.py",
+            "timeout": 10
+          }
+        ]
+      }
+    ]
+  }
+}
