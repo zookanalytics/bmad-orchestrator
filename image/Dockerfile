@@ -37,9 +37,6 @@ RUN curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg | g
   echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main" | tee /etc/apt/sources.list.d/github-cli.list > /dev/null; \
   apt update && apt install -y gh && apt-get clean && rm -rf /var/lib/apt/lists/*
 
-# Install uv (fast Python package manager)
-RUN curl -LsSf https://astral.sh/uv/install.sh | env UV_INSTALL_DIR="/usr/local" sh
-
 # Generate and set locale to prevent bash locale warnings
 RUN sed -i -e 's/# en_US.UTF-8 UTF-8/en_US.UTF-8 UTF-8/' /etc/locale.gen && \
   locale-gen
@@ -134,10 +131,6 @@ ENV PATH="$BUN_INSTALL/bin:$PATH"
 # Install keystone-cli globally via bun (must run as node user for PATH)
 RUN bun install -g github:ZookAnalytics/keystone-cli
 
-# Copy keystone-workflows package and run postinstall to set up symlinks and config
-COPY --chown=node:node packages/keystone-workflows /home/node/.local/lib/keystone-workflows
-RUN /home/node/.local/lib/keystone-workflows/scripts/postinstall.sh
-
 USER root
 
 # Copy configuration files
@@ -222,12 +215,5 @@ RUN mkdir -p /etc/gemini-code/hooks && \
   ln -s /etc/claude-code/hooks/prevent-bash-sensitive-args.py /etc/gemini-code/hooks/ && \
   ln -s /etc/claude-code/hooks/prevent-sensitive-files.py /etc/gemini-code/hooks/ && \
   ln -s /etc/claude-code/hooks/lib /etc/gemini-code/hooks/
-
-# Copy CLI tools from packages (build context must be repo root)
-COPY packages/claude-instance/bin/claude-instance /usr/local/bin/claude-instance
-COPY packages/bmad-orchestrator/scripts/ /usr/local/lib/bmad/
-RUN chmod 755 /usr/local/bin/claude-instance && \
-  ln -s /usr/local/lib/bmad/bmad-cli /usr/local/bin/bmad-cli && \
-  chmod 755 /usr/local/lib/bmad/bmad-cli
 
 USER node
