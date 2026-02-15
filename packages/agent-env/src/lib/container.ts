@@ -192,6 +192,7 @@ export function createContainerLifecycle(executor: Execute = createExecutor()): 
           ok: true,
           status: 'not-found',
           containerId: null,
+          ports: {},
         };
       }
 
@@ -212,6 +213,9 @@ export function createContainerLifecycle(executor: Execute = createExecutor()): 
       const inspectData = JSON.parse(result.stdout) as Array<{
         Id?: string;
         State?: { Status?: string };
+        NetworkSettings?: {
+          Ports?: Record<string, Array<{ HostPort: string }> | null>;
+        };
       }>;
 
       if (!inspectData.length) {
@@ -219,6 +223,7 @@ export function createContainerLifecycle(executor: Execute = createExecutor()): 
           ok: true,
           status: 'not-found',
           containerId: null,
+          ports: {},
         };
       }
 
@@ -229,10 +234,22 @@ export function createContainerLifecycle(executor: Execute = createExecutor()): 
       // We intentionally map all non-running states to 'stopped' for simplicity
       const status: ContainerStatus = dockerStatus === 'running' ? 'running' : 'stopped';
 
+      // Extract ports
+      const ports: Record<string, string> = {};
+      const dockerPorts = container.NetworkSettings?.Ports;
+      if (dockerPorts) {
+        for (const [key, mappings] of Object.entries(dockerPorts)) {
+          if (mappings && mappings.length > 0) {
+            ports[key] = mappings[0].HostPort;
+          }
+        }
+      }
+
       return {
         ok: true,
         status,
         containerId,
+        ports,
       };
     } catch (e) {
       const errorMessage = e instanceof Error ? e.message : String(e);
@@ -395,6 +412,7 @@ export function createContainerLifecycle(executor: Execute = createExecutor()): 
       ok: true,
       status: 'running',
       containerId,
+      ports: {},
     };
   }
 

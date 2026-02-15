@@ -187,6 +187,101 @@ describe('containerStatus', () => {
     expect(result.containerId).toBe('abc123def456');
   });
 
+  it('extracts port mappings from docker inspect output', async () => {
+    const executor = mockExecutor({
+      'docker inspect': {
+        ok: true,
+        stdout: JSON.stringify([
+          {
+            Id: 'abc123',
+            State: { Status: 'running' },
+            NetworkSettings: {
+              Ports: {
+                '22/tcp': [{ HostPort: '49152' }],
+                '3000/tcp': [{ HostPort: '3000' }],
+              },
+            },
+          },
+        ]),
+        stderr: '',
+        exitCode: 0,
+      },
+    });
+    const lifecycle = createContainerLifecycle(executor);
+
+    const result = await lifecycle.containerStatus('ae-test');
+    expect(result.ok).toBe(true);
+    if (!result.ok) throw new Error('Expected success');
+    expect(result.ports).toEqual({ '22/tcp': '49152', '3000/tcp': '3000' });
+  });
+
+  it('returns empty ports when no port mappings exist', async () => {
+    const executor = mockExecutor({
+      'docker inspect': {
+        ok: true,
+        stdout: JSON.stringify([
+          {
+            Id: 'abc123',
+            State: { Status: 'running' },
+            NetworkSettings: { Ports: {} },
+          },
+        ]),
+        stderr: '',
+        exitCode: 0,
+      },
+    });
+    const lifecycle = createContainerLifecycle(executor);
+
+    const result = await lifecycle.containerStatus('ae-test');
+    expect(result.ok).toBe(true);
+    if (!result.ok) throw new Error('Expected success');
+    expect(result.ports).toEqual({});
+  });
+
+  it('returns empty ports when NetworkSettings is absent', async () => {
+    const executor = mockExecutor({
+      'docker inspect': {
+        ok: true,
+        stdout: JSON.stringify([{ State: { Status: 'running' } }]),
+        stderr: '',
+        exitCode: 0,
+      },
+    });
+    const lifecycle = createContainerLifecycle(executor);
+
+    const result = await lifecycle.containerStatus('ae-test');
+    expect(result.ok).toBe(true);
+    if (!result.ok) throw new Error('Expected success');
+    expect(result.ports).toEqual({});
+  });
+
+  it('skips null port mappings (exposed but not bound)', async () => {
+    const executor = mockExecutor({
+      'docker inspect': {
+        ok: true,
+        stdout: JSON.stringify([
+          {
+            State: { Status: 'running' },
+            NetworkSettings: {
+              Ports: {
+                '22/tcp': [{ HostPort: '49152' }],
+                '80/tcp': null,
+              },
+            },
+          },
+        ]),
+        stderr: '',
+        exitCode: 0,
+      },
+    });
+    const lifecycle = createContainerLifecycle(executor);
+
+    const result = await lifecycle.containerStatus('ae-test');
+    expect(result.ok).toBe(true);
+    if (!result.ok) throw new Error('Expected success');
+    expect(result.ports).toEqual({ '22/tcp': '49152' });
+  });
+
   it('calls docker inspect with correct container name and format', async () => {
     const executor = mockExecutor({
       'docker inspect': {

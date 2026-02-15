@@ -62,6 +62,7 @@ export type ContainerSuccess = {
   ok: true;
   status: ContainerStatus;
   containerId: string | null;
+  ports: Record<string, string>; // e.g. { "22/tcp": "12345" }
 };
 
 export type ContainerError = {

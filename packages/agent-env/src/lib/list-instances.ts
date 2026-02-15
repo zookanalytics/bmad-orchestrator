@@ -34,6 +34,8 @@ export interface Instance {
   purpose: string | null;
   /** Git state result, or null if unavailable (e.g., Docker down) */
   gitState: GitStateResult | null;
+  /** SSH connection string (e.g., "node@ae-repo-auth.orb.local" or "node@localhost -p 1234") */
+  sshConnection: string | null;
 }
 
 /** Successful result from listing instances */
@@ -118,12 +120,27 @@ export async function listInstances(deps?: Partial<ListInstancesDeps>): Promise<
         status = containerResult.status;
       }
 
+      // Calculate SSH connection string
+      let sshConnection: string | null = null;
+      if (status === 'running' && containerResult && containerResult.ok) {
+        const sshPort = containerResult.ports['22/tcp'];
+        if (sshPort) {
+          // Primary: OrbStack DNS (handles collisions via dedicated IP per container)
+          sshConnection = `node@${state.containerName}.orb.local`;
+          // Fallback: host port mapping (works with Docker Desktop and non-OrbStack runtimes)
+          if (sshPort !== '22') {
+            sshConnection += ` (or localhost:${sshPort})`;
+          }
+        }
+      }
+
       return {
         name: wsName,
         status,
         lastAttached: state.lastAttached !== 'unknown' ? state.lastAttached : null,
         purpose: state.purpose,
         gitState,
+        sshConnection,
       };
     });
 
