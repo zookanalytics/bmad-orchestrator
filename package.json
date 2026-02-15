@@ -11,6 +11,7 @@
   "scripts": {
     "build": "pnpm -r build",
     "pretest": "pnpm --filter @zookanalytics/shared build",
+    "build:image": "docker build -f image/Dockerfile -t claude-devcontainer:local .",
     "test": "pnpm -r test",
     "test:run": "pnpm -r test:run",
     "lint": "pnpm -r lint",
