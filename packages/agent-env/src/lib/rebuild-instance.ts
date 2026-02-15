@@ -305,21 +305,22 @@ async function executePullStep(
   }
 
   // Pull images in parallel for better performance
-  const pullPromises = images.map(async (image) => {
-    deps.logger?.info(`Pulling ${image}...`);
-    const pullResult = await deps.container.dockerPull(image);
-    if (!pullResult.ok) {
-      throw pullResult.error;
-    }
-    deps.logger?.info(`Pulled ${image}`);
-  });
+  const results = await Promise.allSettled(
+    images.map(async (image) => {
+      deps.logger?.info(`Pulling ${image}...`);
+      const pullResult = await deps.container.dockerPull(image);
+      if (!pullResult.ok) {
+        throw pullResult.error;
+      }
+      deps.logger?.info(`Pulled ${image}`);
+    })
+  );
 
-  try {
-    await Promise.all(pullPromises);
-  } catch (err) {
+  const firstFailure = results.find((r): r is PromiseRejectedResult => r.status === 'rejected');
+  if (firstFailure) {
     return {
       ok: false,
-      error: err as { code: string; message: string; suggestion?: string },
+      error: firstFailure.reason as { code: string; message: string; suggestion?: string },
     };
   }
 

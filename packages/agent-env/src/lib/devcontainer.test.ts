@@ -506,6 +506,22 @@ FROM node:22`;
     expect(result).toEqual(['node:22']);
   });
 
+  it('skips multi-stage references to earlier build stages', () => {
+    const content = `FROM node:22-bookworm-slim AS builder
+RUN npm ci
+FROM builder AS runner
+COPY --from=builder /app /app`;
+    const result = parseDockerfileImages(content);
+    expect(result).toEqual(['node:22-bookworm-slim']);
+  });
+
+  it('skips stage references case-insensitively', () => {
+    const content = `FROM node:22 as Builder
+FROM builder`;
+    const result = parseDockerfileImages(content);
+    expect(result).toEqual(['node:22']);
+  });
+
   it('returns empty array for empty/no-FROM content', () => {
     expect(parseDockerfileImages('')).toEqual([]);
     expect(parseDockerfileImages('RUN echo hello')).toEqual([]);

@@ -261,9 +261,20 @@ export function parseDockerfileImages(
   content: string,
   logger?: { warn: (msg: string) => void }
 ): string[] {
-  const fromRegex = /^\s*FROM\s+(?:--\S+\s+)*(\S+)/i;
+  const fromRegex = /^\s*FROM\s+(?:--\S+\s+)*(\S+)(?:\s+[Aa][Ss]\s+(\S+))?/i;
+  const stageNames = new Set<string>();
   const images = new Set<string>();
 
+  // First pass: collect all stage names declared via AS
+  for (const line of content.split('\n')) {
+    if (line.trim().startsWith('#')) continue;
+    const match = fromRegex.exec(line);
+    if (match?.[2]) {
+      stageNames.add(match[2].toLowerCase());
+    }
+  }
+
+  // Second pass: collect pullable images, excluding stage references
   for (const line of content.split('\n')) {
     const trimmed = line.trim();
     if (trimmed.startsWith('#')) continue;
@@ -279,6 +290,11 @@ export function parseDockerfileImages(
     }
 
     if (image.toLowerCase() === 'scratch') {
+      continue;
+    }
+
+    // Skip references to earlier build stages (e.g., FROM builder)
+    if (stageNames.has(image.toLowerCase())) {
       continue;
     }
 
