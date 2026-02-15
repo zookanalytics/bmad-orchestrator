@@ -1,0 +1,28 @@
+# Base allowed domains for Claude DevContainer
+# Projects can extend via .devcontainer/allowed-domains.txt
+
+# NPM Registry
+www.npmjs.com
+registry.npmjs.org
+
+# Node.js
+nodejs.org
+
+# Anthropic (Claude Code)
+claude.ai
+code.claude.com
+api.anthropic.com
+statsig.anthropic.com
+
+# Google APIs (Gemini CLI)
+play.googleapis.com
+oauth2.googleapis.com
+www.googleapis.com
+cloudcode-pa.googleapis.com
+
+# GitHub (additional to API ranges fetched dynamically)
+raw.githubusercontent.com
+
+# GPG keyservers (commit signing)
+keyserver.ubuntu.com
+keys.openpgp.org

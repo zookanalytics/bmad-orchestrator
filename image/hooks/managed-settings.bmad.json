@@ -1,0 +1,16 @@
+{
+  "hooks": {
+    "Stop": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "/etc/claude-code/hooks/bmad-phase-complete.sh",
+            "timeout": 10
+          }
+        ]
+      }
+    ]
+  }
+}

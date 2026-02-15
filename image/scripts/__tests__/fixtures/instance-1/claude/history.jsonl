@@ -1,0 +1,5 @@
+{"timestamp": 1705600000000, "type": "user", "message": {"content": "How do I create a React component?"}}
+{"timestamp": 1705600001000, "type": "assistant", "message": {"content": "Here's how to create a React component using function syntax..."}}
+{"timestamp": 1705600100000, "type": "user", "message": {"content": "Add authentication to my app"}}
+{"timestamp": 1705600101000, "type": "assistant", "message": {"content": "I'll help you implement authentication. First, let's install the required packages..."}}
+{"timestamp": 1705600200000, "type": "user", "message": {"content": "Write unit tests for the login form"}}

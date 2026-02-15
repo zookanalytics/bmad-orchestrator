@@ -1,0 +1,3 @@
+{"timestamp": 1705700000000, "type": "user", "message": {"content": "Can you fix the bug in the login handler?"}}
+{"timestamp": 1705700001000, "type": "assistant", "message": {"content": "I found the issue. The error occurs because the token validation is incorrect. Here's the fix..."}}
+{"timestamp": 1705700100000, "type": "user", "message": {"content": "fix the bug in the authentication flow"}}

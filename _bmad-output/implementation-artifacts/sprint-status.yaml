@@ -140,6 +140,7 @@ development_status:
   env-5-1-implement-remove-command-with-safety-checks: done
   env-5-2-implement-safety-prompt-ui: done  # Accepted with noted limitations: GitState provides booleans not counts (AC #2/#3/#5 partial)
   env-5-3-implement-force-remove: done
+  tech-spec-devcontainer-image-consolidation: done
   env-epic-5-retrospective: done
 
   # ─── agent-env Epic 6: In-Container Purpose & Tmux Visibility ───

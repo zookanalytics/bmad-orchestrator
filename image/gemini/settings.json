@@ -1,0 +1,74 @@
+{
+  "general": {
+    "previewFeatures": true,
+    "enablePromptCompletion": true
+  },
+  "ide": {
+    "enabled": true
+  },
+  "privacy": {
+    "usageStatisticsEnabled": false
+  },
+  "experimental": {
+    "enableAgents": true
+  },
+  "tools": {
+    "enableHooks": true
+  },
+  "hooks": {
+    "BeforeTool": [
+      {
+        "matcher": "run_shell_command",
+        "hooks": [
+          {
+            "name": "prevent-main-push",
+            "type": "command",
+            "command": "/etc/gemini-code/hooks/prevent-main-push.sh",
+            "description": "Prevents pushing to main/master branches",
+            "timeout": 10000
+          },
+          {
+            "name": "prevent-admin-flag",
+            "type": "command",
+            "command": "/etc/gemini-code/hooks/prevent-admin-flag.sh",
+            "description": "Prevents using --admin flag with GitHub CLI",
+            "timeout": 10000
+          },
+          {
+            "name": "prevent-no-verify",
+            "type": "command",
+            "command": "/etc/gemini-code/hooks/prevent-no-verify.sh",
+            "description": "Prevents bypassing pre-commit hooks",
+            "timeout": 10000
+          },
+          {
+            "name": "prevent-env-leakage",
+            "type": "command",
+            "command": "/etc/gemini-code/hooks/prevent-env-leakage.py",
+            "description": "Prevents leaking sensitive environment variables",
+            "timeout": 10000
+          },
+          {
+            "name": "prevent-bash-sensitive-args",
+            "type": "command",
+            "command": "/etc/gemini-code/hooks/prevent-bash-sensitive-args.py",
+            "description": "Prevents shell commands from accessing sensitive files",
+            "timeout": 10000
+          }
+        ]
+      },
+      {
+        "matcher": "read_file|read_many_files|replace|write_file",
+        "hooks": [
+          {
+            "name": "prevent-sensitive-files",
+            "type": "command",
+            "command": "/etc/gemini-code/hooks/prevent-sensitive-files.py",
+            "description": "Prevents access to sensitive files (credentials, keys, etc.)",
+            "timeout": 10000
+          }
+        ]
+      }
+    ]
+  }
+}

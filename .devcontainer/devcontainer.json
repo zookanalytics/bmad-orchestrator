@@ -1,75 +1,38 @@
 {
-  // VS Code DevContainers configuration for Agent Tools
-  // ===================================================
-  // This config is for VS Code's DevContainers extension (not DevPod).
-  // For DevPod, use .devcontainer/devpod/devcontainer.json instead.
-  //
-  // Note: remoteUser and postCreateCommand are duplicated from the image LABEL
-  // for VS Code compatibility (VS Code may not reliably read LABEL metadata).
+  // Base config from image LABEL — run: docker inspect <image> | jq -r '.[0].Config.Labels["devcontainer.metadata"]'
   "name": "Agent Tools - ${localWorkspaceFolderBasename}",
-  "image": "ghcr.io/zookanalytics/claude-devcontainer:latest",
+  "image": "ghcr.io/zookanalytics/bmad-orchestrator/devcontainer:latest",
+  "initializeCommand": "bash -c 'touch ~/.gitconfig'",
   "runArgs": [
     "--name=agenttools-${localWorkspaceFolderBasename}",
-    "--cap-add=NET_ADMIN",
-    "--cap-add=NET_RAW",
-    "--cap-add=SYSLOG",
-    // OrbStack DNS routing for local development
+    "--shm-size=1gb",
     "--label=dev.orbstack.domains=${localWorkspaceFolderBasename}.agenttools.local",
-    "--label=dev.orbstack.http-port=3000",
-    // Chromium needs adequate shared memory for visual regression tests
-    "--shm-size=1gb"
+    "--label=dev.orbstack.http-port=3000"
   ],
-  "portsAttributes": {
-    // Disable auto-forwarding for Storybook - use OrbStack direct access instead
-    // Access via: http://agenttools-<instancename>.orb.local:6006
-    "6006": {
-      "onAutoForward": "ignore"
-    }
-  },
-  // Project-specific mounts (override image defaults for VS Code /workspace path)
   "mounts": [
-    "source=claude-devcontainer-shared-data,target=/shared-data,type=volume",
-    "source=pnpm-store,target=/workspaces/.pnpm-store,type=volume",
-    "source=agent-tools-node-modules-${localWorkspaceFolderBasename},target=/workspaces/${localWorkspaceFolderBasename}/node_modules,type=volume",
-    "source=/run/host-services/ssh-auth.sock,target=/run/host-services/ssh-auth.sock,type=bind"
+    "source=agent-tools-node-modules-${localWorkspaceFolderBasename},target=/workspaces/${localWorkspaceFolderBasename}/node_modules,type=volume"
   ],
-  // Project-specific environment variables (additions to image defaults)
   "containerEnv": {
-    "CLAUDE_INSTANCE": "${localWorkspaceFolderBasename}",
-    "DEVPOD_WORKSPACE_ID": "${localWorkspaceFolderBasename}", // Temporary during migration from DevPod
+    "AGENT_INSTANCE": "${localWorkspaceFolderBasename}",
     "PROJECT_NAME": "agent-tools",
     "NODE_OPTIONS": "--max-old-space-size=4096",
-    "POWERLEVEL9K_DISABLE_GITSTATUS": "true",
-    "SHARED_DATA_DIR": "/shared-data",
-    // Override pnpm store path for VS Code's /workspace convention (image uses /workspaces).
-    // Virtual store uses default (node_modules/.pnpm) — per-container Docker volume mounts
-    // already isolate each container's node_modules, so no custom path needed.
-    "npm_config_store_dir": "/workspaces/.pnpm-store",
-    // SSH agent forwarding via Docker/OrbStack magic socket.
-    // VS Code overrides this via remoteEnv with its own forwarded socket, so both paths coexist.
-    "SSH_AUTH_SOCK": "/run/host-services/ssh-auth.sock"
+    "ENABLE_BMAD_ORCHESTRATOR": "true"
   },
-  // Container user and lifecycle commands
-  // (Also in image LABEL, but explicit here for VS Code DevContainers compatibility)
-  "remoteUser": "node",
-  "postCreateCommand": "/usr/local/bin/post-create.sh",
+  "portsAttributes": {
+    "6006": { "onAutoForward": "ignore" }
+  },
   "customizations": {
     "vscode": {
       "settings": {
-        "window.title": "Agent Tools - ${containerEnv:CLAUDE_INSTANCE}${separator}${activeRepositoryBranchName}${dirty}",
+        "window.title": "Agent Tools - ${containerEnv:AGENT_INSTANCE}${separator}${activeRepositoryBranchName}${dirty}",
         "terminal.integrated.defaultProfile.linux": "zsh",
         "terminal.integrated.profiles.linux": {
-          "zsh": {
-            "path": "/bin/zsh"
-          },
-          "tmux": {
-            "path": "/home/node/.local/bin/tmux-session"
-          }
+          "zsh": { "path": "/bin/zsh" },
+          "tmux": { "path": "/home/node/.local/bin/tmux-session" }
         },
         "geminicodeassist.agentYoloMode": true
       },
       "extensions": [
-        // Project-specific extensions (base image provides Claude, Gemini, GitLens, ESLint, Prettier)
         "appulate.filewatcher",
         "bierner.markdown-mermaid",
         "bierner.markdown-footnotes",
