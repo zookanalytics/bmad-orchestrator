@@ -1,5 +1,11 @@
 # @zookanalytics/agent-env
 
+## 0.2.0
+
+### Minor Changes
+
+- [#14](https://github.com/zookanalytics/bmad-orchestrator/pull/14) [`d481c3b`](https://github.com/zookanalytics/bmad-orchestrator/commit/d481c3b1ddc479828851ff6bce3062cf41d8a023) Thanks [@johnzook](https://github.com/johnzook)! - Add `--no-pull` and `--use-cache` flags to the rebuild command for controlling Docker image pulling and build cache behavior. By default, rebuild now pulls fresh base images and disables Docker layer cache to ensure fully reproducible builds. Includes Dockerfile resolution, FROM image parsing, and refactored rebuild orchestration.
+
 ## 0.1.3
 
 ### Patch Changes

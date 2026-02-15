@@ -1,6 +1,6 @@
 {
   "name": "@zookanalytics/bmm-retrospective-module",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "BMAD module: Transform retrospective action items into executable workflows",
   "type": "module",
   "bin": "./bin/install.cjs",
