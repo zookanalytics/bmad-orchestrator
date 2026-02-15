@@ -469,6 +469,7 @@ export async function rebuildInstance(
   const buildNoCache = noCache && hasDockerfile;
   const containerResult = await deps.container.devcontainerUp(wsPath.root, containerName, {
     buildNoCache,
+    remoteEnv: { AGENT_INSTANCE: wsPath.name },
   });
   if (!containerResult.ok) {
     return {

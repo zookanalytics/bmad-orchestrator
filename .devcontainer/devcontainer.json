@@ -9,9 +9,6 @@
     "--label=dev.orbstack.domains=${localWorkspaceFolderBasename}.agenttools.local",
     "--label=dev.orbstack.http-port=3000"
   ],
-  "mounts": [
-    "source=agent-tools-node-modules-${localWorkspaceFolderBasename},target=/workspaces/${localWorkspaceFolderBasename}/node_modules,type=volume"
-  ],
   "containerEnv": {
     "AGENT_INSTANCE": "${localWorkspaceFolderBasename}",
     "PROJECT_NAME": "agent-tools",
@@ -25,7 +22,6 @@
     "vscode": {
       "settings": {
         "window.title": "Agent Tools - ${containerEnv:AGENT_INSTANCE}${separator}${activeRepositoryBranchName}${dirty}",
-        "terminal.integrated.defaultProfile.linux": "zsh",
         "terminal.integrated.profiles.linux": {
           "zsh": { "path": "/bin/zsh" },
           "tmux": { "path": "/home/node/.local/bin/tmux-session" }

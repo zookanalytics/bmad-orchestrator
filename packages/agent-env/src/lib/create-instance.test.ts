@@ -225,14 +225,17 @@ describe('createInstance', () => {
     );
   });
 
-  it('calls devcontainerUp after successful clone', async () => {
+  it('calls devcontainerUp after successful clone with AGENT_INSTANCE', async () => {
     const deps = createTestDeps(gitCloneSuccess);
 
     await createInstance('auth', 'https://github.com/user/bmad-orch.git', deps);
 
     expect(deps.container.devcontainerUp).toHaveBeenCalledWith(
       expect.stringContaining('bmad-orch-auth'),
-      'ae-bmad-orch-auth'
+      'ae-bmad-orch-auth',
+      expect.objectContaining({
+        remoteEnv: { AGENT_INSTANCE: 'bmad-orch-auth' },
+      })
     );
   });
 
@@ -395,6 +398,39 @@ describe('createInstance', () => {
 
     // Logger should have been called
     expect(deps.logger?.warn).toHaveBeenCalledWith(expect.stringContaining('Rolling back'));
+  });
+
+  it('includes docker logs in returned error on startup failure', async () => {
+    const deps = createTestDeps(gitCloneSuccess, {
+      devcontainerUp: vi.fn().mockResolvedValue({
+        ok: false,
+        status: 'not-found',
+        containerId: null,
+        error: { code: 'CONTAINER_ERROR', message: 'post-create failed' },
+      }),
+    });
+    // Mock executor to return docker logs (stdout + stderr) when asked
+    const originalExecutor = deps.executor;
+    deps.executor = vi.fn().mockImplementation(async (command: string, args: string[] = []) => {
+      if (command === 'docker' && args[0] === 'logs') {
+        return {
+          ok: true,
+          stdout: '[1/12] Fixing SSH...',
+          stderr: 'ERROR: step 6 failed',
+          exitCode: 0,
+        };
+      }
+      return originalExecutor(command, args);
+    });
+
+    const result = await createInstance('auth', 'https://github.com/user/bmad-orch.git', deps);
+
+    // Docker logs should be included in the returned error message
+    expect(result.ok).toBe(false);
+    if (result.ok) throw new Error('Expected failure');
+    expect(result.error.message).toContain('docker logs');
+    expect(result.error.message).toContain('[1/12] Fixing SSH');
+    expect(result.error.message).toContain('ERROR: step 6 failed');
   });
 
   it('returns CONTAINER_EXISTS when a container already exists for workspace path', async () => {

@@ -13,11 +13,6 @@ import {
   parseDockerfileImages,
 } from './devcontainer.js';
 
-// ─── Constants ──────────────────────────────────────────────────────────────
-
-/** Docker Desktop / OrbStack SSH agent socket path (macOS) */
-const SSH_AUTH_SOCKET = '/run/host-services/ssh-auth.sock';
-
 // ─── Test helpers ────────────────────────────────────────────────────────────
 
 let tempDir: string;
@@ -111,15 +106,9 @@ describe('copyBaselineConfig', () => {
     expect(stats.isFile()).toBe(true);
   });
 
-  it('copies Dockerfile to workspace', async () => {
+  it('copies init-host.sh to workspace', async () => {
     await copyBaselineConfig(tempDir);
-    const stats = await stat(join(tempDir, '.devcontainer', 'Dockerfile'));
-    expect(stats.isFile()).toBe(true);
-  });
-
-  it('copies post-create.sh to workspace', async () => {
-    await copyBaselineConfig(tempDir);
-    const stats = await stat(join(tempDir, '.devcontainer', 'post-create.sh'));
+    const stats = await stat(join(tempDir, '.devcontainer', 'init-host.sh'));
     expect(stats.isFile()).toBe(true);
   });
 
@@ -153,11 +142,6 @@ describe('listBaselineFiles', () => {
     expect(files).toContain('devcontainer.json');
   });
 
-  it('includes Dockerfile', async () => {
-    const files = await listBaselineFiles();
-    expect(files).toContain('Dockerfile');
-  });
-
   it('includes init-host.sh', async () => {
     const files = await listBaselineFiles();
     expect(files).toContain('init-host.sh');
@@ -189,43 +173,13 @@ describe('devcontainer.json content', () => {
     expect(typeof config).toBe('object');
   });
 
-  it('has build configuration with Dockerfile', () => {
-    expect(config.build).toBeDefined();
-    expect((config.build as Record<string, unknown>).dockerfile).toBe('Dockerfile');
+  it('uses pre-built GHCR image instead of local Dockerfile build', () => {
+    expect(config.image).toBe('ghcr.io/zookanalytics/bmad-orchestrator/devcontainer:latest');
+    expect(config.build).toBeUndefined();
   });
 
-  it('configures non-root node user', () => {
-    expect(config.remoteUser).toBe('node');
-  });
-
-  it('mounts Claude Code auth directory as read-only', () => {
-    const mounts = config.mounts as string[];
-    const claudeMount = mounts.find((m) => m.includes('.claude'));
-    expect(claudeMount).toBeDefined();
-    expect(claudeMount).toContain('readonly');
-    expect(claudeMount).toContain('/home/node/.claude');
-  });
-
-  it('mounts host .gitconfig as read-only', () => {
-    const mounts = config.mounts as string[];
-    const gitconfigMount = mounts.find((m) => m.includes('.gitconfig'));
-    expect(gitconfigMount).toBeDefined();
-    expect(gitconfigMount).toContain('readonly');
-    expect(gitconfigMount).toContain('/home/node/.gitconfig');
-  });
-
-  it('mounts Docker SSH agent socket for SSH forwarding', () => {
-    const mounts = config.mounts as string[];
-    const sshMount = mounts.find((m) => m.includes('ssh-auth.sock'));
-    expect(sshMount).toBeDefined();
-    expect(sshMount).toContain(SSH_AUTH_SOCKET);
-    expect(sshMount).toContain('type=bind');
-  });
-
-  it('sets SSH_AUTH_SOCK in containerEnv', () => {
-    const containerEnv = config.containerEnv as Record<string, string>;
-    expect(containerEnv).toBeDefined();
-    expect(containerEnv.SSH_AUTH_SOCK).toBe(SSH_AUTH_SOCKET);
+  it('does not define mounts (provided by image LABEL metadata)', () => {
+    expect(config.mounts).toBeUndefined();
   });
 
   it('has initializeCommand referencing init-host.sh', () => {
@@ -233,19 +187,8 @@ describe('devcontainer.json content', () => {
     expect(config.initializeCommand as string).toContain('init-host.sh');
   });
 
-  it('configures tmux auto-start via postStartCommand', () => {
-    expect(config.postStartCommand).toBeDefined();
-    expect(config.postStartCommand as string).toContain('tmux');
-  });
-
-  it('configures zsh as default shell', () => {
-    const customizations = config.customizations as Record<
-      string,
-      Record<string, Record<string, string>>
-    >;
-    expect(customizations?.vscode?.settings?.['terminal.integrated.defaultProfile.linux']).toBe(
-      'zsh'
-    );
+  it('does not define customizations (provided by image LABEL metadata)', () => {
+    expect(config.customizations).toBeUndefined();
   });
 });
 
@@ -267,8 +210,8 @@ describe('patchContainerName', () => {
 
     const content = await readFile(join(tempDir, '.devcontainer', 'devcontainer.json'), 'utf-8');
     const config = JSON.parse(content);
-    expect(config.remoteUser).toBe('node');
-    expect(config.build).toBeDefined();
+    expect(config.image).toBe('ghcr.io/zookanalytics/bmad-orchestrator/devcontainer:latest');
+    expect(config.initializeCommand).toContain('init-host.sh');
   });
 
   it('replaces existing --name flag in runArgs', async () => {
@@ -284,53 +227,6 @@ describe('patchContainerName', () => {
     const content = await readFile(join(tempDir, '.devcontainer', 'devcontainer.json'), 'utf-8');
     const config = JSON.parse(content);
     expect(config.runArgs).toEqual(['--hostname=test', '--name=ae-new-name']);
-  });
-});
-
-// ─── Dockerfile content validation ───────────────────────────────────────────
-
-describe('Dockerfile content', () => {
-  let content: string;
-
-  beforeEach(async () => {
-    const baselinePath = getBaselineConfigPath();
-    content = await readFile(join(baselinePath, 'Dockerfile'), 'utf-8');
-  });
-
-  it('uses node:22-bookworm-slim as base image', () => {
-    expect(content).toContain('FROM node:22-bookworm-slim');
-  });
-
-  it('installs tmux', () => {
-    expect(content).toContain('tmux');
-  });
-
-  it('installs zsh', () => {
-    expect(content).toContain('zsh');
-  });
-
-  it('installs git', () => {
-    expect(content).toMatch(/\bgit\b/);
-  });
-
-  it('installs gnupg', () => {
-    expect(content).toContain('gnupg');
-  });
-
-  it('installs openssh-client', () => {
-    expect(content).toContain('openssh-client');
-  });
-
-  it('installs Claude Code CLI', () => {
-    expect(content).toContain('@anthropic-ai/claude-code');
-  });
-
-  it('configures non-root node user', () => {
-    expect(content).toContain('USER node');
-  });
-
-  it('sets zsh as default shell', () => {
-    expect(content).toContain('chsh -s /usr/bin/zsh node');
   });
 });
 

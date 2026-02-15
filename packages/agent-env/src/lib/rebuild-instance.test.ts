@@ -190,7 +190,7 @@ describe('rebuildInstance', () => {
   it('rebuilds a stopped instance successfully', async () => {
     const state = createTestState('repo-auth', { configSource: 'baseline' });
     await createTestWorkspace('repo-auth', state, {
-      devcontainerFiles: ['devcontainer.json', 'Dockerfile', 'init-host.sh', 'post-create.sh'],
+      devcontainerFiles: ['devcontainer.json', 'init-host.sh'],
     });
     const deps = createTestDeps();
 
@@ -205,7 +205,7 @@ describe('rebuildInstance', () => {
   it('stops container before rebuilding', async () => {
     const state = createTestState('repo-auth', { configSource: 'baseline' });
     await createTestWorkspace('repo-auth', state, {
-      devcontainerFiles: ['devcontainer.json', 'Dockerfile', 'init-host.sh', 'post-create.sh'],
+      devcontainerFiles: ['devcontainer.json', 'init-host.sh'],
     });
     const mockContainer = createMockContainer();
     const deps = createTestDeps({ container: mockContainer });
@@ -218,7 +218,7 @@ describe('rebuildInstance', () => {
   it('removes container after stopping', async () => {
     const state = createTestState('repo-auth', { configSource: 'baseline' });
     await createTestWorkspace('repo-auth', state, {
-      devcontainerFiles: ['devcontainer.json', 'Dockerfile', 'init-host.sh', 'post-create.sh'],
+      devcontainerFiles: ['devcontainer.json', 'init-host.sh'],
     });
     const mockContainer = createMockContainer();
     const deps = createTestDeps({ container: mockContainer });
@@ -231,7 +231,7 @@ describe('rebuildInstance', () => {
   it('runs devcontainer up after removing container', async () => {
     const state = createTestState('repo-auth', { configSource: 'baseline' });
     await createTestWorkspace('repo-auth', state, {
-      devcontainerFiles: ['devcontainer.json', 'Dockerfile', 'init-host.sh', 'post-create.sh'],
+      devcontainerFiles: ['devcontainer.json', 'init-host.sh'],
     });
     const mockContainer = createMockContainer();
     const deps = createTestDeps({ container: mockContainer });
@@ -249,7 +249,7 @@ describe('rebuildInstance', () => {
   it('preserves workspace files during rebuild', async () => {
     const state = createTestState('repo-auth', { configSource: 'baseline' });
     await createTestWorkspace('repo-auth', state, {
-      devcontainerFiles: ['devcontainer.json', 'Dockerfile', 'init-host.sh', 'post-create.sh'],
+      devcontainerFiles: ['devcontainer.json', 'init-host.sh'],
     });
 
     // Create an extra file to verify workspace is preserved
@@ -267,7 +267,7 @@ describe('rebuildInstance', () => {
   it('finds workspace by exact name', async () => {
     const state = createTestState('repo-auth', { configSource: 'baseline' });
     await createTestWorkspace('repo-auth', state, {
-      devcontainerFiles: ['devcontainer.json', 'Dockerfile', 'init-host.sh', 'post-create.sh'],
+      devcontainerFiles: ['devcontainer.json', 'init-host.sh'],
     });
     const deps = createTestDeps();
 
@@ -279,7 +279,7 @@ describe('rebuildInstance', () => {
   it('finds workspace by suffix match', async () => {
     const state = createTestState('bmad-orch-auth', { configSource: 'baseline' });
     await createTestWorkspace('bmad-orch-auth', state, {
-      devcontainerFiles: ['devcontainer.json', 'Dockerfile', 'init-host.sh', 'post-create.sh'],
+      devcontainerFiles: ['devcontainer.json', 'init-host.sh'],
     });
     const deps = createTestDeps();
 
@@ -293,7 +293,7 @@ describe('rebuildInstance', () => {
   it('refreshes baseline config: copies to temp, patches, then swaps', async () => {
     const state = createTestState('repo-auth', { configSource: 'baseline' });
     await createTestWorkspace('repo-auth', state, {
-      devcontainerFiles: ['devcontainer.json', 'Dockerfile', 'init-host.sh', 'post-create.sh'],
+      devcontainerFiles: ['devcontainer.json', 'init-host.sh'],
     });
     const deps = createTestDeps();
 
@@ -326,7 +326,7 @@ describe('rebuildInstance', () => {
   it('updates state with lastRebuilt timestamp', async () => {
     const state = createTestState('repo-auth', { configSource: 'baseline' });
     await createTestWorkspace('repo-auth', state, {
-      devcontainerFiles: ['devcontainer.json', 'Dockerfile', 'init-host.sh', 'post-create.sh'],
+      devcontainerFiles: ['devcontainer.json', 'init-host.sh'],
     });
     const deps = createTestDeps();
 
@@ -350,7 +350,7 @@ describe('rebuildInstance', () => {
     const state = createTestState('repo-auth');
     delete (state as unknown as Record<string, unknown>).configSource;
     await createTestWorkspace('repo-auth', state, {
-      devcontainerFiles: ['devcontainer.json', 'Dockerfile', 'init-host.sh', 'post-create.sh'],
+      devcontainerFiles: ['devcontainer.json', 'init-host.sh'],
     });
     const deps = createTestDeps();
 
@@ -379,25 +379,28 @@ describe('rebuildInstance', () => {
   it('logs extra files in .devcontainer/ before deletion', async () => {
     const state = createTestState('repo-auth', { configSource: 'baseline' });
     await createTestWorkspace('repo-auth', state, {
-      devcontainerFiles: [
-        'devcontainer.json',
-        'Dockerfile',
-        'init-host.sh',
-        'post-create.sh',
-        'custom-script.sh',
-      ],
+      devcontainerFiles: ['devcontainer.json', 'init-host.sh', 'custom-script.sh'],
     });
     const deps = createTestDeps();
 
     await rebuildInstance('auth', deps);
 
-    expect(deps.logger?.warn).toHaveBeenCalledWith(expect.stringContaining('custom-script.sh'));
+    const warnCalls = (deps.logger?.warn as ReturnType<typeof vi.fn>).mock.calls;
+    const extraFilesWarning = warnCalls.find(
+      (call: string[]) => typeof call[0] === 'string' && call[0].includes('Extra files')
+    );
+    expect(extraFilesWarning).toBeDefined();
+    const warningMessage = (extraFilesWarning as string[])[0];
+    expect(warningMessage).toContain('custom-script.sh');
+    // Verify only custom-script.sh is reported as extra (not baseline files)
+    expect(warningMessage).not.toContain('Dockerfile');
+    expect(warningMessage).not.toContain('post-create.sh');
   });
 
   it('does not log when no extra files exist', async () => {
     const state = createTestState('repo-auth', { configSource: 'baseline' });
     await createTestWorkspace('repo-auth', state, {
-      devcontainerFiles: ['devcontainer.json', 'Dockerfile', 'init-host.sh', 'post-create.sh'],
+      devcontainerFiles: ['devcontainer.json', 'init-host.sh'],
     });
     const deps = createTestDeps();
 
@@ -522,7 +525,7 @@ describe('rebuildInstance', () => {
   it('returns error when config refresh fails and does NOT stop container', async () => {
     const state = createTestState('repo-auth', { configSource: 'baseline' });
     await createTestWorkspace('repo-auth', state, {
-      devcontainerFiles: ['devcontainer.json', 'Dockerfile', 'init-host.sh', 'post-create.sh'],
+      devcontainerFiles: ['devcontainer.json', 'init-host.sh'],
     });
 
     const mockContainer = createMockContainer();
@@ -554,7 +557,7 @@ describe('rebuildInstance', () => {
   it('calls operations in correct order: config refresh → status → stop → remove → devcontainer up', async () => {
     const state = createTestState('repo-auth', { configSource: 'baseline' });
     await createTestWorkspace('repo-auth', state, {
-      devcontainerFiles: ['devcontainer.json', 'Dockerfile', 'init-host.sh', 'post-create.sh'],
+      devcontainerFiles: ['devcontainer.json', 'init-host.sh'],
     });
 
     const callOrder: string[] = [];
@@ -630,7 +633,7 @@ describe('rebuildInstance', () => {
   it('blocks rebuild when container is running and force=false', async () => {
     const state = createTestState('repo-auth', { configSource: 'baseline' });
     await createTestWorkspace('repo-auth', state, {
-      devcontainerFiles: ['devcontainer.json', 'Dockerfile', 'init-host.sh', 'post-create.sh'],
+      devcontainerFiles: ['devcontainer.json', 'init-host.sh'],
     });
     const deps = createTestDeps({
       container: createMockContainer({
@@ -654,7 +657,7 @@ describe('rebuildInstance', () => {
   it('does not stop or remove container when running check blocks', async () => {
     const state = createTestState('repo-auth', { configSource: 'baseline' });
     await createTestWorkspace('repo-auth', state, {
-      devcontainerFiles: ['devcontainer.json', 'Dockerfile', 'init-host.sh', 'post-create.sh'],
+      devcontainerFiles: ['devcontainer.json', 'init-host.sh'],
     });
     const mockContainer = createMockContainer({
       containerStatus: vi.fn().mockResolvedValue({
@@ -675,7 +678,7 @@ describe('rebuildInstance', () => {
   it('rebuilds running container when force=true', async () => {
     const state = createTestState('repo-auth', { configSource: 'baseline' });
     await createTestWorkspace('repo-auth', state, {
-      devcontainerFiles: ['devcontainer.json', 'Dockerfile', 'init-host.sh', 'post-create.sh'],
+      devcontainerFiles: ['devcontainer.json', 'init-host.sh'],
     });
     const mockContainer = createMockContainer({
       containerStatus: vi.fn().mockResolvedValue({
@@ -701,7 +704,7 @@ describe('rebuildInstance', () => {
   it('skips stop and remove when container is not found', async () => {
     const state = createTestState('repo-auth', { configSource: 'baseline' });
     await createTestWorkspace('repo-auth', state, {
-      devcontainerFiles: ['devcontainer.json', 'Dockerfile', 'init-host.sh', 'post-create.sh'],
+      devcontainerFiles: ['devcontainer.json', 'init-host.sh'],
     });
     const mockContainer = createMockContainer({
       containerStatus: vi.fn().mockResolvedValue({
@@ -725,7 +728,7 @@ describe('rebuildInstance', () => {
   it('discovers actual container name from containerId', async () => {
     const state = createTestState('repo-auth', { configSource: 'baseline' });
     await createTestWorkspace('repo-auth', state, {
-      devcontainerFiles: ['devcontainer.json', 'Dockerfile', 'init-host.sh', 'post-create.sh'],
+      devcontainerFiles: ['devcontainer.json', 'init-host.sh'],
     });
     const mockContainer = createMockContainer({
       devcontainerUp: vi.fn().mockResolvedValue({
@@ -748,7 +751,7 @@ describe('rebuildInstance', () => {
   it('updates state when container name changes', async () => {
     const state = createTestState('repo-auth', { configSource: 'baseline' });
     await createTestWorkspace('repo-auth', state, {
-      devcontainerFiles: ['devcontainer.json', 'Dockerfile', 'init-host.sh', 'post-create.sh'],
+      devcontainerFiles: ['devcontainer.json', 'init-host.sh'],
     });
     const mockContainer = createMockContainer({
       devcontainerUp: vi.fn().mockResolvedValue({
@@ -782,7 +785,7 @@ describe('rebuildInstance', () => {
   it('always updates state with lastRebuilt timestamp even if name unchanged', async () => {
     const state = createTestState('repo-auth', { configSource: 'baseline' });
     await createTestWorkspace('repo-auth', state, {
-      devcontainerFiles: ['devcontainer.json', 'Dockerfile', 'init-host.sh', 'post-create.sh'],
+      devcontainerFiles: ['devcontainer.json', 'init-host.sh'],
     });
     const mockContainer = createMockContainer({
       devcontainerUp: vi.fn().mockResolvedValue({
@@ -846,7 +849,7 @@ describe('rebuildInstance', () => {
   it('returns ORBSTACK_REQUIRED when Docker is not available', async () => {
     const state = createTestState('repo-auth', { configSource: 'baseline' });
     await createTestWorkspace('repo-auth', state, {
-      devcontainerFiles: ['devcontainer.json', 'Dockerfile', 'init-host.sh', 'post-create.sh'],
+      devcontainerFiles: ['devcontainer.json', 'init-host.sh'],
     });
     const deps = createTestDeps({
       container: createMockContainer({
@@ -864,7 +867,7 @@ describe('rebuildInstance', () => {
   it('returns error when container stop fails', async () => {
     const state = createTestState('repo-auth', { configSource: 'baseline' });
     await createTestWorkspace('repo-auth', state, {
-      devcontainerFiles: ['devcontainer.json', 'Dockerfile', 'init-host.sh', 'post-create.sh'],
+      devcontainerFiles: ['devcontainer.json', 'init-host.sh'],
     });
     const deps = createTestDeps({
       container: createMockContainer({
@@ -889,7 +892,7 @@ describe('rebuildInstance', () => {
   it('returns error when container remove fails', async () => {
     const state = createTestState('repo-auth', { configSource: 'baseline' });
     await createTestWorkspace('repo-auth', state, {
-      devcontainerFiles: ['devcontainer.json', 'Dockerfile', 'init-host.sh', 'post-create.sh'],
+      devcontainerFiles: ['devcontainer.json', 'init-host.sh'],
     });
     const deps = createTestDeps({
       container: createMockContainer({
@@ -913,7 +916,7 @@ describe('rebuildInstance', () => {
   it('returns error when devcontainer up fails', async () => {
     const state = createTestState('repo-auth', { configSource: 'baseline' });
     await createTestWorkspace('repo-auth', state, {
-      devcontainerFiles: ['devcontainer.json', 'Dockerfile', 'init-host.sh', 'post-create.sh'],
+      devcontainerFiles: ['devcontainer.json', 'init-host.sh'],
     });
     const deps = createTestDeps({
       container: createMockContainer({
@@ -940,7 +943,7 @@ describe('rebuildInstance', () => {
   it('includes wasRunning in error result when devcontainer up fails after stopping', async () => {
     const state = createTestState('repo-auth', { configSource: 'baseline' });
     await createTestWorkspace('repo-auth', state, {
-      devcontainerFiles: ['devcontainer.json', 'Dockerfile', 'init-host.sh', 'post-create.sh'],
+      devcontainerFiles: ['devcontainer.json', 'init-host.sh'],
     });
     const deps = createTestDeps({
       container: createMockContainer({
@@ -971,9 +974,9 @@ describe('rebuildInstance', () => {
   // ─── Pull behavior ──────────────────────────────────────────────────────
 
   it('default rebuild calls dockerPull for each FROM image found in Dockerfile', async () => {
-    const state = createTestState('repo-auth', { configSource: 'baseline' });
+    const state = createTestState('repo-auth', { configSource: 'repo' });
     await createTestWorkspace('repo-auth', state, {
-      devcontainerFiles: ['devcontainer.json', 'Dockerfile', 'init-host.sh', 'post-create.sh'],
+      devcontainerFiles: ['devcontainer.json', 'Dockerfile'],
       dockerfileContent: 'FROM node:22-bookworm-slim\n',
     });
     const mockContainer = createMockContainer();
@@ -985,9 +988,9 @@ describe('rebuildInstance', () => {
   });
 
   it('skips pull entirely when pull is false', async () => {
-    const state = createTestState('repo-auth', { configSource: 'baseline' });
+    const state = createTestState('repo-auth', { configSource: 'repo' });
     await createTestWorkspace('repo-auth', state, {
-      devcontainerFiles: ['devcontainer.json', 'Dockerfile', 'init-host.sh', 'post-create.sh'],
+      devcontainerFiles: ['devcontainer.json', 'Dockerfile'],
     });
     const mockContainer = createMockContainer();
     const deps = createTestDeps({ container: mockContainer });
@@ -998,9 +1001,9 @@ describe('rebuildInstance', () => {
   });
 
   it('returns IMAGE_PULL_FAILED error and does NOT stop/remove container on pull failure', async () => {
-    const state = createTestState('repo-auth', { configSource: 'baseline' });
+    const state = createTestState('repo-auth', { configSource: 'repo' });
     await createTestWorkspace('repo-auth', state, {
-      devcontainerFiles: ['devcontainer.json', 'Dockerfile', 'init-host.sh', 'post-create.sh'],
+      devcontainerFiles: ['devcontainer.json', 'Dockerfile'],
     });
     const mockContainer = createMockContainer({
       dockerPull: vi.fn().mockResolvedValue({
@@ -1065,9 +1068,9 @@ describe('rebuildInstance', () => {
   // ─── noCache behavior ──────────────────────────────────────────────────
 
   it('default rebuild passes buildNoCache true to devcontainerUp', async () => {
-    const state = createTestState('repo-auth', { configSource: 'baseline' });
+    const state = createTestState('repo-auth', { configSource: 'repo' });
     await createTestWorkspace('repo-auth', state, {
-      devcontainerFiles: ['devcontainer.json', 'Dockerfile', 'init-host.sh', 'post-create.sh'],
+      devcontainerFiles: ['devcontainer.json', 'Dockerfile'],
     });
     const mockContainer = createMockContainer();
     const deps = createTestDeps({ container: mockContainer });
@@ -1077,14 +1080,14 @@ describe('rebuildInstance', () => {
     expect(mockContainer.devcontainerUp).toHaveBeenCalledWith(
       expect.any(String),
       expect.any(String),
-      { buildNoCache: true }
+      expect.objectContaining({ buildNoCache: true })
     );
   });
 
   it('pull false still passes buildNoCache true (flags are independent)', async () => {
-    const state = createTestState('repo-auth', { configSource: 'baseline' });
+    const state = createTestState('repo-auth', { configSource: 'repo' });
     await createTestWorkspace('repo-auth', state, {
-      devcontainerFiles: ['devcontainer.json', 'Dockerfile', 'init-host.sh', 'post-create.sh'],
+      devcontainerFiles: ['devcontainer.json', 'Dockerfile'],
     });
     const mockContainer = createMockContainer();
     const deps = createTestDeps({ container: mockContainer });
@@ -1095,14 +1098,14 @@ describe('rebuildInstance', () => {
     expect(mockContainer.devcontainerUp).toHaveBeenCalledWith(
       expect.any(String),
       expect.any(String),
-      { buildNoCache: true }
+      expect.objectContaining({ buildNoCache: true })
     );
   });
 
   it('passes buildNoCache false when noCache is false', async () => {
     const state = createTestState('repo-auth', { configSource: 'baseline' });
     await createTestWorkspace('repo-auth', state, {
-      devcontainerFiles: ['devcontainer.json', 'Dockerfile', 'init-host.sh', 'post-create.sh'],
+      devcontainerFiles: ['devcontainer.json', 'init-host.sh'],
     });
     const mockContainer = createMockContainer();
     const deps = createTestDeps({ container: mockContainer });
@@ -1112,7 +1115,24 @@ describe('rebuildInstance', () => {
     expect(mockContainer.devcontainerUp).toHaveBeenCalledWith(
       expect.any(String),
       expect.any(String),
-      { buildNoCache: false }
+      expect.objectContaining({ buildNoCache: false })
+    );
+  });
+
+  it('baseline rebuild defaults to buildNoCache false (image-based, no Dockerfile after refresh)', async () => {
+    const state = createTestState('repo-auth', { configSource: 'baseline' });
+    await createTestWorkspace('repo-auth', state, {
+      devcontainerFiles: ['devcontainer.json', 'init-host.sh'],
+    });
+    const mockContainer = createMockContainer();
+    const deps = createTestDeps({ container: mockContainer });
+
+    await rebuildInstance('auth', deps);
+
+    expect(mockContainer.devcontainerUp).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.any(String),
+      expect.objectContaining({ buildNoCache: false })
     );
   });
 
@@ -1134,16 +1154,16 @@ describe('rebuildInstance', () => {
     expect(mockContainer.devcontainerUp).toHaveBeenCalledWith(
       expect.any(String),
       expect.any(String),
-      { buildNoCache: false }
+      expect.objectContaining({ buildNoCache: false })
     );
   });
 
   // ─── Pull ordering verification ────────────────────────────────────────
 
-  it('pull step runs after config refresh but before container stop', async () => {
-    const state = createTestState('repo-auth', { configSource: 'baseline' });
+  it('pull failure prevents container teardown (stop is never called)', async () => {
+    const state = createTestState('repo-auth', { configSource: 'repo' });
     await createTestWorkspace('repo-auth', state, {
-      devcontainerFiles: ['devcontainer.json', 'Dockerfile', 'init-host.sh', 'post-create.sh'],
+      devcontainerFiles: ['devcontainer.json', 'Dockerfile'],
     });
 
     const callOrder: string[] = [];

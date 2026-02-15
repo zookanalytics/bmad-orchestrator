@@ -14,8 +14,8 @@ import type { ContainerResult, ContainerStatus } from './types.js';
 
 // ─── Constants ───────────────────────────────────────────────────────────────
 
-/** Timeout for devcontainer up operation (120 seconds for cached builds) */
-export const DEVCONTAINER_UP_TIMEOUT = 120_000;
+/** Timeout for devcontainer up operation (300 seconds — includes post-create with network I/O) */
+export const DEVCONTAINER_UP_TIMEOUT = 300_000;
 
 /** Timeout for devcontainer up with --build-no-cache (300 seconds — full rebuilds are slow) */
 export const DEVCONTAINER_UP_NO_CACHE_TIMEOUT = 300_000;
@@ -51,7 +51,7 @@ export interface ContainerLifecycle {
   devcontainerUp(
     workspacePath: string,
     containerName: string,
-    options?: { buildNoCache?: boolean }
+    options?: { buildNoCache?: boolean; remoteEnv?: Record<string, string> }
   ): Promise<ContainerResult>;
   dockerPull(image: string): Promise<DockerPullResult>;
   containerStop(containerName: string): Promise<ContainerStopResult>;
@@ -89,6 +89,72 @@ function parseDevcontainerOutput(stdout: string): {
     }
   }
   return null;
+}
+
+/** Extract non-JSON lines from devcontainer CLI stdout (lifecycle command output).
+ *  The devcontainer CLI may write postCreateCommand output as text lines
+ *  before the final JSON result object. */
+function extractLifecycleOutput(stdout: string): string {
+  if (!stdout) return '';
+  const lines = stdout.trim().split('\n');
+  const nonJsonLines: string[] = [];
+  for (const line of lines) {
+    const trimmed = line.trim();
+    if (!trimmed) continue;
+    try {
+      JSON.parse(trimmed);
+      // JSON line (result object), skip it
+    } catch {
+      nonJsonLines.push(line);
+    }
+  }
+  return nonJsonLines.join('\n');
+}
+
+/** Maximum number of output lines to include in error messages. */
+const MAX_OUTPUT_LINES = 100;
+
+/** Truncate output to last N lines, adding an omission notice if truncated. */
+function truncateOutput(output: string, maxLines: number): string[] {
+  const outputLines = output.trimEnd().split('\n');
+  if (outputLines.length > maxLines) {
+    return [
+      `[... ${outputLines.length - maxLines} earlier lifecycle output lines omitted]`,
+      outputLines.slice(-maxLines).join('\n'),
+    ];
+  }
+  return [output];
+}
+
+/**
+ * Build a detailed error message from devcontainer up failure output.
+ * Combines parsed JSON output, lifecycle output, and stderr.
+ */
+function buildDevcontainerErrorDetails(
+  stdout: string,
+  stderr: string,
+  parsedOutput: ReturnType<typeof parseDevcontainerOutput>
+): string {
+  const parts: string[] = [];
+  if (parsedOutput?.message) parts.push(parsedOutput.message);
+  if (parsedOutput?.description) parts.push(parsedOutput.description);
+
+  const lifecycleOutput = extractLifecycleOutput(stdout);
+  if (lifecycleOutput) {
+    parts.push(...truncateOutput(lifecycleOutput, MAX_OUTPUT_LINES));
+  }
+
+  if (stderr) {
+    const stderrLines = stderr.trimEnd().split('\n');
+    if (stderrLines.length > MAX_OUTPUT_LINES) {
+      parts.push(`[... ${stderrLines.length - MAX_OUTPUT_LINES} earlier stderr lines omitted]`);
+      parts.push(stderrLines.slice(-MAX_OUTPUT_LINES).join('\n'));
+    } else {
+      parts.push(stderr);
+    }
+  }
+
+  return parts.join('\n   ') || 'No error details available';
 }
 
 // ─── Factory ─────────────────────────────────────────────────────────────────
@@ -251,7 +317,7 @@ export function createContainerLifecycle(executor: Execute = createExecutor()): 
   async function devcontainerUp(
     workspacePath: string,
     containerName: string,
-    options?: { buildNoCache?: boolean }
+    options?: { buildNoCache?: boolean; remoteEnv?: Record<string, string> }
   ): Promise<ContainerResult> {
     // Check Docker availability first
     const dockerOk = await isDockerAvailable();
@@ -269,11 +335,23 @@ export function createContainerLifecycle(executor: Execute = createExecutor()): 
     }
 
     // Run devcontainer up
+    // --log-level debug causes the devcontainer CLI to write lifecycle command
+    // output (including postCreateCommand) as timestamped text lines on stdout,
+    // before the final JSON result. This is the primary diagnostic channel.
+    // Using debug instead of trace to avoid the verbose userEnvProbe env dump.
+    // If postCreateCommand output disappears at debug level, switch back to trace.
     const buildNoCache = options?.buildNoCache === true;
+    const remoteEnvArgs = Object.entries(options?.remoteEnv ?? {}).flatMap(([key, value]) => [
+      '--remote-env',
+      `${key}=${value}`,
+    ]);
     const args = [
       'up',
       '--workspace-folder',
       workspacePath,
+      '--log-level',
+      'debug',
+      ...remoteEnvArgs,
       ...(buildNoCache ? ['--build-no-cache'] : []),
     ];
     const result = await executor('devcontainer', args, {
@@ -285,13 +363,7 @@ export function createContainerLifecycle(executor: Execute = createExecutor()): 
     const parsedOutput = parseDevcontainerOutput(result.stdout);
 
     if (!result.ok) {
-      // Build detailed error message from all available sources
-      const parts: string[] = [];
-      if (parsedOutput?.message) parts.push(parsedOutput.message);
-      if (parsedOutput?.description) parts.push(parsedOutput.description);
-      if (result.stderr) parts.push(result.stderr);
-      if (parts.length === 0 && result.stdout) parts.push(result.stdout.slice(0, 1000));
-      const details = parts.join('\n   ') || 'No error details available';
+      const details = buildDevcontainerErrorDetails(result.stdout, result.stderr, parsedOutput);
 
       // Detect container name conflict for a targeted suggestion
       const combined = `${result.stderr} ${result.stdout}`;

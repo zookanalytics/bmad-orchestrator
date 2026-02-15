@@ -1,18 +1,12 @@
 #!/usr/bin/env bash
 # init-host.sh - Runs on the HOST before container creation (initializeCommand)
-# Ensures mount sources exist to prevent devcontainer up failures
+# Ensures mount sources exist to prevent devcontainer up failures.
+# The .gitconfig and SSH socket mounts are provided by the image LABEL metadata.
 
 set -euo pipefail
 
-CLAUDE_DIR="$HOME/.claude"
 GITCONFIG="$HOME/.gitconfig"
 SSH_SOCKET="/run/host-services/ssh-auth.sock"
-
-# Ensure ~/.claude directory exists (mounted read-only into container)
-if [ ! -d "$CLAUDE_DIR" ]; then
-  echo "agent-env: Creating $CLAUDE_DIR (mount source)"
-  mkdir -p "$CLAUDE_DIR"
-fi
 
 # Ensure ~/.gitconfig exists (mounted read-only into container)
 if [ ! -f "$GITCONFIG" ]; then

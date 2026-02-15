@@ -25,7 +25,7 @@ import { dirname } from 'node:path';
 import type { ContainerLifecycle } from './container.js';
 import type { DevcontainerFsDeps } from './devcontainer.js';
 import type { StateFsDeps } from './state.js';
-import type { WorkspacePath } from './types.js';
+import type { ContainerError, WorkspacePath } from './types.js';
 import type { FsDeps } from './workspace.js';
 
 import { createContainerLifecycle } from './container.js';
@@ -383,17 +383,13 @@ export async function createInstance(
   }
 
   // Step 6: Start container
-  const containerResult = await deps.container.devcontainerUp(wsPath.root, containerName);
+  // Pass AGENT_INSTANCE so the image's postCreateCommand can set up per-instance
+  // isolation (shared credentials + per-instance history/state).
+  const containerResult = await deps.container.devcontainerUp(wsPath.root, containerName, {
+    remoteEnv: { AGENT_INSTANCE: wsPath.name },
+  });
   if (!containerResult.ok) {
-    deps.logger?.warn(`Rolling back workspace at ${wsPath.root} due to container startup failure.`);
-    await safeRollback(wsPath.root, deps.rm, deps.logger);
-    return {
-      ok: false,
-      error: containerResult.error ?? {
-        code: 'CONTAINER_ERROR',
-        message: 'Container startup failed for unknown reason.',
-      },
-    };
+    return rollbackContainerFailure(containerName, wsPath, containerResult, deps);
   }
 
   // Step 6b: Discover actual container name
@@ -430,6 +426,108 @@ export async function createInstance(
 }
 
 // ─── Rollback ────────────────────────────────────────────────────────────────
+
+/**
+ * Handle container startup failure: capture logs, clean up, and return error.
+ */
+async function rollbackContainerFailure(
+  containerName: string,
+  wsPath: WorkspacePath,
+  containerResult: ContainerError,
+  deps: CreateInstanceDeps
+): Promise<CreateResult> {
+  deps.logger?.warn(`Rolling back workspace at ${wsPath.root} due to container startup failure.`);
+
+  // Best-effort: capture docker logs before cleanup destroys the container.
+  const dockerLogs = await safeCaptureDockerLogs(containerName, wsPath.root, deps);
+
+  // Clean up the Docker container (may have been created before post-create failed)
+  await safeContainerCleanup(containerName, wsPath.root, deps.container, deps.logger);
+  await safeRollback(wsPath.root, deps.rm, deps.logger);
+
+  // Build error with docker logs appended if available
+  const baseError = containerResult.error ?? {
+    code: 'CONTAINER_ERROR',
+    message: 'Container startup failed for unknown reason.',
+  };
+  const error = dockerLogs
+    ? { ...baseError, message: `${baseError.message}\n   --- docker logs ---\n   ${dockerLogs}` }
+    : baseError;
+
+  return { ok: false, error };
+}
+
+/** Timeout for docker logs capture (5 seconds — we don't want to delay error reporting) */
+const DOCKER_LOGS_TIMEOUT = 5_000;
+
+/**
+ * Best-effort capture of docker logs before container cleanup.
+ * Returns the last 100 lines of container logs, or null if unavailable.
+ */
+async function safeCaptureDockerLogs(
+  containerName: string,
+  workspacePath: string,
+  deps: Pick<CreateInstanceDeps, 'executor' | 'container'>
+): Promise<string | null> {
+  // Try expected container name, then fall back to workspace label lookup
+  const candidates = [containerName];
+  try {
+    const labelMatch = await deps.container.findContainerByWorkspaceLabel(workspacePath);
+    if (labelMatch && labelMatch !== containerName) candidates.push(labelMatch);
+  } catch {
+    // Best-effort
+  }
+
+  for (const name of candidates) {
+    try {
+      const result = await deps.executor('docker', ['logs', '--tail', '100', name], {
+        timeout: DOCKER_LOGS_TIMEOUT,
+      });
+      if (result.ok) {
+        // Combine stdout and stderr — container diagnostics can appear on either stream
+        const combined = [result.stdout.trim(), result.stderr.trim()]
+          .filter(Boolean)
+          .join('\n--- stderr ---\n');
+        if (combined) return combined;
+      }
+    } catch {
+      // Best-effort — continue to next candidate
+    }
+  }
+  return null;
+}
+
+/**
+ * Safely stop and remove a Docker container during rollback.
+ *
+ * The container may have been created by `devcontainer up` before the
+ * postCreateCommand failed. Try both the expected name and a workspace-label
+ * lookup (the repo's devcontainer.json may override the container name).
+ */
+async function safeContainerCleanup(
+  containerName: string,
+  workspacePath: string,
+  container: ContainerLifecycle,
+  logger?: { warn: (msg: string) => void }
+): Promise<void> {
+  // Try the expected name first, then fall back to workspace label lookup
+  const candidates = new Set<string>([containerName]);
+  try {
+    const labelMatch = await container.findContainerByWorkspaceLabel(workspacePath);
+    if (labelMatch) candidates.add(labelMatch);
+  } catch {
+    // Best-effort lookup
+  }
+
+  for (const name of candidates) {
+    try {
+      await container.containerStop(name);
+      await container.containerRemove(name);
+    } catch {
+      logger?.warn(`Warning: Failed to clean up container '${name}'`);
+    }
+  }
+}
 
 /**
  * Safely remove a workspace directory during rollback.

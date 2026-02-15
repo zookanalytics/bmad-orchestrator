@@ -566,6 +566,74 @@ describe('devcontainerUp', () => {
     expect(result.error.message).toContain('Build failed');
   });
 
+  it('includes lifecycle output (non-JSON stdout lines) in error message', async () => {
+    const lifecycleOutput = [
+      '[1/12] Fixing SSH agent socket permissions...',
+      '  ✓ SSH agent socket permissions fixed',
+      '[2/12] Assembling Claude Code managed settings...',
+      '  ✓ Managed settings assembled',
+      '[3/12] Checking for instance isolation...',
+      '  SHARED_DATA_DIR not set',
+      '[4/12] Checking for package updates...',
+      'ERROR: some-command failed with exit code 1',
+    ].join('\n');
+
+    const executor = mockExecutor({
+      'docker info': successResult,
+      'devcontainer up': {
+        ok: false,
+        stdout:
+          lifecycleOutput +
+          '\n' +
+          JSON.stringify({
+            outcome: 'error',
+            message: 'Command failed: /bin/sh -c /usr/local/bin/post-create.sh',
+            description: 'postCreateCommand from devcontainer.json failed.',
+          }),
+        stderr: '',
+        exitCode: 1,
+      },
+    });
+    const lifecycle = createContainerLifecycle(executor);
+
+    const result = await lifecycle.devcontainerUp('/workspace/path', 'ae-test');
+    expect(result.ok).toBe(false);
+    if (result.ok) throw new Error('Expected failure');
+    // Should include JSON error details
+    expect(result.error.message).toContain('Command failed');
+    expect(result.error.message).toContain('postCreateCommand');
+    // Should also include lifecycle output from stdout
+    expect(result.error.message).toContain('[1/12] Fixing SSH');
+    expect(result.error.message).toContain('ERROR: some-command failed');
+  });
+
+  it('truncates lifecycle output to last 100 lines when very long', async () => {
+    const lines = Array.from({ length: 160 }, (_, i) => `lifecycle line ${i + 1}`);
+    const executor = mockExecutor({
+      'docker info': successResult,
+      'devcontainer up': {
+        ok: false,
+        stdout:
+          lines.join('\n') +
+          '\n' +
+          JSON.stringify({ outcome: 'error', message: 'post-create failed' }),
+        stderr: '',
+        exitCode: 1,
+      },
+    });
+    const lifecycle = createContainerLifecycle(executor);
+
+    const result = await lifecycle.devcontainerUp('/workspace/path', 'ae-test');
+    expect(result.ok).toBe(false);
+    if (result.ok) throw new Error('Expected failure');
+    // Should include truncation notice
+    expect(result.error.message).toContain('earlier lifecycle output lines omitted');
+    // Should include the last 100 lines (61-160) but not the early ones (1-60)
+    expect(result.error.message).toContain('lifecycle line 160');
+    expect(result.error.message).toContain('lifecycle line 61');
+    expect(result.error.message).not.toContain('lifecycle line 60\n');
+  });
+
   it('passes workspace-folder argument to devcontainer CLI', async () => {
     const executor = mockExecutor({
       'docker info': successResult,
@@ -768,6 +836,76 @@ describe('dockerPull', () => {
     expect(result.error.code).toBe('IMAGE_PULL_FAILED');
     expect(result.error.message).toContain('private-registry.io/image:latest');
     expect(result.error.suggestion).toContain('--no-pull');
+  });
+});
+
+// ─── devcontainerUp remoteEnv options ───────────────────────────────────
+
+describe('devcontainerUp remoteEnv options', () => {
+  it('passes --remote-env args when remoteEnv is provided', async () => {
+    const executor = mockExecutor({
+      'docker info': successResult,
+      'devcontainer up': {
+        ok: true,
+        stdout: JSON.stringify({ outcome: 'success', containerId: 'x' }),
+        stderr: '',
+        exitCode: 0,
+      },
+    });
+    const lifecycle = createContainerLifecycle(executor);
+
+    await lifecycle.devcontainerUp('/workspace', 'ae-test', {
+      remoteEnv: { AGENT_INSTANCE: 'my-instance' },
+    });
+    expect(executor).toHaveBeenCalledWith(
+      'devcontainer',
+      expect.arrayContaining(['--remote-env', 'AGENT_INSTANCE=my-instance']),
+      expect.any(Object)
+    );
+  });
+
+  it('passes multiple --remote-env args', async () => {
+    const executor = mockExecutor({
+      'docker info': successResult,
+      'devcontainer up': {
+        ok: true,
+        stdout: JSON.stringify({ outcome: 'success', containerId: 'x' }),
+        stderr: '',
+        exitCode: 0,
+      },
+    });
+    const lifecycle = createContainerLifecycle(executor);
+
+    await lifecycle.devcontainerUp('/workspace', 'ae-test', {
+      remoteEnv: { AGENT_INSTANCE: 'test', FOO: 'bar' },
+    });
+    const devcontainerCall = executor.mock.calls.find(
+      (call: unknown[]) => call[0] === 'devcontainer'
+    );
+    expect(devcontainerCall).toBeDefined();
+    const args = (devcontainerCall as unknown[])[1] as string[];
+    expect(args).toContain('AGENT_INSTANCE=test');
+    expect(args).toContain('FOO=bar');
+  });
+
+  it('does not pass --remote-env when remoteEnv is omitted', async () => {
+    const executor = mockExecutor({
+      'docker info': successResult,
+      'devcontainer up': {
+        ok: true,
+        stdout: JSON.stringify({ outcome: 'success', containerId: 'x' }),
+        stderr: '',
+        exitCode: 0,
+      },
+    });
+    const lifecycle = createContainerLifecycle(executor);
+
+    await lifecycle.devcontainerUp('/workspace', 'ae-test');
+    const devcontainerCall = executor.mock.calls.find(
+      (call: unknown[]) => call[0] === 'devcontainer'
+    );
+    expect(devcontainerCall).toBeDefined();
+    expect((devcontainerCall as unknown[])[1]).not.toContain('--remote-env');
   });
 });
 

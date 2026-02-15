@@ -229,7 +229,8 @@ LABEL devcontainer.metadata='[ \
     "capAdd": ["NET_ADMIN", "NET_RAW", "SYSLOG"], \
     "mounts": [ \
       "source=agent-devcontainer-shared-data,target=/shared-data,type=volume", \
-      "source=pnpm-store,target=/workspaces/.pnpm-store,type=volume", \
+      "source=agent-devcontainer-pnpm-store,target=/workspaces/.pnpm-store,type=volume", \
+      "source=agent-devcontainer-node-modules-${localWorkspaceFolderBasename},target=/workspaces/${localWorkspaceFolderBasename}/node_modules,type=volume", \
       "source=${localEnv:HOME}/.gitconfig,target=/home/node/.gitconfig,type=bind,readonly", \
       "source=/run/host-services/ssh-auth.sock,target=/run/host-services/ssh-auth.sock,type=bind" \
     ], \

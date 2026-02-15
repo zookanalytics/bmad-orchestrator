@@ -181,7 +181,9 @@ export async function attachInstance(
   if (statusResult.status === 'stopped' || statusResult.status === 'not-found') {
     onContainerStarting?.();
 
-    const startResult = await deps.container.devcontainerUp(wsPath.root, containerName);
+    const startResult = await deps.container.devcontainerUp(wsPath.root, containerName, {
+      remoteEnv: { AGENT_INSTANCE: wsPath.name },
+    });
 
     if (!startResult.ok) {
       return {
