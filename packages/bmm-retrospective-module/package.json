@@ -3,9 +3,11 @@
   "version": "0.1.0",
   "description": "BMAD module: Transform retrospective action items into executable workflows",
   "type": "module",
+  "bin": "./bin/install.cjs",
   "files": [
     "src",
-    "_module-installer"
+    "_module-installer",
+    "bin"
   ],
   "scripts": {},
   "engines": {
