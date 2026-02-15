@@ -4,12 +4,19 @@
   "description": "BMAD module: Transform retrospective action items into executable workflows",
   "type": "module",
   "bin": "./bin/install.cjs",
+  "license": "MIT",
   "files": [
     "src",
     "_module-installer",
-    "bin"
+    "bin",
+    "LICENSE"
   ],
   "scripts": {},
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/zookanalytics/bmad-orchestrator",
+    "directory": "packages/bmm-retrospective-module"
+  },
   "engines": {
     "node": ">=20"
   }
