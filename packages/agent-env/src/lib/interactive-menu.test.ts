@@ -4,7 +4,7 @@ import type { InstanceAction } from '../components/InteractiveMenu.js';
 import type { AttachResult, AttachInstanceDeps } from './attach-instance.js';
 import type { InteractiveMenuDeps } from './interactive-menu.js';
 import type { ListResult, Instance } from './list-instances.js';
-import type { RebuildResult, RebuildInstanceDeps } from './rebuild-instance.js';
+import type { RebuildResult, RebuildInstanceDeps, RebuildOptions } from './rebuild-instance.js';
 import type { RemoveResult, RemoveInstanceDeps } from './remove-instance.js';
 
 import { launchInteractiveMenu } from './interactive-menu.js';
@@ -59,7 +59,13 @@ function createMockDeps(overrides: Partial<InteractiveMenuDeps> = {}): Interacti
       .fn<(name: string, deps: AttachInstanceDeps) => Promise<AttachResult>>()
       .mockResolvedValue({ ok: true }),
     rebuildInstance: vi
-      .fn<(name: string, deps: RebuildInstanceDeps) => Promise<RebuildResult>>()
+      .fn<
+        (
+          name: string,
+          deps: RebuildInstanceDeps,
+          options?: RebuildOptions
+        ) => Promise<RebuildResult>
+      >()
       .mockResolvedValue({ ok: true, containerName: 'ae-test', wasRunning: false }),
     removeInstance: vi
       .fn<(name: string, deps: RemoveInstanceDeps) => Promise<RemoveResult>>()
@@ -157,7 +163,7 @@ describe('launchInteractiveMenu', () => {
       const result = await launchInteractiveMenu(deps);
 
       expect(result).toEqual({ ok: true, action: 'rebuilt', instanceName: 'alpha' });
-      expect(rebuildInstance).toHaveBeenCalledWith('alpha', expect.anything(), true);
+      expect(rebuildInstance).toHaveBeenCalledWith('alpha', expect.anything(), { force: true });
     });
 
     it('calls removeInstance when remove action is selected', async () => {

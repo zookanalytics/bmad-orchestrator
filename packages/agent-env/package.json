@@ -43,6 +43,7 @@
     "commander": "^14.0.2",
     "execa": "^9.6.1",
     "ink": "^6.6.0",
+    "jsonc-parser": "^3.3.1",
     "react": "^19.2.3",
     "timeago.js": "^4.0.2"
   },

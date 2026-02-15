@@ -116,6 +116,7 @@ development_status:
   env-2-3-implement-container-lifecycle: done
   env-2-4-implement-create-command-basic: done
   env-2-5-implement-create-command-variants: done
+  rebuild-pull-no-cache: done
   env-epic-2-retrospective: done
 
   # ─── agent-env Epic 3: Instance Discovery & Git State ───

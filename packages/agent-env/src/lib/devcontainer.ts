@@ -5,6 +5,7 @@
  * that ship with the agent-env package.
  */
 
+import { parse as parseJsonc, type ParseError } from 'jsonc-parser';
 import { access, cp, mkdir, readdir, readFile, stat, writeFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -169,4 +170,136 @@ export async function listBaselineFiles(
   const baselinePath = getBaselineConfigPath();
   const entries = await deps.readdir(baselinePath);
   return entries.sort();
+}
+
+// ─── Dockerfile resolution ────────────────────────────────────────────────
+
+/**
+ * Resolve the path to the Dockerfile used by the devcontainer config.
+ *
+ * Searches for devcontainer.json in the three standard locations,
+ * reads the config (supports JSONC), and resolves the Dockerfile path
+ * from `build.dockerfile` or falls back to a default `Dockerfile` in
+ * the config directory.
+ *
+ * @param workspacePath - Absolute path to workspace root
+ * @param deps - Injectable filesystem deps
+ * @returns Absolute path to the Dockerfile, or null if no Dockerfile exists
+ */
+export async function resolveDockerfilePath(
+  workspacePath: string,
+  deps: Pick<DevcontainerFsDeps, 'readFile' | 'stat'>
+): Promise<string | null> {
+  // Search for devcontainer.json in three locations
+  const candidates = [
+    join(workspacePath, DEVCONTAINER_DIR, DEVCONTAINER_JSON),
+    join(workspacePath, DEVCONTAINER_JSON),
+    join(workspacePath, DOT_DEVCONTAINER_JSON),
+  ];
+
+  let configPath: string | null = null;
+  for (const candidate of candidates) {
+    try {
+      await deps.stat(candidate);
+      configPath = candidate;
+      break;
+    } catch {
+      // Not found, try next
+    }
+  }
+
+  if (!configPath) {
+    return null;
+  }
+
+  // Read and parse JSONC config
+  const content = await deps.readFile(configPath, 'utf-8');
+  const errors: ParseError[] = [];
+  const config = parseJsonc(content, errors, { allowTrailingComma: true }) as {
+    build?: { dockerfile?: string };
+    dockerfile?: string;
+  } | null;
+
+  if (errors.length > 0) {
+    throw new Error(`Failed to parse devcontainer config at ${configPath}: Invalid JSONC`);
+  }
+
+  const configDir = dirname(configPath);
+
+  // Check build.dockerfile field (nested form)
+  if (config?.build?.dockerfile) {
+    return join(configDir, config.build.dockerfile);
+  }
+
+  // Check top-level dockerfile field (shorthand form)
+  if (config?.dockerfile) {
+    return join(configDir, config.dockerfile);
+  }
+
+  // Fall back to Dockerfile in config directory
+  try {
+    await deps.stat(join(configDir, 'Dockerfile'));
+    return join(configDir, 'Dockerfile');
+  } catch {
+    return null;
+  }
+}
+
+// ─── Dockerfile parsing ──────────────────────────────────────────────────
+
+/**
+ * Parse FROM image references from Dockerfile content.
+ *
+ * Extracts unique, pullable image references from FROM lines.
+ * Skips `scratch` and parameterized `${VAR}` references.
+ *
+ * @param content - Dockerfile content as string
+ * @param logger - Optional logger for warnings about skipped lines
+ * @returns Array of unique image references
+ */
+export function parseDockerfileImages(
+  content: string,
+  logger?: { warn: (msg: string) => void }
+): string[] {
+  const fromRegex = /^\s*FROM\s+(?:--\S+\s+)*(\S+)(?:\s+[Aa][Ss]\s+(\S+))?/i;
+  const stageNames = new Set<string>();
+  const images = new Set<string>();
+
+  // First pass: collect all stage names declared via AS
+  for (const line of content.split('\n')) {
+    if (line.trim().startsWith('#')) continue;
+    const match = fromRegex.exec(line);
+    if (match?.[2]) {
+      stageNames.add(match[2].toLowerCase());
+    }
+  }
+
+  // Second pass: collect pullable images, excluding stage references
+  for (const line of content.split('\n')) {
+    const trimmed = line.trim();
+    if (trimmed.startsWith('#')) continue;
+
+    const match = fromRegex.exec(line);
+    if (!match) continue;
+
+    const image = match[1];
+
+    if (image.includes('$')) {
+      logger?.warn(`Skipping parameterized FROM: ${image}`);
+      continue;
+    }
+
+    if (image.toLowerCase() === 'scratch') {
+      continue;
+    }
+
+    // Skip references to earlier build stages (e.g., FROM builder)
+    if (stageNames.has(image.toLowerCase())) {
+      continue;
+    }
+
+    images.add(image);
+  }
+
+  return [...images];
 }
