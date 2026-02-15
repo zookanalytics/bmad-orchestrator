@@ -30,6 +30,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
   lsof \
   ulogd2 \
   tmux \
+  openssh-server \
   && apt-get clean && rm -rf /var/lib/apt/lists/*
 
 # Install latest GitHub CLI from official repository
@@ -92,6 +93,13 @@ RUN chown -R node:node /pnpm
 # Pre-approve GitHub SSH host keys (published at https://docs.github.com/en/authentication/keeping-your-account-and-data-secure/githubs-ssh-key-fingerprints)
 RUN mkdir -p /etc/ssh && \
   ssh-keyscan -t ed25519,ecdsa,rsa github.com >> /etc/ssh/ssh_known_hosts 2>/dev/null
+
+# SSH server setup: runtime dir, hardened config, remove default host keys (generated per-container)
+RUN mkdir -p /run/sshd && \
+  rm -f /etc/ssh/ssh_host_*_key /etc/ssh/ssh_host_*_key.pub
+COPY image/config/sshd_config /etc/ssh/sshd_config
+
+EXPOSE 22
 
 # Set up non-root user
 USER node
@@ -163,6 +171,7 @@ COPY image/scripts/fix-shared-data-permissions.sh /usr/local/bin/
 COPY image/scripts/register-plugin-marketplaces.sh /usr/local/bin/
 COPY image/scripts/devcontainer-sanity-check.sh /usr/local/bin/
 COPY image/scripts/fix-ssh-socket-permissions.sh /usr/local/bin/
+COPY image/scripts/start-sshd.sh /usr/local/bin/
 
 # Make scripts executable and configure sudo
 RUN chmod 755 /usr/local/bin/init-firewall.sh && \
@@ -184,6 +193,7 @@ RUN chmod 755 /usr/local/bin/init-firewall.sh && \
   chmod 755 /usr/local/bin/register-plugin-marketplaces.sh && \
   chmod 755 /usr/local/bin/devcontainer-sanity-check.sh && \
   chmod 755 /usr/local/bin/fix-ssh-socket-permissions.sh && \
+  chmod 755 /usr/local/bin/start-sshd.sh && \
   echo "node ALL=(root) NOPASSWD: /usr/local/bin/init-firewall.sh" > /etc/sudoers.d/node-commands && \
   echo "node ALL=(root) NOPASSWD: /usr/local/bin/assemble-managed-settings.sh" >> /etc/sudoers.d/node-commands && \
   echo "node ALL=(root) NOPASSWD: /usr/local/bin/fix-node-modules-ownership.sh" >> /etc/sudoers.d/node-commands && \
@@ -193,6 +203,7 @@ RUN chmod 755 /usr/local/bin/init-firewall.sh && \
   echo "node ALL=(root) NOPASSWD: /usr/local/bin/update-packages.sh" >> /etc/sudoers.d/node-commands && \
   echo "node ALL=(root) NOPASSWD: /usr/local/bin/fix-shared-data-permissions.sh" >> /etc/sudoers.d/node-commands && \
   echo "node ALL=(root) NOPASSWD: /usr/local/bin/fix-ssh-socket-permissions.sh" >> /etc/sudoers.d/node-commands && \
+  echo "node ALL=(root) NOPASSWD: /usr/local/bin/start-sshd.sh" >> /etc/sudoers.d/node-commands && \
   chmod 0440 /etc/sudoers.d/node-commands
 
 # Create log files with proper permissions
@@ -232,7 +243,8 @@ LABEL devcontainer.metadata='[ \
       "source=agent-devcontainer-pnpm-store,target=/workspaces/.pnpm-store,type=volume", \
       "source=agent-devcontainer-node-modules-${localWorkspaceFolderBasename},target=/workspaces/${localWorkspaceFolderBasename}/node_modules,type=volume", \
       "source=${localEnv:HOME}/.gitconfig,target=/home/node/.gitconfig,type=bind,readonly", \
-      "source=/run/host-services/ssh-auth.sock,target=/run/host-services/ssh-auth.sock,type=bind" \
+      "source=/run/host-services/ssh-auth.sock,target=/run/host-services/ssh-auth.sock,type=bind", \
+      "source=${localEnv:HOME}/.agent-env/ssh-pub-keys,target=/home/node/.ssh-host,type=bind,readonly" \
     ], \
     "containerEnv": { \
       "SSH_AUTH_SOCK": "/run/host-services/ssh-auth.sock", \
@@ -243,7 +255,8 @@ LABEL devcontainer.metadata='[ \
       "CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC": "true" \
     }, \
     "postCreateCommand": "/usr/local/bin/post-create.sh", \
-    "postStartCommand": "tmux new-session -d -s main 2>/dev/null || true", \
+    "postStartCommand": "sudo /usr/local/bin/start-sshd.sh; tmux new-session -d -s main 2>/dev/null || true", \
+    "forwardPorts": [22], \
     "customizations": { \
       "vscode": { \
         "settings": { \

@@ -1,4 +1,6 @@
 {
+  // This file is ONLY for configuration unique to working on the monorepo itself.
+  // All shared infrastructure config lives in image/Dockerfile (LABEL devcontainer.metadata).
   // Base config from image LABEL — run: docker inspect <image> | jq -r '.[0].Config.Labels["devcontainer.metadata"]'
   "name": "Agent Tools - ${localWorkspaceFolderBasename}",
   "image": "ghcr.io/zookanalytics/bmad-orchestrator/devcontainer:latest",
