@@ -216,4 +216,46 @@ RUN mkdir -p /etc/gemini-code/hooks && \
   ln -s /etc/claude-code/hooks/prevent-sensitive-files.py /etc/gemini-code/hooks/ && \
   ln -s /etc/claude-code/hooks/lib /etc/gemini-code/hooks/
 
+# Devcontainer metadata — infrastructure defaults for all projects
+# Projects override via their .devcontainer/devcontainer.json (additive merge)
+# Inspect with: docker inspect <image> | jq -r '.[0].Config.Labels["devcontainer.metadata"]'
+LABEL devcontainer.metadata='[ \
+  { \
+    "remoteUser": "node", \
+    "containerUser": "node", \
+    "capAdd": ["NET_ADMIN", "NET_RAW", "SYSLOG"], \
+    "mounts": [ \
+      "source=claude-devcontainer-shared-data,target=/shared-data,type=volume", \
+      "source=pnpm-store,target=/workspaces/.pnpm-store,type=volume", \
+      "source=${localEnv:HOME}/.gitconfig,target=/home/node/.gitconfig,type=bind,readonly", \
+      "source=${localEnv:HOME}/.claude,target=/home/node/.claude,type=bind", \
+      "source=/run/host-services/ssh-auth.sock,target=/run/host-services/ssh-auth.sock,type=bind" \
+    ], \
+    "containerEnv": { \
+      "SSH_AUTH_SOCK": "/run/host-services/ssh-auth.sock", \
+      "POWERLEVEL9K_DISABLE_GITSTATUS": "true", \
+      "SHARED_DATA_DIR": "/shared-data", \
+      "PNPM_HOME": "/pnpm", \
+      "npm_config_store_dir": "/workspaces/.pnpm-store", \
+      "CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC": "true" \
+    }, \
+    "postCreateCommand": "/usr/local/bin/post-create.sh", \
+    "postStartCommand": "tmux new-session -d -s main 2>/dev/null || true", \
+    "customizations": { \
+      "vscode": { \
+        "settings": { \
+          "terminal.integrated.defaultProfile.linux": "zsh" \
+        }, \
+        "extensions": [ \
+          "Anthropic.claude-code", \
+          "google.gemini-cli-vscode-ide-companion", \
+          "eamodio.gitlens", \
+          "esbenp.prettier-vscode", \
+          "dbaeumer.vscode-eslint" \
+        ] \
+      } \
+    } \
+  } \
+]'
+
 USER node
