@@ -2,7 +2,7 @@
 title: 'SSH Server Support for Agent-Env Baseline'
 slug: 'ssh-server-baseline'
 created: '2026-02-15'
-status: 'completed'
+status: 'done'
 stepsCompleted: [1, 2, 3, 4]
 tech_stack:
   - openssh-server
@@ -18,6 +18,8 @@ files_to_modify:
   - packages/agent-env/src/lib/container.ts
   - packages/agent-env/src/lib/list-instances.ts
   - packages/agent-env/src/components/InstanceList.tsx
+  - packages/agent-env/src/lib/container.test.ts
+  - packages/agent-env/src/lib/list-instances.test.ts
 code_patterns:
   - devcontainer lifecycle hooks (initializeCommand, postCreateCommand, postStartCommand)
   - host mount staging pattern

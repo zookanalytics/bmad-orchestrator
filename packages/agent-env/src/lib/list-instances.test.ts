@@ -494,7 +494,7 @@ describe('listInstances', () => {
       assertSuccess(result);
 
       expect(result.instances[0].sshConnection).toBe(
-        'node@ae-my-instance.orb.local (or localhost:49152)'
+        'node@ae-my-instance.orb.local (localhost:49152)'
       );
     });
 

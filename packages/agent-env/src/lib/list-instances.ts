@@ -129,7 +129,7 @@ export async function listInstances(deps?: Partial<ListInstancesDeps>): Promise<
           sshConnection = `node@${state.containerName}.orb.local`;
           // Fallback: host port mapping (works with Docker Desktop and non-OrbStack runtimes)
           if (sshPort !== '22') {
-            sshConnection += ` (or localhost:${sshPort})`;
+            sshConnection += ` (localhost:${sshPort})`;
           }
         }
       }
