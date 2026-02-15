@@ -43,11 +43,12 @@ RUN sed -i -e 's/# en_US.UTF-8 UTF-8/en_US.UTF-8 UTF-8/' /etc/locale.gen && \
 ENV LANG=en_US.UTF-8
 ENV LC_ALL=en_US.UTF-8
 
-# Setup pnpm via corepack
+# Setup pnpm via corepack (pin version to avoid mismatch with project packageManager)
+ARG PNPM_VERSION=10.29.3
 ENV PNPM_HOME="/pnpm"
 RUN mkdir -p "$PNPM_HOME"
 ENV PATH="$PNPM_HOME:$PATH"
-RUN corepack enable
+RUN corepack enable && corepack prepare pnpm@${PNPM_VERSION} --activate
 
 ARG USERNAME=node
 
@@ -87,6 +88,10 @@ RUN pnpm dlx playwright install-deps
 # Ensure node user has access to required directories
 RUN chown -R node:node /usr/local/share
 RUN chown -R node:node /pnpm
+
+# Pre-approve GitHub SSH host keys (published at https://docs.github.com/en/authentication/keeping-your-account-and-data-secure/githubs-ssh-key-fingerprints)
+RUN mkdir -p /etc/ssh && \
+  ssh-keyscan -t ed25519,ecdsa,rsa github.com >> /etc/ssh/ssh_known_hosts 2>/dev/null
 
 # Set up non-root user
 USER node
@@ -155,7 +160,6 @@ COPY image/scripts/setup-instance-isolation.sh /usr/local/bin/
 COPY image/scripts/setup-claude-auth-sharing.sh /usr/local/bin/
 COPY image/scripts/search-history.sh /usr/local/bin/
 COPY image/scripts/fix-shared-data-permissions.sh /usr/local/bin/
-COPY image/scripts/update-keystone.sh /usr/local/bin/
 COPY image/scripts/register-plugin-marketplaces.sh /usr/local/bin/
 COPY image/scripts/devcontainer-sanity-check.sh /usr/local/bin/
 COPY image/scripts/fix-ssh-socket-permissions.sh /usr/local/bin/
@@ -177,7 +181,6 @@ RUN chmod 755 /usr/local/bin/init-firewall.sh && \
   chmod 755 /usr/local/bin/setup-claude-auth-sharing.sh && \
   chmod 755 /usr/local/bin/search-history.sh && \
   chmod 755 /usr/local/bin/fix-shared-data-permissions.sh && \
-  chmod 755 /usr/local/bin/update-keystone.sh && \
   chmod 755 /usr/local/bin/register-plugin-marketplaces.sh && \
   chmod 755 /usr/local/bin/devcontainer-sanity-check.sh && \
   chmod 755 /usr/local/bin/fix-ssh-socket-permissions.sh && \
@@ -225,10 +228,9 @@ LABEL devcontainer.metadata='[ \
     "containerUser": "node", \
     "capAdd": ["NET_ADMIN", "NET_RAW", "SYSLOG"], \
     "mounts": [ \
-      "source=claude-devcontainer-shared-data,target=/shared-data,type=volume", \
+      "source=agent-devcontainer-shared-data,target=/shared-data,type=volume", \
       "source=pnpm-store,target=/workspaces/.pnpm-store,type=volume", \
       "source=${localEnv:HOME}/.gitconfig,target=/home/node/.gitconfig,type=bind,readonly", \
-      "source=${localEnv:HOME}/.claude,target=/home/node/.claude,type=bind", \
       "source=/run/host-services/ssh-auth.sock,target=/run/host-services/ssh-auth.sock,type=bind" \
     ], \
     "containerEnv": { \

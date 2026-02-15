@@ -72,7 +72,7 @@ else
   ],
   "containerEnv": {
     "PROJECT_NAME": "${PROJECT_NAME}",
-    "CLAUDE_INSTANCE": "\${localWorkspaceFolderBasename}",
+    "AGENT_INSTANCE": "\${localWorkspaceFolderBasename}",
     "NODE_OPTIONS": "--max-old-space-size=4096",
     "CLAUDE_CONFIG_DIR": "/home/node/.claude",
     "PNPM_HOME": "/pnpm",

@@ -11,7 +11,7 @@
   "scripts": {
     "build": "pnpm -r build",
     "pretest": "pnpm --filter @zookanalytics/shared build",
-    "build:image": "docker build -f image/Dockerfile -t claude-devcontainer:local .",
+    "build:image": "docker build -f image/Dockerfile -t agent-devcontainer:local .",
     "test": "pnpm -r test",
     "test:run": "pnpm -r test:run",
     "lint": "pnpm -r lint",
@@ -37,7 +37,7 @@
   "repository": "github:ZookAnalytics/bmad-orchestrator",
   "author": "",
   "license": "MIT",
-  "packageManager": "pnpm@10.26.2",
+  "packageManager": "pnpm@10.29.3",
   "devDependencies": {
     "@changesets/changelog-github": "^0.5.2",
     "@changesets/cli": "^2.29.8",

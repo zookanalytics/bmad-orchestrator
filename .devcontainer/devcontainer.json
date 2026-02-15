@@ -2,7 +2,7 @@
   // Base config from image LABEL — run: docker inspect <image> | jq -r '.[0].Config.Labels["devcontainer.metadata"]'
   "name": "Agent Tools - ${localWorkspaceFolderBasename}",
   "image": "ghcr.io/zookanalytics/bmad-orchestrator/devcontainer:latest",
-  "initializeCommand": "bash -c 'touch ~/.gitconfig; mkdir -p ~/.claude'",
+  "initializeCommand": "bash -c 'touch ~/.gitconfig'",
   "runArgs": [
     "--name=agenttools-${localWorkspaceFolderBasename}",
     "--shm-size=1gb",
@@ -13,7 +13,7 @@
     "source=agent-tools-node-modules-${localWorkspaceFolderBasename},target=/workspaces/${localWorkspaceFolderBasename}/node_modules,type=volume"
   ],
   "containerEnv": {
-    "CLAUDE_INSTANCE": "${localWorkspaceFolderBasename}",
+    "AGENT_INSTANCE": "${localWorkspaceFolderBasename}",
     "PROJECT_NAME": "agent-tools",
     "NODE_OPTIONS": "--max-old-space-size=4096",
     "ENABLE_BMAD_ORCHESTRATOR": "true"
@@ -24,7 +24,7 @@
   "customizations": {
     "vscode": {
       "settings": {
-        "window.title": "Agent Tools - ${containerEnv:CLAUDE_INSTANCE}${separator}${activeRepositoryBranchName}${dirty}",
+        "window.title": "Agent Tools - ${containerEnv:AGENT_INSTANCE}${separator}${activeRepositoryBranchName}${dirty}",
         "terminal.integrated.defaultProfile.linux": "zsh",
         "terminal.integrated.profiles.linux": {
           "zsh": { "path": "/bin/zsh" },

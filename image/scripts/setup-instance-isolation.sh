@@ -29,8 +29,8 @@
 # Error codes:
 #   E001: /shared-data is read-only
 #   E002: /shared-data write test timed out
-#   E003: DEVPOD_WORKSPACE_ID is not set
-#   E004: DEVPOD_WORKSPACE_ID contains invalid characters
+#   E003: AGENT_INSTANCE is not set
+#   E004: AGENT_INSTANCE contains invalid characters
 #   E005: Failed to create directory
 #   E006: Failed to create symlink (ln -sf failed)
 #   E007: Symlink verification failed (symlink not created or not a symlink)
@@ -127,7 +127,7 @@ SHARED_DATA="${SHARED_DATA_DIR:-/shared-data}"
 SHARED_DATA_TIMEOUT="${SHARED_DATA_TIMEOUT:-5}"
 
 # --- Step 0: Early checks ---
-echo "=== DevPod Instance Isolation Setup ==="
+echo "=== Instance Isolation Setup ==="
 echo ""
 
 # 0a: Verify /shared-data is writable with timeout
@@ -144,24 +144,24 @@ echo "  /shared-data is writable"
 
 check_fail_at_step 0
 
-# --- Step 1: Validate DEVPOD_WORKSPACE_ID ---
+# --- Step 1: Validate AGENT_INSTANCE ---
 echo ""
-echo "[1] Validating DEVPOD_WORKSPACE_ID..."
+echo "[1] Validating AGENT_INSTANCE..."
 
-if [ -z "${DEVPOD_WORKSPACE_ID:-}" ]; then
-  echo "E003: ERROR: DEVPOD_WORKSPACE_ID is not set. Cannot proceed with isolation."
+if [ -z "${AGENT_INSTANCE:-}" ]; then
+  echo "E003: ERROR: AGENT_INSTANCE is not set. Cannot proceed with isolation."
   exit 1
 fi
 
 # Validate format: alphanumeric, hyphens, underscores only
-SANITIZED_ID="${DEVPOD_WORKSPACE_ID//[^a-zA-Z0-9_-]/}"
-if [ "$SANITIZED_ID" != "$DEVPOD_WORKSPACE_ID" ]; then
-  echo "E004: ERROR: DEVPOD_WORKSPACE_ID contains invalid characters: '$DEVPOD_WORKSPACE_ID'"
+SANITIZED_ID="${AGENT_INSTANCE//[^a-zA-Z0-9_-]/}"
+if [ "$SANITIZED_ID" != "$AGENT_INSTANCE" ]; then
+  echo "E004: ERROR: AGENT_INSTANCE contains invalid characters: '$AGENT_INSTANCE'"
   echo "  Allowed: alphanumeric, hyphens, underscores"
   exit 1
 fi
 
-INSTANCE_ID="$DEVPOD_WORKSPACE_ID"
+INSTANCE_ID="$AGENT_INSTANCE"
 echo "  Instance ID: $INSTANCE_ID"
 
 check_fail_at_step 1
@@ -463,12 +463,12 @@ echo "  All symlinks verified writable"
 
 check_fail_at_step 10
 
-# --- Step 11: Export CLAUDE_INSTANCE ---
+# --- Step 11: Export AGENT_INSTANCE ---
 echo ""
 echo "[11] Exporting instance ID..."
 
-INSTANCE_MARKER="[setup-instance-isolation:CLAUDE_INSTANCE]"
-INSTANCE_LINE="export CLAUDE_INSTANCE=\"$INSTANCE_ID\" # $INSTANCE_MARKER"
+INSTANCE_MARKER="[setup-instance-isolation:AGENT_INSTANCE]"
+INSTANCE_LINE="export AGENT_INSTANCE=\"$INSTANCE_ID\" # $INSTANCE_MARKER"
 
 if grep -q "$INSTANCE_MARKER" "$HOME/.zshrc" 2>/dev/null; then
   # Update existing line
@@ -478,8 +478,8 @@ else
   echo "$INSTANCE_LINE" >> "$HOME/.zshrc"
 fi
 
-export CLAUDE_INSTANCE="$INSTANCE_ID"
-echo "  CLAUDE_INSTANCE=$INSTANCE_ID"
+export AGENT_INSTANCE="$INSTANCE_ID"
+echo "  AGENT_INSTANCE=$INSTANCE_ID"
 
 check_fail_at_step 11
 

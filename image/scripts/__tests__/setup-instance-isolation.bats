@@ -32,29 +32,29 @@ teardown() {
   rm -rf "$TEMP_ROOT"
 }
 
-# Helper: Run script with given DEVPOD_WORKSPACE_ID
+# Helper: Run script with given AGENT_INSTANCE
 run_isolation_script() {
   local workspace_id="$1"
-  export DEVPOD_WORKSPACE_ID="$workspace_id"
+  export AGENT_INSTANCE="$workspace_id"
   run bash "$SCRIPT"
 }
 
 # =============================================================================
-# Test: E003 - Fails if DEVPOD_WORKSPACE_ID is unset
+# Test: E003 - Fails if AGENT_INSTANCE is unset
 # =============================================================================
-@test "E003: fails if DEVPOD_WORKSPACE_ID unset" {
-  unset DEVPOD_WORKSPACE_ID
+@test "E003: fails if AGENT_INSTANCE unset" {
+  unset AGENT_INSTANCE
   run bash "$SCRIPT"
 
   [ "$status" -eq 1 ]
   [[ "$output" == *"E003"* ]]
-  [[ "$output" == *"DEVPOD_WORKSPACE_ID is not set"* ]]
+  [[ "$output" == *"AGENT_INSTANCE is not set"* ]]
 }
 
 # =============================================================================
-# Test: E004 - Fails if DEVPOD_WORKSPACE_ID contains invalid characters
+# Test: E004 - Fails if AGENT_INSTANCE contains invalid characters
 # =============================================================================
-@test "E004: fails if DEVPOD_WORKSPACE_ID contains invalid chars" {
+@test "E004: fails if AGENT_INSTANCE contains invalid chars" {
   run_isolation_script "agent/1"
 
   [ "$status" -eq 1 ]
@@ -62,14 +62,14 @@ run_isolation_script() {
   [[ "$output" == *"invalid characters"* ]]
 }
 
-@test "E004: fails with spaces in DEVPOD_WORKSPACE_ID" {
+@test "E004: fails with spaces in AGENT_INSTANCE" {
   run_isolation_script "agent 1"
 
   [ "$status" -eq 1 ]
   [[ "$output" == *"E004"* ]]
 }
 
-@test "E004: fails with special chars in DEVPOD_WORKSPACE_ID" {
+@test "E004: fails with special chars in AGENT_INSTANCE" {
   run_isolation_script "agent\$1"
 
   [ "$status" -eq 1 ]
@@ -294,16 +294,16 @@ run_isolation_script() {
 }
 
 # =============================================================================
-# Test: Exports CLAUDE_INSTANCE to .zshrc
+# Test: Exports AGENT_INSTANCE to .zshrc
 # =============================================================================
-@test "exports CLAUDE_INSTANCE to .zshrc" {
+@test "exports AGENT_INSTANCE to .zshrc" {
   run_isolation_script "test-instance"
 
   [ "$status" -eq 0 ]
 
-  # Verify CLAUDE_INSTANCE export in .zshrc (marker is trailing comment)
-  grep -q "^export CLAUDE_INSTANCE=" "$HOME/.zshrc"
-  grep -q "\[setup-instance-isolation:CLAUDE_INSTANCE\]" "$HOME/.zshrc"
+  # Verify AGENT_INSTANCE export in .zshrc (marker is trailing comment)
+  grep -q "^export AGENT_INSTANCE=" "$HOME/.zshrc"
+  grep -q "\[setup-instance-isolation:AGENT_INSTANCE\]" "$HOME/.zshrc"
 }
 
 # =============================================================================
