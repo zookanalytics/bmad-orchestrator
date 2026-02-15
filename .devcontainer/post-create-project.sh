@@ -2,7 +2,7 @@
 set -e
 
 # Agent Tools project-specific post-create tasks
-# Called by the base image's post-create.sh (step 13)
+# Called by the base image's post-create.sh (step 12)
 
 echo "=== Agent Tools Project Setup ==="
 
