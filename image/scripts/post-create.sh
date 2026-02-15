@@ -17,18 +17,69 @@ echo "==============================================="
 
 # Step 1: Fix SSH agent socket permissions (if mounted)
 echo ""
-echo "[1/12] Fixing SSH agent socket permissions..."
+echo "[1/13] Fixing SSH agent socket permissions..."
 sudo /usr/local/bin/fix-ssh-socket-permissions.sh
 
-# Step 2: Assemble Claude Code managed settings
+# Step 2: SSH server setup (host keys + authorized_keys)
 echo ""
-echo "[2/12] Assembling Claude Code managed settings..."
+echo "[2/13] Setting up SSH server..."
+
+# Generate persistent host keys (stored in workspace so they survive stop/start)
+SSH_HOST_KEY_DIR="$WORKSPACE_ROOT/.agent-env/ssh"
+mkdir -p "$SSH_HOST_KEY_DIR"
+chmod 700 "$SSH_HOST_KEY_DIR"
+if [ ! -f "$SSH_HOST_KEY_DIR/ssh_host_ed25519_key" ]; then
+  echo "  SSH: Generating host keys..."
+  ssh-keygen -t ed25519 -f "$SSH_HOST_KEY_DIR/ssh_host_ed25519_key" -N "" -q
+  ssh-keygen -t rsa -b 4096 -f "$SSH_HOST_KEY_DIR/ssh_host_rsa_key" -N "" -q
+  echo "  SSH: Host keys generated"
+else
+  echo "  SSH: Using existing host keys"
+fi
+
+# Install host keys where sshd expects them
+sudo cp "$SSH_HOST_KEY_DIR"/ssh_host_*_key "$SSH_HOST_KEY_DIR"/ssh_host_*_key.pub /etc/ssh/
+sudo chown root:root /etc/ssh/ssh_host_*_key /etc/ssh/ssh_host_*_key.pub
+sudo chmod 600 /etc/ssh/ssh_host_*_key
+sudo chmod 644 /etc/ssh/ssh_host_*_key.pub
+
+# Set up authorized_keys from staged public keys (mounted read-only by init-host.sh)
+mkdir -p "$HOME/.ssh"
+chmod 700 "$HOME/.ssh"
+
+if [ -d "$HOME/.ssh-host" ]; then
+  touch "$HOME/.ssh/authorized_keys"
+  chmod 600 "$HOME/.ssh/authorized_keys"
+
+  temp_keys=$(mktemp)
+  trap 'rm -f "$temp_keys"' EXIT
+  cat "$HOME/.ssh-host"/*.pub > "$temp_keys" 2>/dev/null || true
+
+  if [ -s "$temp_keys" ]; then
+    while IFS= read -r key; do
+      if ! grep -qxF "$key" "$HOME/.ssh/authorized_keys" 2>/dev/null; then
+        echo "$key" >> "$HOME/.ssh/authorized_keys"
+      fi
+    done < "$temp_keys"
+    echo "  SSH: authorized_keys updated ($(wc -l < "$HOME/.ssh/authorized_keys") keys total)"
+  else
+    echo "  SSH: Warning: No .pub keys found in staged ssh-pub-keys"
+  fi
+  rm "$temp_keys"
+else
+  echo "  SSH: Warning: ssh-pub-keys not mounted at ~/.ssh-host"
+fi
+echo "✓ SSH server setup complete"
+
+# Step 3: Assemble Claude Code managed settings
+echo ""
+echo "[3/13] Assembling Claude Code managed settings..."
 sudo /usr/local/bin/assemble-managed-settings.sh
 echo "✓ Managed settings assembled"
 
-# Step 3: Instance isolation (if applicable)
+# Step 4: Instance isolation (if applicable)
 echo ""
-echo "[3/12] Checking for instance isolation..."
+echo "[4/13] Checking for instance isolation..."
 
 # Fix shared-data volume permissions if needed (Docker creates volumes as root)
 if [ -n "${SHARED_DATA_DIR:-}" ] && [ -d "$SHARED_DATA_DIR" ] && [ ! -w "$SHARED_DATA_DIR" ]; then
@@ -59,21 +110,21 @@ else
   echo "  Skipping instance isolation (not in proper DevContainer)"
 fi
 
-# Step 4: Check for package updates (daily)
+# Step 5: Check for package updates (daily)
 echo ""
-echo "[4/12] Checking for package updates..."
+echo "[5/13] Checking for package updates..."
 /usr/local/bin/check-daily-updates.sh
 echo "✓ Package update check complete"
 
-# Step 5: Fix node_modules ownership
+# Step 6: Fix node_modules ownership
 echo ""
-echo "[5/12] Fixing node_modules ownership..."
+echo "[6/13] Fixing node_modules ownership..."
 sudo /usr/local/bin/fix-node-modules-ownership.sh
 echo "✓ Node modules ownership fixed"
 
-# Step 6: Install CLI tools
+# Step 7: Install CLI tools
 echo ""
-echo "[6/12] Installing CLI tools..."
+echo "[7/13] Installing CLI tools..."
 
 # Install Claude Code via official installer (https://claude.ai/install.sh)
 # Security note: Piping to bash is the official install method. The script is served
@@ -129,43 +180,43 @@ fi
 
 echo "✓ CLI tools installed"
 
-# Step 7: Register plugin marketplaces from project settings
-# NOTE: Must run BEFORE firewall init (step 10) — marketplace registration
+# Step 8: Register plugin marketplaces from project settings
+# NOTE: Must run BEFORE firewall init (step 11) — marketplace registration
 # clones git repos and needs unrestricted network access.
 echo ""
-echo "[7/12] Registering plugin marketplaces..."
+echo "[8/13] Registering plugin marketplaces..."
 /usr/local/bin/register-plugin-marketplaces.sh "$WORKSPACE_ROOT"
 echo "✓ Plugin marketplaces registered"
 
-# Step 8: Start dnsmasq for DNS logging
+# Step 9: Start dnsmasq for DNS logging
 echo ""
-echo "[8/12] Starting dnsmasq DNS forwarder..."
+echo "[9/13] Starting dnsmasq DNS forwarder..."
 sudo /usr/local/bin/start-dnsmasq.sh
 
-# Step 9: Start ulogd for firewall logging
+# Step 10: Start ulogd for firewall logging
 echo ""
-echo "[9/12] Starting ulogd firewall logger..."
+echo "[10/13] Starting ulogd firewall logger..."
 sudo /usr/local/bin/start-ulogd.sh
 echo "✓ ulogd started"
 
-# Step 10: Initialize firewall
+# Step 11: Initialize firewall
 echo ""
-echo "[10/12] Initializing firewall rules..."
+echo "[11/13] Initializing firewall rules..."
 sudo /usr/local/bin/init-firewall.sh
 echo "✓ Firewall initialized"
 
-# Step 11: Run sanity check
+# Step 12: Run sanity check
 echo ""
-echo "[11/12] Running sanity check..."
+echo "[12/13] Running sanity check..."
 if /usr/local/bin/devcontainer-sanity-check.sh; then
   echo "✓ Sanity check passed"
 else
   echo "⚠ Sanity check reported failures (see above) - container continues"
 fi
 
-# Step 12: Run project-specific post-create if it exists
+# Step 13: Run project-specific post-create if it exists
 echo ""
-echo "[12/12] Running project-specific setup..."
+echo "[13/13] Running project-specific setup..."
 PROJECT_POST_CREATE="$WORKSPACE_ROOT/.devcontainer/post-create-project.sh"
 if [ -f "$PROJECT_POST_CREATE" ]; then
     echo "Running $PROJECT_POST_CREATE..."

@@ -38,6 +38,7 @@ function makeInstance(overrides: Partial<Instance> = {}): Instance {
     lastAttached: '2026-02-03T10:00:00.000Z',
     purpose: null,
     gitState: makeCleanGitState(),
+    sshConnection: null,
     ...overrides,
   };
 }

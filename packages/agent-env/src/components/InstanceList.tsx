@@ -64,6 +64,15 @@ function formatPurpose(purpose: string | null): string {
   return purpose;
 }
 
+function formatSSH(ssh: string | null): string {
+  if (!ssh) return '-';
+  // Truncate long SSH strings (e.g. very long container names)
+  if (ssh.length > 40) {
+    return ssh.slice(0, 37) + '...';
+  }
+  return ssh;
+}
+
 // ─── Component ──────────────────────────────────────────────────────────────
 
 export function InstanceList({
@@ -96,6 +105,8 @@ export function InstanceList({
   const gitWidth = Math.max(3, ...augmentedInstances.map((i) => i.indicatorText.length)) + 2;
   const lastAttachedWidth =
     Math.max(13, ...augmentedInstances.map((i) => formatLastAttached(i.lastAttached).length)) + 2;
+  const sshWidth =
+    Math.max(4, ...augmentedInstances.map((i) => formatSSH(i.sshConnection).length)) + 2;
 
   return (
     <Box flexDirection="column">
@@ -105,6 +116,7 @@ export function InstanceList({
         <Text bold>{pad('STATUS', statusWidth)}</Text>
         <Text bold>{pad('GIT', gitWidth)}</Text>
         <Text bold>{pad('LAST ATTACHED', lastAttachedWidth)}</Text>
+        <Text bold>{pad('SSH', sshWidth)}</Text>
         <Text bold>PURPOSE</Text>
       </Box>
 
@@ -124,6 +136,7 @@ export function InstanceList({
             ))}
           </Box>
           <Text>{pad(formatLastAttached(instance.lastAttached), lastAttachedWidth)}</Text>
+          <Text color="cyan">{pad(formatSSH(instance.sshConnection), sshWidth)}</Text>
           <Text color="gray">{formatPurpose(instance.purpose)}</Text>
         </Box>
       ))}

@@ -46,6 +46,7 @@ export const listCommand = new Command('list')
           lastAttached: i.lastAttached,
           purpose: i.purpose,
           gitState: i.gitState,
+          sshConnection: i.sshConnection,
         })),
         error: null,
       };

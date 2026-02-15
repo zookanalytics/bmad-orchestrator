@@ -76,6 +76,7 @@ function makeInstance(overrides: Partial<Instance> = {}): Instance {
     lastAttached: '2026-02-03T08:30:00.000Z',
     purpose: null,
     gitState: makeCleanGitState(),
+    sshConnection: null,
     ...overrides,
   };
 }
@@ -241,9 +242,16 @@ describe('list command --json', () => {
       const keys = Object.keys(firstItem as unknown as Record<string, unknown>);
 
       expect(keys).toEqual(
-        expect.arrayContaining(['name', 'status', 'lastAttached', 'purpose', 'gitState'])
+        expect.arrayContaining([
+          'name',
+          'status',
+          'lastAttached',
+          'purpose',
+          'gitState',
+          'sshConnection',
+        ])
       );
-      expect(keys).toHaveLength(5);
+      expect(keys).toHaveLength(6);
     });
   });
 

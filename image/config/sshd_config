@@ -1,0 +1,21 @@
+# agent-env sshd configuration - key-based auth only
+Port 22
+PermitRootLogin no
+PasswordAuthentication no
+KbdInteractiveAuthentication no
+PubkeyAuthentication yes
+AuthorizedKeysFile %h/.ssh/authorized_keys
+HostKey /etc/ssh/ssh_host_ed25519_key
+HostKey /etc/ssh/ssh_host_rsa_key
+UsePAM no
+X11Forwarding no
+AllowTcpForwarding no
+AllowAgentForwarding no
+GatewayPorts no
+PermitTunnel no
+MaxAuthTries 3
+LoginGraceTime 30
+PrintMotd no
+LogLevel INFO
+AcceptEnv LANG LC_*
+Subsystem sftp /usr/lib/openssh/sftp-server

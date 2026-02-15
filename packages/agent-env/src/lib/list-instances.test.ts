@@ -77,6 +77,7 @@ function mockContainer(overrides: Partial<ContainerLifecycle> = {}): ContainerLi
       ok: true,
       status: 'running',
       containerId: 'abc123',
+      ports: {},
     }),
     getContainerNameById: vi.fn().mockResolvedValue(null),
     findContainerByWorkspaceLabel: vi.fn().mockResolvedValue(null),
@@ -132,9 +133,9 @@ describe('listInstances', () => {
       const container = mockContainer({
         containerStatus: vi
           .fn()
-          .mockResolvedValueOnce({ ok: true, status: 'running', containerId: 'a' })
-          .mockResolvedValueOnce({ ok: true, status: 'stopped', containerId: 'b' })
-          .mockResolvedValueOnce({ ok: true, status: 'running', containerId: 'c' }),
+          .mockResolvedValueOnce({ ok: true, status: 'running', containerId: 'a', ports: {} })
+          .mockResolvedValueOnce({ ok: true, status: 'stopped', containerId: 'b', ports: {} })
+          .mockResolvedValueOnce({ ok: true, status: 'running', containerId: 'c', ports: {} }),
       });
 
       const wsFsDeps = mockFsDeps(['repo-alpha', 'repo-beta', 'repo-gamma']);
@@ -167,7 +168,7 @@ describe('listInstances', () => {
       const container = mockContainer({
         containerStatus: vi
           .fn()
-          .mockResolvedValue({ ok: true, status: 'running', containerId: 'a' }),
+          .mockResolvedValue({ ok: true, status: 'running', containerId: 'a', ports: {} }),
       });
       const wsFsDeps = mockFsDeps(['my-instance']);
       const stateFsDeps = mockStateFsDeps({
@@ -189,7 +190,7 @@ describe('listInstances', () => {
       const container = mockContainer({
         containerStatus: vi
           .fn()
-          .mockResolvedValue({ ok: true, status: 'stopped', containerId: 'a' }),
+          .mockResolvedValue({ ok: true, status: 'stopped', containerId: 'a', ports: {} }),
       });
       const wsFsDeps = mockFsDeps(['my-instance']);
       const stateFsDeps = mockStateFsDeps({
@@ -441,6 +442,130 @@ describe('listInstances', () => {
       assertSuccess(result);
 
       expect(result.instances[0].purpose).toBeNull();
+    });
+  });
+
+  describe('SSH connection string', () => {
+    it('shows SSH connection for running instances with port 22 mapped', async () => {
+      const container = mockContainer({
+        containerStatus: vi.fn().mockResolvedValue({
+          ok: true,
+          status: 'running',
+          containerId: 'abc',
+          ports: { '22/tcp': '22' },
+        }),
+      });
+      const wsFsDeps = mockFsDeps(['my-instance']);
+      const stateFsDeps = mockStateFsDeps({
+        'my-instance': makeState({ name: 'my-instance', containerName: 'ae-my-instance' }),
+      });
+
+      const result = await listInstances({
+        container,
+        gitDetector: mockGitDetector(),
+        workspaceFsDeps: wsFsDeps,
+        stateFsDeps,
+      });
+      assertSuccess(result);
+
+      expect(result.instances[0].sshConnection).toBe('node@ae-my-instance.orb.local');
+    });
+
+    it('includes localhost port fallback when mapped to non-standard port', async () => {
+      const container = mockContainer({
+        containerStatus: vi.fn().mockResolvedValue({
+          ok: true,
+          status: 'running',
+          containerId: 'abc',
+          ports: { '22/tcp': '49152' },
+        }),
+      });
+      const wsFsDeps = mockFsDeps(['my-instance']);
+      const stateFsDeps = mockStateFsDeps({
+        'my-instance': makeState({ name: 'my-instance', containerName: 'ae-my-instance' }),
+      });
+
+      const result = await listInstances({
+        container,
+        gitDetector: mockGitDetector(),
+        workspaceFsDeps: wsFsDeps,
+        stateFsDeps,
+      });
+      assertSuccess(result);
+
+      expect(result.instances[0].sshConnection).toBe(
+        'node@ae-my-instance.orb.local (localhost:49152)'
+      );
+    });
+
+    it('shows null SSH connection for stopped instances', async () => {
+      const container = mockContainer({
+        containerStatus: vi.fn().mockResolvedValue({
+          ok: true,
+          status: 'stopped',
+          containerId: 'abc',
+          ports: {},
+        }),
+      });
+      const wsFsDeps = mockFsDeps(['my-instance']);
+      const stateFsDeps = mockStateFsDeps({
+        'my-instance': makeState({ name: 'my-instance', containerName: 'ae-my-instance' }),
+      });
+
+      const result = await listInstances({
+        container,
+        gitDetector: mockGitDetector(),
+        workspaceFsDeps: wsFsDeps,
+        stateFsDeps,
+      });
+      assertSuccess(result);
+
+      expect(result.instances[0].sshConnection).toBeNull();
+    });
+
+    it('shows null SSH connection when no SSH port is mapped', async () => {
+      const container = mockContainer({
+        containerStatus: vi.fn().mockResolvedValue({
+          ok: true,
+          status: 'running',
+          containerId: 'abc',
+          ports: { '3000/tcp': '3000' },
+        }),
+      });
+      const wsFsDeps = mockFsDeps(['my-instance']);
+      const stateFsDeps = mockStateFsDeps({
+        'my-instance': makeState({ name: 'my-instance', containerName: 'ae-my-instance' }),
+      });
+
+      const result = await listInstances({
+        container,
+        gitDetector: mockGitDetector(),
+        workspaceFsDeps: wsFsDeps,
+        stateFsDeps,
+      });
+      assertSuccess(result);
+
+      expect(result.instances[0].sshConnection).toBeNull();
+    });
+
+    it('shows null SSH connection when Docker is unavailable', async () => {
+      const container = mockContainer({
+        isDockerAvailable: vi.fn().mockResolvedValue(false),
+      });
+      const wsFsDeps = mockFsDeps(['my-instance']);
+      const stateFsDeps = mockStateFsDeps({
+        'my-instance': makeState({ name: 'my-instance', containerName: 'ae-my-instance' }),
+      });
+
+      const result = await listInstances({
+        container,
+        gitDetector: mockGitDetector(),
+        workspaceFsDeps: wsFsDeps,
+        stateFsDeps,
+      });
+      assertSuccess(result);
+
+      expect(result.instances[0].sshConnection).toBeNull();
     });
   });
 

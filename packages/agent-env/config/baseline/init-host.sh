@@ -14,6 +14,20 @@ if [ ! -f "$GITCONFIG" ]; then
   touch "$GITCONFIG"
 fi
 
+# Stage only SSH public keys for container mount (never expose private keys)
+SSH_PUB_DIR="$HOME/.agent-env/ssh-pub-keys"
+mkdir -p "$SSH_PUB_DIR"
+rm -f "$SSH_PUB_DIR"/*.pub 2>/dev/null || true
+if ls "$HOME/.ssh/"*.pub &>/dev/null; then
+  cp -p "$HOME/.ssh/"*.pub "$SSH_PUB_DIR/"
+  echo "agent-env: Staged SSH public keys:"
+  for f in "$SSH_PUB_DIR"/*.pub; do
+    echo "  - $(basename "$f")"
+  done
+else
+  echo "agent-env: Warning: No SSH public keys found in ~/.ssh. SSH access will require manual setup."
+fi
+
 # Verify SSH agent socket exists (provided by Docker Desktop / OrbStack on macOS)
 if [ ! -S "$SSH_SOCKET" ]; then
   echo "agent-env: Warning: SSH agent socket not found at $SSH_SOCKET"
