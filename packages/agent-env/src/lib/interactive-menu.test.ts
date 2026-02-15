@@ -35,6 +35,7 @@ function makeInstance(overrides: Partial<Instance> = {}): Instance {
         isClean: true,
       },
     },
+    sshConnection: null,
     ...overrides,
   };
 }
