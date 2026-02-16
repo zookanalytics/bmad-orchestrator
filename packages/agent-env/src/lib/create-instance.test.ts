@@ -8,64 +8,9 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import type { ContainerLifecycle } from './container.js';
 import type { CreateInstanceDeps } from './create-instance.js';
 
-import {
-  extractRepoName,
-  createInstance,
-  resolveRepoUrl,
-  attachToInstance,
-} from './create-instance.js';
+import { createInstance, resolveRepoUrl, attachToInstance } from './create-instance.js';
 import { getBaselineConfigPath } from './devcontainer.js';
 import { AGENT_ENV_DIR, WORKSPACES_DIR } from './types.js';
-
-// ─── extractRepoName tests ──────────────────────────────────────────────────
-
-describe('extractRepoName', () => {
-  it('extracts name from HTTPS URL with .git suffix', () => {
-    expect(extractRepoName('https://github.com/user/bmad-orch.git')).toBe('bmad-orch');
-  });
-
-  it('extracts name from HTTPS URL without .git suffix', () => {
-    expect(extractRepoName('https://github.com/user/bmad-orch')).toBe('bmad-orch');
-  });
-
-  it('extracts name from SSH URL with .git suffix', () => {
-    expect(extractRepoName('git@github.com:user/repo.git')).toBe('repo');
-  });
-
-  it('extracts name from SSH URL without .git suffix', () => {
-    expect(extractRepoName('git@github.com:user/repo')).toBe('repo');
-  });
-
-  it('handles trailing slashes in HTTPS URLs', () => {
-    expect(extractRepoName('https://github.com/user/bmad-orch/')).toBe('bmad-orch');
-  });
-
-  it('handles nested paths in HTTPS URLs', () => {
-    expect(extractRepoName('https://gitlab.com/org/sub/repo-name.git')).toBe('repo-name');
-  });
-
-  it('handles repos with dots in the name', () => {
-    expect(extractRepoName('https://github.com/user/my.repo.name.git')).toBe('my.repo.name');
-  });
-
-  it('handles repos with hyphens and underscores', () => {
-    expect(extractRepoName('https://github.com/user/my-repo_name.git')).toBe('my-repo_name');
-  });
-
-  it('extracts name from SSH URL with protocol', () => {
-    expect(extractRepoName('ssh://git@github.com/user/repo.git')).toBe('repo');
-  });
-
-  it('throws for empty URL', () => {
-    expect(() => extractRepoName('')).toThrow('Cannot extract repository name');
-  });
-
-  it('throws for URL that resolves to empty name', () => {
-    expect(() => extractRepoName('https://github.com/.git')).toThrow(
-      'Cannot extract repository name'
-    );
-  });
-});
 
 // ─── createInstance tests ───────────────────────────────────────────────────
 

@@ -110,47 +110,6 @@ export interface CreateInstanceDeps {
   };
 }
 
-// ─── URL Parsing ─────────────────────────────────────────────────────────────
-
-/**
- * Extract repository name from a git URL.
- *
- * Supports:
- * - HTTPS: https://github.com/user/repo-name.git → "repo-name"
- * - HTTPS without .git: https://github.com/user/repo-name → "repo-name"
- * - SSH: git@github.com:user/repo-name.git → "repo-name"
- * - SSH without .git: git@github.com:user/repo-name → "repo-name"
- *
- * @param url - Git repository URL (HTTPS or SSH)
- * @returns Repository name extracted from URL
- * @throws If URL cannot be parsed
- */
-export function extractRepoName(url: string): string {
-  // Remove trailing slashes and the .git suffix to normalize the URL
-  const cleaned = url.replace(/\/+$/, '').replace(/\.git$/, '');
-
-  // The repository name is the last segment after the final '/' or ':'
-  const lastSlash = cleaned.lastIndexOf('/');
-  const lastColon = cleaned.lastIndexOf(':');
-  const lastSeparator = Math.max(lastSlash, lastColon);
-
-  // If there's no separator, the URL itself might be the repo name
-  if (lastSeparator === -1) {
-    if (!cleaned) {
-      throw new Error(`Cannot extract repository name from URL: ${url}`);
-    }
-    return cleaned;
-  }
-
-  const repoName = cleaned.slice(lastSeparator + 1);
-
-  if (!repoName) {
-    throw new Error(`Cannot extract repository name from URL: ${url}`);
-  }
-
-  return repoName;
-}
-
 // ─── Repo URL Resolution ──────────────────────────────────────────────────
 
 export type ResolveResult =
