@@ -228,7 +228,7 @@ Validated all three epics against create-epics-and-stories best practices: user 
 **User Value:** Clear. Users type `auth` instead of `bmad-orch-auth`. Multiple instances per repo. Config choice.
 **Independence:** Verified. No dependency on Epics 6 or 8.
 **Stories:** 5 stories with proper ACs. Edge cases well-covered.
-**Architecture Alignment:** Stories match all revised architecture decisions (nested layout, slug compression, two-phase resolution, baseline prompt).
+**Architecture Alignment:** Stories match all revised architecture decisions (flat repo-scoped layout, slug compression, two-phase resolution, baseline prompt).
 
 ### Epic 8: Growth — Repo Registry & VS Code Purpose — PASS
 
@@ -250,7 +250,7 @@ Story 6.3 combines CLI installation, dev mode, environment detection, and purpos
 - **Recommendation:** Acceptable as-is. Could split CLI installation from purpose updates if implementation proves unwieldy, but unnecessary pre-emptively.
 
 **MC-2: Story 7.1 is a technical refactoring story**
-Story 7.1 ("Refactor workspace scanning and state schema for nested layout") is framed as "As a developer" — it's infrastructure for the user-facing changes in Stories 7.2-7.5. The story includes functional verification ACs (all commands still work).
+Story 7.1 ("Refactor workspace naming and state schema for repo-scoped instances") is framed as "As a developer" — it's infrastructure for the user-facing changes in Stories 7.2-7.5. The story includes functional verification ACs (all commands still work).
 - **Recommendation:** Acceptable. Foundational refactoring stories are valid when they enable user-facing stories in the same epic.
 
 **MC-3: Story 7.3 has high edge-case complexity**
@@ -259,13 +259,13 @@ Story 7.3 (two-phase resolution) has 8 distinct resolution scenarios in its ACs.
 
 ### Observations (Not Violations)
 
-1. **Architecture consistency:** Some early architecture sections reference hooks pattern and flat naming, but superseded sections are clearly marked. Epics correctly reference actual implementation patterns (lib/ orchestration modules, nested workspaces).
+1. **Architecture consistency:** Some early architecture sections reference hooks pattern and old naming, but superseded sections are clearly marked. Epics correctly reference actual implementation patterns (lib/ orchestration modules, repo-scoped flat workspaces).
 
 2. **Concurrent development risk:** Epics 6 and 7 both modify `create.ts` and devcontainer config. The epics doc recommends sequential development and acknowledges merge conflict potential. This is a process note, not a quality issue.
 
 3. **No migration path:** Epic 7 intentionally drops flat-layout workspaces without migration. Documented and justified (negligible existing instances). Appropriate for current project stage.
 
-4. **Breaking change in AGENT_ENV_INSTANCE:** Epic 6 sets this to the compound name; Epic 7 changes it to the short instance name. The ADR explicitly declares this opaque — consumers should not parse it. The "break" improves UX (shorter tmux display).
+4. **Breaking change in AGENT_ENV_INSTANCE:** Epic 6 sets this to the ad-hoc compound name; Epic 7 changes it to the explicit `<repo-slug>-<instance>` compound name (still globally unique, flat layout). The ADR explicitly declares this opaque — consumers should not parse it. Confirmed: zero runtime consumers in image scripts.
 
 ### Best Practices Compliance Summary
 
@@ -320,7 +320,7 @@ None.
 
 - **Concurrent development warning:** Epics 6 and 7 both modify the create command and devcontainer config. The epics doc recommends sequential development to avoid merge conflicts.
 - **Breaking change (Epic 7):** Old flat-layout workspaces will not be detected after Epic 7. No migration code. Existing instances must be recreated. Acceptable given negligible existing user base.
-- **AGENT_ENV_INSTANCE value changes:** Compound name in Epic 6, short name after Epic 7. ADR declares the value opaque — consumers should not parse it.
+- **AGENT_ENV_INSTANCE value changes:** Ad-hoc compound name in Epic 6, explicit `<repo-slug>-<instance>` compound name after Epic 7 (still globally unique — flat layout preserved). ADR declares the value opaque — consumers should not parse it.
 
 ### Final Note
 

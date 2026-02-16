@@ -1,0 +1,41 @@
+source: _bmad-output/implementation-artifacts/epic-env-6-retro-2026-02-16.md
+generated: 2026-02-16
+
+items:
+  - id: 1
+    action_item: 1
+    workflow: bmad:bmm:workflows:quick-dev
+    status: done
+    summary: |
+      Update Epic env-7 Story 7.1 to include all state.json consumers added in Epic 6.
+      Additionally: AGENT_ENV_INSTANCE analysis confirmed safe (zero runtime consumers in image scripts).
+      Critical discovery: nested workspace layout (workspaces/<repo-slug>/<instance>/) would break
+      localWorkspaceFolderBasename uniqueness, affecting named volumes, AGENT_INSTANCE, and container naming.
+      Resolution: switched Epic 7 architecture to flat layout (workspaces/<repo-slug>-<instance>/).
+      Updated architecture.md naming model, epics.md Epic 7 summary, Story 7.1 title/ACs/tech reqs,
+      and Story 7.3 path references. Removed AGENT_INSTANCE collision risk (no longer applicable with flat layout).
+      Files modified: architecture.md, epics.md.
+      Why: Epic 7 stories were written before Epic 6 was implemented and the nested layout assumption had not been validated against devcontainer variable behavior.
+      Success criteria: Story 7.1 reflects flat layout, all nested references removed, architecture doc updated.
+
+  - id: 2
+    action_item: 2
+    workflow: bmad:bmm:workflows:quick-dev
+    status: done
+    summary: |
+      Add the grep -q to grep -qF fix for setup-instance-isolation.sh Steps 9 and 11 to Epic 7 Story 7.1 scope.
+      Currently Steps 9 and 11 use grep -q with bracket characters in marker strings, treated as regex metacharacters.
+      Only Step 11b (new in Epic 6) was fixed per story scope; the pre-existing instances remain unfixed.
+      This is a ticking bomb in a script that runs on every container startup.
+      Why: Technical debt from Epic 6 Story 6.2 review requiring all three steps to use grep -qF for fixed string matching.
+      Success criteria: All three steps in setup-instance-isolation.sh use grep -qF for fixed string matching.
+
+  - id: 3
+    action_item: 3
+    workflow: bash
+    status: done
+    summary: |
+      Execute git merge of the Epic 6 development branch to main.
+      This is a post-retro deployment action. CI must pass after merge.
+      Why: Epic 6 implementation is complete, retro is done, and merge is the final deployment step.
+      Success criteria: Clean merge to main, CI passes.

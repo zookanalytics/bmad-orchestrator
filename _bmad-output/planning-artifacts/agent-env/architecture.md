@@ -1383,26 +1383,28 @@ This section documents architectural decisions made in response to the 2026-02-1
 | FR27: Baseline "always" overrides repo `.devcontainer/` | Baseline override is opt-in via prompt or flag, not forced | PRD update required |
 | "Environments, not containers" framing | Unintended by product owner. Tool manages containers. | PRD update required |
 
-### Decision: Instance Naming Model (Revised)
+### Decision: Instance Naming Model (Revised 2026-02-14, updated 2026-02-16)
 
 **Supersedes:** "Naming Convention" in Project Context Analysis section.
 
+**Revision history:** Original revision (2026-02-14) specified nested layout (`workspaces/<repo-slug>/<instance>/`). Updated (2026-02-16) to flat layout (`workspaces/<repo-slug>-<instance>/`) after Epic 6 retro analysis revealed that nested layout breaks `localWorkspaceFolderBasename` global uniqueness, affecting named Docker volumes, `AGENT_INSTANCE` env var, and container naming.
+
 **Previous model:** Compound name `<repo>-<instance>` as flat workspace identifier. User must type full compound name for all commands.
 
-**New model:** Instance name is user-chosen, scoped to a repository. The unique key is `(repo-slug, instance-name)`.
+**New model:** Instance name is user-chosen, scoped to a repository. The unique key is `(repo-slug, instance-name)`. Workspace directory name is the flat compound `<repo-slug>-<instance>`, preserving global uniqueness for `localWorkspaceFolderBasename` (used by devcontainer.json for container names, named volumes, and env vars).
 
 **Workspace folder structure:**
 ```
 ~/.agent-env/workspaces/
-├── bmad-orch/
-│   ├── auth/
-│   │   └── .agent-env/state.json
-│   └── api/
-│       └── .agent-env/state.json
-└── awesome-cli/
-    └── bugfix/
-        └── .agent-env/state.json
+├── bmad-orch-auth/
+│   └── .agent-env/state.json
+├── bmad-orch-api/
+│   └── .agent-env/state.json
+└── awesome-cli-bugfix/
+    └── .agent-env/state.json
 ```
+
+**Why flat, not nested:** A nested layout (`workspaces/<repo-slug>/<instance>/`) was considered but rejected. The devcontainer variable `${localWorkspaceFolderBasename}` resolves to the innermost directory name — with nesting, that's just the instance name (e.g., `auth`), which is only unique within a repo. This breaks named Docker volumes, container naming, `AGENT_INSTANCE` env var, and any other system that uses the folder basename as a unique key. The flat layout keeps `localWorkspaceFolderBasename` globally unique with zero workarounds. Grouping instances by repo is handled via `state.json` fields (`repoSlug`, `instance`) and `agent-env list --repo <slug>`.
 
 **Repo slug derivation:** Last path segment of git remote URL, minus `.git`. Example: `https://github.com/user/bmad-orchestrator.git` → `bmad-orchestrator`.
 
@@ -1422,7 +1424,9 @@ Format: `<first 15 chars>_<6 char SHA-256 hex>_<last 15 chars>` = 38 characters 
 
 **Container naming:** `ae-<repo-slug>-<instance>` (flat string, internal only — user never types this). Maximum 63 characters enforced by Docker: `ae-` (3) + repo slug (≤39) + `-` (1) + instance (≤20) = 63.
 
-**Known limitation:** Slug compression can theoretically collide if two repos share the same first 15 and last 15 characters but differ in the middle. Extremely unlikely for a single-user tool. Documented, not mitigated.
+**Known limitation — slug compression collision:** Slug compression can theoretically collide if two repos share the same first 15 and last 15 characters but differ in the middle. Extremely unlikely for a single-user tool. Documented, not mitigated.
+
+**Known limitation — compound-name collision:** Two different repos could produce the same compound workspace name. Example: repo `my-app` with instance `v2` and repo `my-app-v2` with instance (empty/default) would both yield `my-app-v2`. Mitigated at create time: `createWorkspace()` checks if the directory already exists and rejects with an error. Extremely unlikely in practice — requires deliberate adversarial naming. State.json carries explicit `repoSlug` and `instance` fields, so the compound folder name is never parsed.
 
 **Repo resolution for commands (two-phase):**
 
@@ -1463,7 +1467,7 @@ agent-env attach auth --repo bmad-orch    # explicit when ambiguous
 
 **`list` behavior:** Always shows all instances across all repos. `--repo` flag available to filter.
 
-**Instance scanning:** Scan `~/.agent-env/workspaces/*/` for repo-slug directories, then `~/.agent-env/workspaces/*/*/` for instance directories containing `.agent-env/state.json`.
+**Instance scanning:** Scan `~/.agent-env/workspaces/*/` for workspace directories containing `.agent-env/state.json`. Each workspace's state.json contains `repoSlug` and `instance` fields for structured queries (no directory name parsing needed).
 
 ### Decision: Baseline Config (Prompt with Flag Override)
 
@@ -1507,7 +1511,7 @@ Three states: force-baseline, force-repo-config, ask-user (default when repo has
 {
   "containerEnv": {
     "AGENT_ENV_CONTAINER": "true",
-    "AGENT_ENV_INSTANCE": "<instance-name>",
+    "AGENT_ENV_INSTANCE": "<repo-slug>-<instance>",
     "AGENT_ENV_REPO": "<repo-slug>"
   }
 }
@@ -1538,8 +1542,8 @@ function resolveStatePath(): string {
   if (isInsideContainer()) {
     return '/etc/agent-env/state.json';
   }
-  // Host path resolution via workspaces directory
-  return path.join(homedir(), '.agent-env/workspaces', repoSlug, instance, '.agent-env/state.json');
+  // Host path resolution via workspaces directory (flat layout: <repo-slug>-<instance>)
+  return path.join(homedir(), '.agent-env/workspaces', `${repoSlug}-${instance}`, '.agent-env/state.json');
 }
 ```
 
@@ -1599,7 +1603,7 @@ interface InstanceState {
 | Devcontainer Integration Architecture | Step 2 updated: baseline application depends on prompt/flag; mount is read-write |
 | Container Management Dependencies | agent-env CLI now installed inside container via post-create |
 | Project Structure (commands/) | `create.ts` gains `--baseline`/`--no-baseline` flag handling and prompt logic |
-| Project Structure (lib/) | `workspace.ts` scanning changes from flat to nested; `compressSlug()` added |
+| Project Structure (lib/) | `workspace.ts` scanning unchanged (still `workspaces/*/`); `createWorkspace()` uses `<repo-slug>-<instance>` naming; `compressSlug()` added |
 | FR to Structure Mapping | FR3, FR43, FR46-50 mapped to updated modules |
 | CLI Naming Convention | Superseded — instance name is no longer compound |
 | State File Schema | Updated with revised field names and constraints |
