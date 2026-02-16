@@ -5,11 +5,13 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 
 import type { FsDeps } from './workspace.js';
 
-import { AGENT_ENV_DIR, STATE_FILE, WORKSPACES_DIR } from './types.js';
+import { AGENT_ENV_DIR, MAX_REPO_SLUG_LENGTH, STATE_FILE, WORKSPACES_DIR } from './types.js';
 import {
+  compressSlug,
   createWorkspace,
   deleteWorkspace,
   deriveContainerName,
+  deriveRepoSlug,
   deriveWorkspaceName,
   getWorkspacePathByName,
   getWorkspacesBaseDir,
@@ -77,6 +79,136 @@ describe('deriveWorkspaceName', () => {
 
   it('allows dots and underscores in names', () => {
     expect(deriveWorkspaceName('my_repo', 'v1.0')).toBe('my_repo-v1.0');
+  });
+});
+
+describe('deriveRepoSlug', () => {
+  it('extracts slug from HTTPS URL with .git suffix', () => {
+    expect(deriveRepoSlug('https://github.com/user/bmad-orchestrator.git')).toBe(
+      'bmad-orchestrator'
+    );
+  });
+
+  it('extracts slug from HTTPS URL without .git suffix', () => {
+    expect(deriveRepoSlug('https://github.com/user/bmad-orchestrator')).toBe('bmad-orchestrator');
+  });
+
+  it('extracts slug from SSH URL with .git suffix', () => {
+    expect(deriveRepoSlug('git@github.com:user/repo.git')).toBe('repo');
+  });
+
+  it('extracts slug from SSH URL without .git suffix', () => {
+    expect(deriveRepoSlug('git@github.com:user/repo')).toBe('repo');
+  });
+
+  it('handles trailing slashes', () => {
+    expect(deriveRepoSlug('https://github.com/user/bmad-orchestrator/')).toBe('bmad-orchestrator');
+  });
+
+  it('handles nested paths in HTTPS URLs', () => {
+    expect(deriveRepoSlug('https://gitlab.com/org/sub/repo-name.git')).toBe('repo-name');
+  });
+
+  it('handles repos with dots in the name', () => {
+    expect(deriveRepoSlug('https://github.com/user/my.repo.name.git')).toBe('my.repo.name');
+  });
+
+  it('handles repos with hyphens and underscores', () => {
+    expect(deriveRepoSlug('https://github.com/user/my-repo_name.git')).toBe('my-repo_name');
+  });
+
+  it('handles SSH URL with protocol prefix', () => {
+    expect(deriveRepoSlug('ssh://git@github.com/user/repo.git')).toBe('repo');
+  });
+
+  it('lowercases the slug', () => {
+    expect(deriveRepoSlug('https://github.com/user/My-REPO.git')).toBe('my-repo');
+  });
+
+  it('compresses slugs longer than 39 characters', () => {
+    const longUrl =
+      'https://github.com/user/my-extremely-long-repository-name-that-exceeds-limit.git';
+    const slug = deriveRepoSlug(longUrl);
+    expect(slug.length).toBeLessThanOrEqual(MAX_REPO_SLUG_LENGTH);
+    expect(slug).toContain('_'); // Contains hash separator
+  });
+
+  it('passes through slugs of exactly 39 characters', () => {
+    // Create a URL with exactly 39-char repo name
+    const repoName = 'a'.repeat(39);
+    const url = `https://github.com/user/${repoName}.git`;
+    expect(deriveRepoSlug(url)).toBe(repoName);
+  });
+
+  it('throws for empty URL', () => {
+    expect(() => deriveRepoSlug('')).toThrow('Cannot derive repo slug');
+  });
+
+  it('throws for URL that resolves to empty name', () => {
+    expect(() => deriveRepoSlug('https://github.com/.git')).toThrow('Cannot derive repo slug');
+  });
+
+  it('is deterministic (same input → same output)', () => {
+    const url = 'https://github.com/user/my-extremely-long-repository-name-that-exceeds-limit.git';
+    const slug1 = deriveRepoSlug(url);
+    const slug2 = deriveRepoSlug(url);
+    expect(slug1).toBe(slug2);
+  });
+});
+
+describe('compressSlug', () => {
+  it('returns slug unchanged when within max length', () => {
+    expect(compressSlug('short-slug')).toBe('short-slug');
+  });
+
+  it('returns slug unchanged when exactly at max length', () => {
+    const slug = 'a'.repeat(MAX_REPO_SLUG_LENGTH);
+    expect(compressSlug(slug)).toBe(slug);
+  });
+
+  it('compresses slug exceeding max length', () => {
+    const slug = 'my-extremely-long-repository-name-that-exceeds-limit';
+    const compressed = compressSlug(slug);
+    expect(compressed.length).toBeLessThanOrEqual(MAX_REPO_SLUG_LENGTH);
+  });
+
+  it('uses underscore-delimited hash format', () => {
+    const slug = 'my-extremely-long-repository-name-that-exceeds-limit';
+    const compressed = compressSlug(slug);
+    // Format: <prefix>_<6-char hash>_<suffix>
+    const parts = compressed.split('_');
+    expect(parts.length).toBe(3);
+    expect(parts[1]).toHaveLength(6);
+  });
+
+  it('preserves prefix and suffix from original slug', () => {
+    const slug = 'my-extremely-long-repository-name-that-exceeds-limit';
+    const compressed = compressSlug(slug);
+    expect(compressed.startsWith('my-extremely-lo')).toBe(true);
+    expect(compressed.endsWith('ceeds-limit')).toBe(true);
+  });
+
+  it('is deterministic', () => {
+    const slug = 'my-extremely-long-repository-name-that-exceeds-limit';
+    expect(compressSlug(slug)).toBe(compressSlug(slug));
+  });
+
+  it('produces different outputs for different inputs', () => {
+    const slug1 = 'a'.repeat(50);
+    const slug2 = 'b'.repeat(50);
+    expect(compressSlug(slug1)).not.toBe(compressSlug(slug2));
+  });
+
+  it('respects custom max length', () => {
+    const slug = 'this-is-a-moderately-long-name';
+    const compressed = compressSlug(slug, 20);
+    expect(compressed.length).toBeLessThanOrEqual(20);
+  });
+
+  it('handles slug that is just one char over limit', () => {
+    const slug = 'a'.repeat(MAX_REPO_SLUG_LENGTH + 1);
+    const compressed = compressSlug(slug);
+    expect(compressed.length).toBeLessThanOrEqual(MAX_REPO_SLUG_LENGTH);
   });
 });
 

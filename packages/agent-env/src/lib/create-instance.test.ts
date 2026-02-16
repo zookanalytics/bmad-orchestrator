@@ -294,6 +294,7 @@ describe('createInstance', () => {
     expect(result.error).not.toBeNull();
     expect(result.error.code).toBe('INSTANCE_EXISTS');
     expect(result.error.message).toContain("Instance 'auth' already exists");
+    expect(result.error.message).toContain('bmad-orch');
   });
 
   it('returns GIT_ERROR when clone fails', async () => {
@@ -750,6 +751,38 @@ describe('createInstance', () => {
     expect(envPatchCall).toBeDefined();
     const writtenContent = JSON.parse((envPatchCall as unknown[])[1] as string);
     expect(writtenContent.containerEnv.AGENT_ENV_PURPOSE).toBe('JWT authentication');
+  });
+
+  it('returns INSTANCE_NAME_TOO_LONG when instance name exceeds 20 characters', async () => {
+    const deps = createTestDeps(gitCloneSuccess);
+    const tooLongName = 'this-name-is-way-too-long';
+
+    const result = await createInstance(tooLongName, 'https://github.com/user/bmad-orch.git', deps);
+
+    expect(result.ok).toBe(false);
+    if (result.ok) throw new Error('Expected failure');
+    expect(result.error.code).toBe('INSTANCE_NAME_TOO_LONG');
+    expect(result.error.message).toContain('20');
+    expect(result.error.message).toContain(`${tooLongName.length}`);
+    // Should not have attempted clone
+    expect(deps.executor).not.toHaveBeenCalled();
+  });
+
+  it('accepts instance name of exactly 20 characters', async () => {
+    const deps = createTestDeps(gitCloneSuccess);
+    const exactName = 'a'.repeat(20);
+
+    const result = await createInstance(exactName, 'https://github.com/user/bmad-orch.git', deps);
+
+    expect(result.ok).toBe(true);
+  });
+
+  it('accepts short instance name', async () => {
+    const deps = createTestDeps(gitCloneSuccess);
+
+    const result = await createInstance('auth', 'https://github.com/user/bmad-orch.git', deps);
+
+    expect(result.ok).toBe(true);
   });
 
   it('returns PURPOSE_TOO_LONG when purpose exceeds MAX_PURPOSE_LENGTH', async () => {

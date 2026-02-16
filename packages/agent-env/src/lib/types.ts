@@ -19,6 +19,15 @@ export const STATE_FILE_TMP = 'state.json.tmp';
 /** Container name prefix */
 export const CONTAINER_PREFIX = 'ae-';
 
+/** Maximum length for user-chosen instance names */
+export const MAX_INSTANCE_NAME_LENGTH = 20;
+
+/** Maximum length for derived repo slugs (compressed if longer) */
+export const MAX_REPO_SLUG_LENGTH = 39;
+
+/** Maximum length for Docker container names */
+export const MAX_CONTAINER_NAME_LENGTH = 63;
+
 // ─── Types ───────────────────────────────────────────────────────────────────
 
 /** Resolved workspace path information */

@@ -37,8 +37,41 @@ import {
 } from './devcontainer.js';
 import { MAX_PURPOSE_LENGTH } from './purpose-instance.js';
 import { createInitialState, ensureGitExclude, writeStateAtomic } from './state.js';
-import { AGENT_ENV_DIR } from './types.js';
-import { deriveContainerName, getWorkspacePath, workspaceExists } from './workspace.js';
+import { AGENT_ENV_DIR, MAX_INSTANCE_NAME_LENGTH } from './types.js';
+import {
+  deriveContainerName,
+  deriveRepoSlug,
+  getWorkspacePath,
+  workspaceExists,
+} from './workspace.js';
+
+// ─── Input validation ────────────────────────────────────────────────────────
+
+type CreateError = { ok: false; error: { code: string; message: string; suggestion?: string } };
+
+function validateCreateInputs(instanceName: string, purposeText: string): CreateError | null {
+  if (instanceName.length > MAX_INSTANCE_NAME_LENGTH) {
+    return {
+      ok: false,
+      error: {
+        code: 'INSTANCE_NAME_TOO_LONG',
+        message: `Instance name must be ${MAX_INSTANCE_NAME_LENGTH} characters or fewer (got ${instanceName.length})`,
+      },
+    };
+  }
+
+  if (purposeText.length > MAX_PURPOSE_LENGTH) {
+    return {
+      ok: false,
+      error: {
+        code: 'PURPOSE_TOO_LONG',
+        message: `Purpose must be ${MAX_PURPOSE_LENGTH} characters or fewer (got ${purposeText.length})`,
+      },
+    };
+  }
+
+  return null;
+}
 
 // ─── Constants ───────────────────────────────────────────────────────────────
 
@@ -321,21 +354,14 @@ export async function createInstance(
   const purposeText = options?.purpose ?? '';
   const purposeState = options?.purpose ?? null;
 
-  // Validate purpose length before any I/O
-  if (purposeText.length > MAX_PURPOSE_LENGTH) {
-    return {
-      ok: false,
-      error: {
-        code: 'PURPOSE_TOO_LONG',
-        message: `Purpose must be ${MAX_PURPOSE_LENGTH} characters or fewer (got ${purposeText.length})`,
-      },
-    };
-  }
+  // Validate inputs before any I/O
+  const validationError = validateCreateInputs(instanceName, purposeText);
+  if (validationError) return validationError;
 
-  // Step 1: Extract repo name from URL
+  // Step 1: Derive repo slug from URL (handles compression for long names)
   let repoName: string;
   try {
-    repoName = extractRepoName(repoUrl);
+    repoName = deriveRepoSlug(repoUrl);
   } catch {
     return {
       ok: false,
