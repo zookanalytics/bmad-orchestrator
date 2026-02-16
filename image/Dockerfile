@@ -122,7 +122,9 @@ COPY --chown=node:node image/scripts/tmux-session.sh /home/node/.local/bin/tmux-
 COPY --chown=node:node image/scripts/tmux-purpose.sh /home/node/.local/bin/tmux-purpose
 RUN chmod +x /home/node/.local/bin/tmux-session /home/node/.local/bin/tmux-purpose
 
-# Set default shell and editor
+# Set default shell and editor (both the env var and the login shell in /etc/passwd,
+# so that SSH sessions and interactive terminals both use zsh)
+RUN usermod -s /bin/zsh node
 ENV SHELL=/bin/zsh
 ENV EDITOR=vim
 ENV VISUAL=vim
