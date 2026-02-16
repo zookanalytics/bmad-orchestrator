@@ -34,7 +34,7 @@
 #   E005: Failed to create directory
 #   E006: Failed to create symlink (ln -sf failed)
 #   E007: Symlink verification failed (symlink not created or not a symlink)
-#   E008: Final health check failed (symlinks not writable)
+#   E008: Symlink readability/writability check failed (health check or credentials)
 
 # --- Testing support ---
 # FAIL_AT_STEP: If set, script will fail after completing that step (for rollback testing)
@@ -388,6 +388,7 @@ CREDENTIALS_FILE="$SHARED_DATA/claude/credentials.json"
 
 if [ -f "$CREDENTIALS_FILE" ]; then
   echo "    Shared credentials found, ensuring symlink..."
+  rm -f "$HOME/.claude/.credentials.json"
   if ! ln -sf "$CREDENTIALS_FILE" "$HOME/.claude/.credentials.json"; then
     echo "E006: ERROR: Failed to create symlink: ~/.claude/.credentials.json -> $CREDENTIALS_FILE"
     exit 1
@@ -409,6 +410,7 @@ else
     promote_credentials_to_shared "$discovered" || true
     # Check if promotion succeeded (shared now exists)
     if [ -f "$CREDENTIALS_FILE" ]; then
+      rm -f "$HOME/.claude/.credentials.json"
       if ! ln -sf "$CREDENTIALS_FILE" "$HOME/.claude/.credentials.json"; then
         echo "E006: ERROR: Failed to create symlink: ~/.claude/.credentials.json -> $CREDENTIALS_FILE"
         exit 1

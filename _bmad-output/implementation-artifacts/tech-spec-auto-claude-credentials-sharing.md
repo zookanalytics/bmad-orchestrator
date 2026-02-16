@@ -120,7 +120,7 @@ Rationale:
   - Logic:
     ```bash
     # Find most recent credentials - uses find's printf for safe sorting
-    find "$SHARED_DATA/instance" -mindepth 2 -maxdepth 2 -type f -name ".credentials.json" \
+    find "$SHARED_DATA/instance" -mindepth 3 -maxdepth 3 -type f -name ".credentials.json" \
       -path "*/claude/.credentials.json" -printf '%T@ %p\n' 2>/dev/null | \
       sort -rn | head -1 | cut -d' ' -f2-
     ```
