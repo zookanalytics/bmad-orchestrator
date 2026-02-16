@@ -18,12 +18,12 @@ setup() {
   # Create minimal .zshrc
   touch "$HOME/.zshrc"
 
-  # Path to script under test
-  SCRIPT="/usr/local/bin/setup-instance-isolation.sh"
+  # Path to script under test - prefer repo version for development
+  SCRIPT="${BATS_TEST_DIRNAME}/../setup-instance-isolation.sh"
 
-  # If running locally (not in container), use relative path
+  # Fall back to installed version in container
   if [ ! -f "$SCRIPT" ]; then
-    SCRIPT="${BATS_TEST_DIRNAME}/../setup-instance-isolation.sh"
+    SCRIPT="/usr/local/bin/setup-instance-isolation.sh"
   fi
 }
 
@@ -123,7 +123,7 @@ run_isolation_script() {
 }
 
 # =============================================================================
-# Test: Symlinks credentials when shared credentials exist
+# Test: Symlinks credentials when shared credentials exist (AC3)
 # =============================================================================
 @test "symlinks credentials when shared credentials exist" {
   # Pre-create shared credentials
@@ -133,28 +133,31 @@ run_isolation_script() {
   run_isolation_script "test-instance"
 
   [ "$status" -eq 0 ]
+  [[ "$output" == *"Shared credentials found"* ]]
+  [[ "$output" == *"Credentials symlinked to shared"* ]]
 
   # Verify symlink
   [ -L "$HOME/.claude/.credentials.json" ]
   [ "$(readlink "$HOME/.claude/.credentials.json")" = "$SHARED_DATA_DIR/claude/credentials.json" ]
+
+  # Verify readable
+  [ -r "$HOME/.claude/.credentials.json" ]
 }
 
 # =============================================================================
-# Test: Creates credentials symlink proactively (bootstraps empty file)
+# Test: First instance - no credentials anywhere (AC1)
 # =============================================================================
-@test "creates credentials symlink proactively and bootstraps empty file" {
+@test "first instance: no credentials, no shared, no errors" {
   run_isolation_script "test-instance"
 
   [ "$status" -eq 0 ]
-  [[ "$output" == *"Bootstrapping empty credentials.json"* ]]
+  [[ "$output" == *"No credentials found - first instance will create on auth"* ]]
 
-  # Symlink should be created pointing to the bootstrapped file
-  [ -L "$HOME/.claude/.credentials.json" ]
-  [ "$(readlink "$HOME/.claude/.credentials.json")" = "$SHARED_DATA_DIR/claude/credentials.json" ]
+  # No shared credentials should exist
+  [ ! -f "$SHARED_DATA_DIR/claude/credentials.json" ]
 
-  # Bootstrapped file should exist and be valid JSON
-  [ -f "$SHARED_DATA_DIR/claude/credentials.json" ]
-  jq empty "$SHARED_DATA_DIR/claude/credentials.json"
+  # No credentials symlink should exist
+  [ ! -L "$HOME/.claude/.credentials.json" ]
 }
 
 # =============================================================================
@@ -375,4 +378,183 @@ run_isolation_script() {
   [ "$status" -eq 0 ]
   [[ "$output" == *"Instance isolation complete"* ]]
   [[ "$output" == *"test-instance"* ]]
+}
+
+# =============================================================================
+# Credential Discovery & Promotion Tests
+# =============================================================================
+
+# =============================================================================
+# Test: Discovery scenario - instance A has local creds, no shared (AC2)
+# =============================================================================
+@test "discovers credentials from another instance and promotes to shared" {
+  # Simulate instance A having already authenticated (created local credentials)
+  mkdir -p "$SHARED_DATA_DIR/instance/instance-A/claude"
+  echo '{"token": "from-instance-A"}' > "$SHARED_DATA_DIR/instance/instance-A/claude/.credentials.json"
+
+  # Run as instance B
+  run_isolation_script "instance-B"
+
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"No shared credentials, discovering from instances"* ]]
+  [[ "$output" == *"Found credentials"* ]]
+  [[ "$output" == *"Credentials promoted and symlinked"* ]]
+
+  # Verify shared credentials now exist
+  [ -f "$SHARED_DATA_DIR/claude/credentials.json" ]
+
+  # Verify instance B has symlink to shared
+  [ -L "$HOME/.claude/.credentials.json" ]
+  [ "$(readlink "$HOME/.claude/.credentials.json")" = "$SHARED_DATA_DIR/claude/credentials.json" ]
+  [ -r "$HOME/.claude/.credentials.json" ]
+
+  # Verify instance A's original file is now a symlink back to shared
+  [ -L "$SHARED_DATA_DIR/instance/instance-A/claude/.credentials.json" ]
+}
+
+# =============================================================================
+# Test: Multi-instance discovery picks most recent by mtime (AC4)
+# =============================================================================
+@test "multi-instance discovery picks most recent credentials by mtime" {
+  # Create instance A credentials (older)
+  mkdir -p "$SHARED_DATA_DIR/instance/instance-A/claude"
+  echo '{"token": "older"}' > "$SHARED_DATA_DIR/instance/instance-A/claude/.credentials.json"
+  # Set mtime to 1 hour ago
+  touch -d "1 hour ago" "$SHARED_DATA_DIR/instance/instance-A/claude/.credentials.json"
+
+  # Create instance B credentials (newer)
+  mkdir -p "$SHARED_DATA_DIR/instance/instance-B/claude"
+  echo '{"token": "newer"}' > "$SHARED_DATA_DIR/instance/instance-B/claude/.credentials.json"
+
+  # Run as instance C
+  run_isolation_script "instance-C"
+
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"Credentials promoted and symlinked"* ]]
+
+  # Verify shared credentials contain the newer token
+  [ -f "$SHARED_DATA_DIR/claude/credentials.json" ]
+  grep -q '"newer"' "$SHARED_DATA_DIR/claude/credentials.json"
+}
+
+# =============================================================================
+# Test: Late-arrival instance uses already-promoted shared credentials (AC5)
+# Note: True concurrent flock contention requires manual integration testing
+# =============================================================================
+@test "late-arrival instance uses already-promoted shared credentials" {
+  # Simulate: instance A has local credentials
+  mkdir -p "$SHARED_DATA_DIR/instance/instance-A/claude"
+  echo '{"token": "from-A"}' > "$SHARED_DATA_DIR/instance/instance-A/claude/.credentials.json"
+
+  # Run first instance (promotes credentials)
+  run_isolation_script "instance-B"
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"Credentials promoted and symlinked"* ]]
+
+  # Verify shared exists
+  [ -f "$SHARED_DATA_DIR/claude/credentials.json" ]
+
+  # Run second instance (should see shared and just symlink)
+  run_isolation_script "instance-C"
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"Shared credentials found"* ]]
+  [[ "$output" == *"Credentials symlinked to shared"* ]]
+
+  # Both instances should have readable symlinks
+  [ -L "$HOME/.claude/.credentials.json" ]
+  [ -r "$HOME/.claude/.credentials.json" ]
+}
+
+# =============================================================================
+# Test: Self-healing - shared deleted, rediscovery rebuilds (AC9)
+# =============================================================================
+@test "self-healing: rediscovers credentials after shared is deleted" {
+  # Setup: instance A has local credentials in instance dir
+  mkdir -p "$SHARED_DATA_DIR/instance/instance-A/claude"
+  echo '{"token": "recovered"}' > "$SHARED_DATA_DIR/instance/instance-A/claude/.credentials.json"
+
+  # Shared credentials do NOT exist (simulate deletion)
+  rm -f "$SHARED_DATA_DIR/claude/credentials.json" 2>/dev/null || true
+
+  # Run instance B - should discover from instance A and promote
+  run_isolation_script "instance-B"
+
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"Found credentials"* ]]
+  [[ "$output" == *"Credentials promoted and symlinked"* ]]
+
+  # Verify shared is rebuilt
+  [ -f "$SHARED_DATA_DIR/claude/credentials.json" ]
+  [ -r "$HOME/.claude/.credentials.json" ]
+}
+
+# =============================================================================
+# Test: Local regular file replaced with symlink when shared exists (AC10)
+# =============================================================================
+@test "replaces local regular file with symlink when shared exists" {
+  # Pre-create shared credentials
+  mkdir -p "$SHARED_DATA_DIR/claude"
+  echo '{"token": "shared"}' > "$SHARED_DATA_DIR/claude/credentials.json"
+
+  # Run instance to set up ~/.claude symlink
+  run_isolation_script "test-instance"
+  [ "$status" -eq 0 ]
+
+  # Simulate Claude replacing symlink with regular file
+  rm -f "$HOME/.claude/.credentials.json"
+  echo '{"token": "local-override"}' > "$HOME/.claude/.credentials.json"
+
+  # Run again - should replace regular file with symlink
+  run_isolation_script "test-instance"
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"Shared credentials found"* ]]
+
+  # Verify it's a symlink again (not a regular file)
+  [ -L "$HOME/.claude/.credentials.json" ]
+  [ "$(readlink "$HOME/.claude/.credentials.json")" = "$SHARED_DATA_DIR/claude/credentials.json" ]
+}
+
+# =============================================================================
+# Test: Backward compatibility - existing shared from manual script (AC6)
+# =============================================================================
+@test "backward compatibility: uses existing shared credentials without discovery" {
+  # Simulate setup-claude-auth-sharing.sh having already run
+  mkdir -p "$SHARED_DATA_DIR/claude"
+  echo '{"token": "manually-shared"}' > "$SHARED_DATA_DIR/claude/credentials.json"
+
+  run_isolation_script "test-instance"
+
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"Shared credentials found"* ]]
+
+  # Should NOT run discovery
+  [[ "$output" != *"discovering from instances"* ]]
+
+  # Verify symlink
+  [ -L "$HOME/.claude/.credentials.json" ]
+  [ "$(readlink "$HOME/.claude/.credentials.json")" = "$SHARED_DATA_DIR/claude/credentials.json" ]
+}
+
+# =============================================================================
+# Test: Idempotent - already symlinked, re-run recreates symlink (AC7)
+# =============================================================================
+@test "idempotent: re-run recreates credentials symlink" {
+  # Pre-create shared credentials
+  mkdir -p "$SHARED_DATA_DIR/claude"
+  echo '{"token": "shared"}' > "$SHARED_DATA_DIR/claude/credentials.json"
+
+  # First run
+  run_isolation_script "test-instance"
+  [ "$status" -eq 0 ]
+  [ -L "$HOME/.claude/.credentials.json" ]
+
+  # Second run - should succeed and re-create symlink
+  run_isolation_script "test-instance"
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"Shared credentials found"* ]]
+
+  # Verify symlink still correct
+  [ -L "$HOME/.claude/.credentials.json" ]
+  [ "$(readlink "$HOME/.claude/.credentials.json")" = "$SHARED_DATA_DIR/claude/credentials.json" ]
+  [ -r "$HOME/.claude/.credentials.json" ]
 }

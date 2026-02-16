@@ -2,6 +2,10 @@
 # setup-claude-auth-sharing.sh
 # Copies local Claude credentials to shared volume for use by other instances
 #
+# DEPRECATED: Credential sharing is now handled automatically by
+# setup-instance-isolation.sh via discovery-based promotion on every instance
+# startup. This script is kept for manual use if needed.
+#
 # Run this AFTER authenticating with Claude in the first instance.
 # This is a MANUAL operation - explicit user action ensures informed consent.
 #

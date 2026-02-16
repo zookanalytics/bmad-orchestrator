@@ -316,32 +316,52 @@ echo "  ~/.claude/settings.json -> $SETTINGS_FILE"
 
 check_fail_at_step 6
 
-# --- Step 7: Symlink Claude credentials (SHARED) ---
+# --- Helper functions for credential discovery/promotion ---
+
+# Discover most recent credentials from instance directories
+# Returns path to most recent .credentials.json, or empty if none found
+discover_most_recent_credentials() {
+  find "$SHARED_DATA/instance" -mindepth 3 -maxdepth 3 -type f -name ".credentials.json" \
+    -path "*/claude/.credentials.json" -printf '%T@ %p\n' 2>/dev/null | \
+    sort -rn | head -1 | cut -d' ' -f2-
+}
+
+# Promote discovered credentials to shared location with flock safety
+# Args: $1 = path to discovered credentials file
+# Returns: 0 if successful or shared already exists, 1 if failed
+promote_credentials_to_shared() {
+  local discovered_path="$1"
+  mkdir -p "$SHARED_DATA/claude"
+  (
+    # Acquire flock with 30s timeout
+    if ! flock -w 30 200; then
+      echo "    WARNING: Could not acquire lock for credential promotion"
+      exit 1
+    fi
+
+    # Check if shared already exists (another instance won the race)
+    if [ -f "$SHARED_DATA/claude/credentials.json" ]; then
+      exit 0
+    fi
+
+    # Move to shared (atomic)
+    mv "$discovered_path" "$SHARED_DATA/claude/credentials.json" || exit 1
+
+    # Set permissions BEFORE making visible
+    chmod 644 "$SHARED_DATA/claude/credentials.json" || exit 1
+
+    # Create symlink back at original location
+    ln -sf "$SHARED_DATA/claude/credentials.json" "$discovered_path" || exit 1
+
+    exit 0
+  ) 200>"$SHARED_DATA/claude/.credentials-sharing.lock"
+}
+
+# --- Step 7: Setup shared Claude inner config and credentials ---
 echo ""
-echo "[7] Setting up shared Claude credentials..."
+echo "[7] Setting up shared Claude inner config and credentials..."
 
-# 7a: .credentials.json
-CREDENTIALS_FILE="$SHARED_DATA/claude/credentials.json"
-
-# Bootstrap with empty JSON if not exists
-if [ ! -f "$CREDENTIALS_FILE" ]; then
-  echo "  Bootstrapping empty credentials.json..."
-  echo '{}' > "$CREDENTIALS_FILE"
-fi
-
-if ! ln -sf "$CREDENTIALS_FILE" "$HOME/.claude/.credentials.json"; then
-  echo "E006: ERROR: Failed to create symlink: ~/.claude/.credentials.json -> $CREDENTIALS_FILE"
-  exit 1
-fi
-track_symlink "$HOME/.claude/.credentials.json"
-
-if [ ! -L "$HOME/.claude/.credentials.json" ]; then
-  echo "E007: ERROR: Symlink verification failed for: ~/.claude/.credentials.json"
-  exit 1
-fi
-echo "  ~/.claude/.credentials.json -> $CREDENTIALS_FILE"
-
-# 7b: .claude.json (inside ~/.claude/ - account info, auth, etc.)
+# 7a: .claude.json (inside ~/.claude/ - account info, auth, etc.)
 CLAUDE_INNER_CONFIG="$SHARED_DATA/claude/inner-config.json"
 
 # Bootstrap with empty JSON if not exists (Claude accepts {} as valid)
@@ -361,6 +381,51 @@ if [ ! -L "$HOME/.claude/.claude.json" ]; then
   exit 1
 fi
 echo "  ~/.claude/.claude.json -> $CLAUDE_INNER_CONFIG"
+
+# 7b: Validate and setup Claude credentials sharing (discovery-based)
+echo "  Validating Claude credentials sharing..."
+CREDENTIALS_FILE="$SHARED_DATA/claude/credentials.json"
+
+if [ -f "$CREDENTIALS_FILE" ]; then
+  echo "    Shared credentials found, ensuring symlink..."
+  if ! ln -sf "$CREDENTIALS_FILE" "$HOME/.claude/.credentials.json"; then
+    echo "E006: ERROR: Failed to create symlink: ~/.claude/.credentials.json -> $CREDENTIALS_FILE"
+    exit 1
+  fi
+  track_symlink "$HOME/.claude/.credentials.json"
+  # Verify readable
+  if [ ! -r "$HOME/.claude/.credentials.json" ]; then
+    echo "E008: ERROR: Credentials symlink not readable"
+    exit 1
+  fi
+  echo "    ✓ Credentials symlinked to shared"
+else
+  discovered=$(discover_most_recent_credentials)
+  if [ -n "$discovered" ]; then
+    echo "    No shared credentials, discovering from instances..."
+    echo "    Found credentials: $discovered"
+    # || true: prevent set -e from killing script on promotion failure;
+    # we check for success via [ -f "$CREDENTIALS_FILE" ] below
+    promote_credentials_to_shared "$discovered" || true
+    # Check if promotion succeeded (shared now exists)
+    if [ -f "$CREDENTIALS_FILE" ]; then
+      if ! ln -sf "$CREDENTIALS_FILE" "$HOME/.claude/.credentials.json"; then
+        echo "E006: ERROR: Failed to create symlink: ~/.claude/.credentials.json -> $CREDENTIALS_FILE"
+        exit 1
+      fi
+      track_symlink "$HOME/.claude/.credentials.json"
+      if [ ! -r "$HOME/.claude/.credentials.json" ]; then
+        echo "E008: ERROR: Credentials symlink not readable"
+        exit 1
+      fi
+      echo "    ✓ Credentials promoted and symlinked"
+    else
+      echo "    Promotion failed, credentials remain local"
+    fi
+  else
+    echo "    No credentials found - first instance will create on auth"
+  fi
+fi
 
 check_fail_at_step 7
 
