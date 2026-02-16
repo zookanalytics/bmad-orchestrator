@@ -1,5 +1,17 @@
 # @zookanalytics/agent-env
 
+## 0.3.1
+
+### Patch Changes
+
+- [#20](https://github.com/zookanalytics/bmad-orchestrator/pull/20) [`f900879`](https://github.com/zookanalytics/bmad-orchestrator/commit/f90087979e2a373f948bc15c7f162c8b7af703bd) Thanks [@johnzook](https://github.com/johnzook)! - fix(devcontainer): prevent container hang during SSH setup
+
+  Replaces direct sudo commands with a dedicated install-ssh-host-keys.sh script in post-create.sh. The previous approach used sudo cp/chown/chmod which hung indefinitely because these commands weren't in sudoers, causing the container to wait for a password that would never come.
+
+  Also adds agent-env README documentation for workspace structure, SSH access (host keys vs user keys), and commit signing setup (SSH signing recommended over GPG).
+
+  Additionally improves the local image testing workflow by using docker tag/pull to switch between local and remote images, avoiding modifications to tracked config files.
+
 ## 0.3.0
 
 ### Minor Changes
