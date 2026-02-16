@@ -225,7 +225,27 @@ describe('createInstance', () => {
     );
   });
 
-  it('calls devcontainerUp after successful clone with AGENT_INSTANCE', async () => {
+  it('calls devcontainerUp after successful clone with AGENT_INSTANCE and AGENT_ENV_PURPOSE', async () => {
+    const deps = createTestDeps(gitCloneSuccess);
+
+    await createInstance('auth', 'https://github.com/user/bmad-orch.git', deps, {
+      purpose: 'JWT authentication',
+    });
+
+    expect(deps.container.devcontainerUp).toHaveBeenCalledWith(
+      expect.stringContaining('bmad-orch-auth'),
+      'ae-bmad-orch-auth',
+      expect.objectContaining({
+        remoteEnv: {
+          AGENT_INSTANCE: 'bmad-orch-auth',
+          AGENT_ENV_PURPOSE: 'JWT authentication',
+        },
+        configPath: expect.stringContaining(join('.agent-env', 'devcontainer.json')),
+      })
+    );
+  });
+
+  it('passes empty string AGENT_ENV_PURPOSE in devcontainerUp remoteEnv when no purpose', async () => {
     const deps = createTestDeps(gitCloneSuccess);
 
     await createInstance('auth', 'https://github.com/user/bmad-orch.git', deps);
@@ -234,8 +254,10 @@ describe('createInstance', () => {
       expect.stringContaining('bmad-orch-auth'),
       'ae-bmad-orch-auth',
       expect.objectContaining({
-        remoteEnv: { AGENT_INSTANCE: 'bmad-orch-auth' },
-        configPath: expect.stringContaining(join('.agent-env', 'devcontainer.json')),
+        remoteEnv: {
+          AGENT_INSTANCE: 'bmad-orch-auth',
+          AGENT_ENV_PURPOSE: '',
+        },
       })
     );
   });
@@ -678,6 +700,71 @@ describe('createInstance', () => {
     const excludePath = join(result.workspacePath.root, '.git', 'info', 'exclude');
     const content = await readFile(excludePath, 'utf-8');
     expect(content).toContain('.agent-env/');
+  });
+
+  it('writes purpose to state.json when --purpose is provided', async () => {
+    const deps = createTestDeps(gitCloneSuccess);
+
+    const result = await createInstance('auth', 'https://github.com/user/bmad-orch.git', deps, {
+      purpose: 'JWT authentication',
+    });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) throw new Error('Expected success');
+
+    const stateContent = await readFile(result.workspacePath.stateFile, 'utf-8');
+    const state = JSON.parse(stateContent);
+    expect(state.purpose).toBe('JWT authentication');
+  });
+
+  it('writes purpose as null to state.json when --purpose is not provided', async () => {
+    const deps = createTestDeps(gitCloneSuccess);
+
+    const result = await createInstance('auth', 'https://github.com/user/bmad-orch.git', deps);
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) throw new Error('Expected success');
+
+    const stateContent = await readFile(result.workspacePath.stateFile, 'utf-8');
+    const state = JSON.parse(stateContent);
+    expect(state.purpose).toBeNull();
+  });
+
+  it('includes AGENT_ENV_PURPOSE in patchContainerEnv call for baseline config', async () => {
+    const deps = createTestDeps(gitCloneSuccess, {}, false);
+
+    await createInstance('auth', 'https://github.com/user/bmad-orch.git', deps, {
+      purpose: 'JWT authentication',
+    });
+
+    // patchContainerEnv is called via devcontainerFsDeps.writeFile
+    // The second writeFile call (after patchContainerName) should contain AGENT_ENV_PURPOSE
+    const writeFileCalls = (deps.devcontainerFsDeps.writeFile as ReturnType<typeof vi.fn>).mock
+      .calls;
+    // Find the call that contains AGENT_ENV_PURPOSE
+    const envPatchCall = writeFileCalls.find(
+      (call: unknown[]) =>
+        typeof call[1] === 'string' && (call[1] as string).includes('AGENT_ENV_PURPOSE')
+    );
+    expect(envPatchCall).toBeDefined();
+    const writtenContent = JSON.parse((envPatchCall as unknown[])[1] as string);
+    expect(writtenContent.containerEnv.AGENT_ENV_PURPOSE).toBe('JWT authentication');
+  });
+
+  it('sets AGENT_ENV_PURPOSE to empty string in patchContainerEnv when no purpose', async () => {
+    const deps = createTestDeps(gitCloneSuccess, {}, false);
+
+    await createInstance('auth', 'https://github.com/user/bmad-orch.git', deps);
+
+    const writeFileCalls = (deps.devcontainerFsDeps.writeFile as ReturnType<typeof vi.fn>).mock
+      .calls;
+    const envPatchCall = writeFileCalls.find(
+      (call: unknown[]) =>
+        typeof call[1] === 'string' && (call[1] as string).includes('AGENT_ENV_PURPOSE')
+    );
+    expect(envPatchCall).toBeDefined();
+    const writtenContent = JSON.parse((envPatchCall as unknown[])[1] as string);
+    expect(writtenContent.containerEnv.AGENT_ENV_PURPOSE).toBe('');
   });
 });
 

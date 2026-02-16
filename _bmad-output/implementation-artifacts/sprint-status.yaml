@@ -150,7 +150,7 @@ development_status:
   # PRD revision 2026-02-14: FR46-FR50, NFR22-NFR24
   env-epic-6: in-progress
   env-6-1-baseline-devcontainer-updates-for-purpose-infrastructure: done
-  env-6-2-purpose-flag-on-create-and-agent-env-purpose-env-var: backlog
+  env-6-2-purpose-flag-on-create-and-agent-env-purpose-env-var: done
   env-6-3-agent-env-cli-inside-containers-with-live-purpose-updates: backlog
   env-epic-6-retrospective: optional
 

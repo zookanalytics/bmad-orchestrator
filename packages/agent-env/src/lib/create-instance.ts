@@ -236,6 +236,61 @@ export function createDefaultDeps(): CreateInstanceDeps {
 }
 
 /**
+ * Set up the devcontainer configuration for the workspace.
+ * Returns the config source ('baseline' or 'repo') on success, or a CreateResult error on failure.
+ */
+async function setupDevcontainerConfig(
+  wsPath: WorkspacePath,
+  containerName: string,
+  repoName: string,
+  purposeText: string,
+  deps: CreateInstanceDeps
+): Promise<{ ok: true; configSource: 'baseline' | 'repo' } | (CreateResult & { ok: false })> {
+  const hasConfig = await hasDevcontainerConfig(wsPath.root, deps.devcontainerFsDeps);
+  if (hasConfig) {
+    return { ok: true, configSource: 'repo' };
+  }
+
+  try {
+    await copyBaselineConfig(wsPath.root, deps.devcontainerFsDeps);
+  } catch (err) {
+    await safeRollback(wsPath.root, deps.rm, deps.logger);
+    return {
+      ok: false,
+      error: {
+        code: 'CONTAINER_ERROR',
+        message: `Failed to copy baseline devcontainer config: ${err instanceof Error ? err.message : String(err)}`,
+      },
+    };
+  }
+
+  try {
+    await patchContainerName(wsPath.root, containerName, deps.devcontainerFsDeps, AGENT_ENV_DIR);
+    await patchContainerEnv(
+      wsPath.root,
+      {
+        AGENT_ENV_INSTANCE: wsPath.name,
+        AGENT_ENV_REPO: repoName,
+        AGENT_ENV_PURPOSE: purposeText,
+      },
+      deps.devcontainerFsDeps,
+      AGENT_ENV_DIR
+    );
+  } catch (err) {
+    await safeRollback(wsPath.root, deps.rm, deps.logger);
+    return {
+      ok: false,
+      error: {
+        code: 'CONTAINER_ERROR',
+        message: `Failed to patch baseline devcontainer.json: ${err instanceof Error ? err.message : String(err)}`,
+      },
+    };
+  }
+
+  return { ok: true, configSource: 'baseline' };
+}
+
+/**
  * Create a new instance from a git repository.
  *
  * Orchestration flow:
@@ -253,13 +308,18 @@ export function createDefaultDeps(): CreateInstanceDeps {
  * @param instanceName - User-provided instance name (e.g., "auth")
  * @param repoUrl - Git repository URL (HTTPS or SSH)
  * @param deps - Injectable dependencies
+ * @param options - Optional parameters (purpose)
  * @returns CreateResult with success/failure info
  */
 export async function createInstance(
   instanceName: string,
   repoUrl: string,
-  deps: CreateInstanceDeps
+  deps: CreateInstanceDeps,
+  options?: { purpose?: string }
 ): Promise<CreateResult> {
+  const purposeText = options?.purpose ?? '';
+  const purposeState = options?.purpose ?? null;
+
   // Step 1: Extract repo name from URL
   let repoName: string;
   try {
@@ -338,52 +398,18 @@ export async function createInstance(
     };
   }
 
-  // Step 5: Copy baseline devcontainer config if none exists
-  const hasConfig = await hasDevcontainerConfig(wsPath.root, deps.devcontainerFsDeps);
-  let configSource: 'baseline' | 'repo' = 'baseline';
-  if (!hasConfig) {
-    try {
-      await copyBaselineConfig(wsPath.root, deps.devcontainerFsDeps);
-    } catch (err) {
-      await safeRollback(wsPath.root, deps.rm, deps.logger);
-      return {
-        ok: false,
-        error: {
-          code: 'CONTAINER_ERROR',
-          message: `Failed to copy baseline devcontainer config: ${err instanceof Error ? err.message : String(err)}`,
-        },
-      };
-    }
-
-    // Step 5b: Patch our baseline devcontainer.json with container name and
-    // per-instance environment variables. Only done for baseline configs we
-    // control (valid JSON). Repo-provided configs may use JSONC and shouldn't
-    // be modified. AGENT_ENV_INSTANCE and AGENT_ENV_REPO are per-instance
-    // values that can't be set via devcontainer variable substitution.
-    try {
-      await patchContainerName(wsPath.root, containerName, deps.devcontainerFsDeps, AGENT_ENV_DIR);
-      await patchContainerEnv(
-        wsPath.root,
-        {
-          AGENT_ENV_INSTANCE: wsPath.name,
-          AGENT_ENV_REPO: repoName,
-        },
-        deps.devcontainerFsDeps,
-        AGENT_ENV_DIR
-      );
-    } catch (err) {
-      await safeRollback(wsPath.root, deps.rm, deps.logger);
-      return {
-        ok: false,
-        error: {
-          code: 'CONTAINER_ERROR',
-          message: `Failed to patch baseline devcontainer.json: ${err instanceof Error ? err.message : String(err)}`,
-        },
-      };
-    }
-  } else {
-    configSource = 'repo';
+  // Step 5: Copy baseline devcontainer config if none exists, patch with instance env vars
+  const configResult = await setupDevcontainerConfig(
+    wsPath,
+    containerName,
+    repoName,
+    purposeText,
+    deps
+  );
+  if (!configResult.ok) {
+    return configResult;
   }
+  const { configSource } = configResult;
 
   // Step 5c: Pre-flight check for existing containers at this workspace path
   const existingContainer = await deps.container.findContainerByWorkspaceLabel(wsPath.root);
@@ -407,7 +433,10 @@ export async function createInstance(
   const baselineConfigPath =
     configSource === 'baseline' ? join(wsPath.root, AGENT_ENV_DIR, 'devcontainer.json') : undefined;
   const containerResult = await deps.container.devcontainerUp(wsPath.root, containerName, {
-    remoteEnv: { AGENT_INSTANCE: wsPath.name },
+    remoteEnv: {
+      AGENT_INSTANCE: wsPath.name,
+      AGENT_ENV_PURPOSE: purposeText,
+    },
     configPath: baselineConfigPath,
   });
   if (!containerResult.ok) {
@@ -434,6 +463,7 @@ export async function createInstance(
   const state = createInitialState(wsPath.name, repoUrl, {
     containerName: actualContainerName,
     configSource,
+    purpose: purposeState,
   });
   await writeStateAtomic(wsPath, state, deps.stateFsDeps);
 

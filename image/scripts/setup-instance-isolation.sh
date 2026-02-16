@@ -483,6 +483,26 @@ echo "  AGENT_INSTANCE=$INSTANCE_ID"
 
 check_fail_at_step 11
 
+# --- Step 11b: Export AGENT_ENV_PURPOSE (dynamic from state.json) ---
+echo ""
+echo "[11b] Exporting AGENT_ENV_PURPOSE..."
+
+PURPOSE_MARKER="[setup-instance-isolation:AGENT_ENV_PURPOSE]"
+# Use double quotes for safety against word splitting and special characters.
+# Check if jq is available before attempting to use it.
+PURPOSE_LINE='if command -v jq >/dev/null 2>&1; then export AGENT_ENV_PURPOSE="$(jq -r '"'"'.purpose // ""'"'"' /etc/agent-env/state.json 2>/dev/null)"; else export AGENT_ENV_PURPOSE=""; fi # '"$PURPOSE_MARKER"
+
+if grep -qF "$PURPOSE_MARKER" "$HOME/.zshrc" 2>/dev/null; then
+  # Update existing line — escape brackets for sed regex
+  ESCAPED_MARKER=$(printf '%s' "$PURPOSE_MARKER" | sed 's/[][\\.^$*]/\\&/g')
+  sed -i "s|.*$ESCAPED_MARKER.*|$PURPOSE_LINE|" "$HOME/.zshrc"
+else
+  # Append new line
+  echo "$PURPOSE_LINE" >> "$HOME/.zshrc"
+fi
+
+echo "  AGENT_ENV_PURPOSE export added to .zshrc (reads from state.json at shell startup)"
+
 # --- Step 12: Symlink ~/.config/gh -> shared directory ---
 echo ""
 echo "[12] Setting up GitHub CLI config (shared)..."

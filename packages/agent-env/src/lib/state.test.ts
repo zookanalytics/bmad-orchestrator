@@ -340,6 +340,32 @@ describe('createInitialState', () => {
     expect(state.containerName).toBe('custom');
     expect(state.configSource).toBe('repo');
   });
+
+  it('sets purpose when provided as string', () => {
+    const state = createInitialState('test', 'repo-url', { purpose: 'JWT authentication' });
+    expect(state.purpose).toBe('JWT authentication');
+  });
+
+  it('sets purpose to null when provided as null', () => {
+    const state = createInitialState('test', 'repo-url', { purpose: null });
+    expect(state.purpose).toBeNull();
+  });
+
+  it('defaults purpose to null when not provided', () => {
+    const state = createInitialState('test', 'repo-url', { containerName: 'custom' });
+    expect(state.purpose).toBeNull();
+  });
+
+  it('sets purpose alongside containerName and configSource', () => {
+    const state = createInitialState('test', 'repo-url', {
+      containerName: 'custom',
+      configSource: 'repo',
+      purpose: 'OAuth integration',
+    });
+    expect(state.containerName).toBe('custom');
+    expect(state.configSource).toBe('repo');
+    expect(state.purpose).toBe('OAuth integration');
+  });
 });
 
 // ─── isValidState backwards compatibility ───────────────────────────────────

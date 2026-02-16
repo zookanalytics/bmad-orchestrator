@@ -104,16 +104,16 @@ export async function writeStateAtomic(
 export function createInitialState(
   name: string,
   repo: string,
-  options?: { containerName?: string; configSource?: 'baseline' | 'repo' }
+  options?: { containerName?: string; configSource?: 'baseline' | 'repo'; purpose?: string | null }
 ): InstanceState {
-  const { containerName, configSource } = options ?? {};
+  const { containerName, configSource, purpose } = options ?? {};
   const now = new Date().toISOString();
   return {
     name,
     repo,
     createdAt: now,
     lastAttached: now,
-    purpose: null,
+    purpose: purpose ?? null,
     containerName: containerName ?? `${CONTAINER_PREFIX}${name}`,
     configSource: configSource ?? 'baseline',
   };
