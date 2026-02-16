@@ -34,7 +34,8 @@
 #   E005: Failed to create directory
 #   E006: Failed to create symlink (ln -sf failed)
 #   E007: Symlink verification failed (symlink not created or not a symlink)
-#   E008: Symlink readability/writability check failed (health check or credentials)
+#   E008: Final health check failed (symlinks not writable)
+#   E009: Credentials symlink not readable after creation
 
 # --- Testing support ---
 # FAIL_AT_STEP: If set, script will fail after completing that step (for rollback testing)
@@ -396,7 +397,7 @@ if [ -f "$CREDENTIALS_FILE" ]; then
   track_symlink "$HOME/.claude/.credentials.json"
   # Verify readable
   if [ ! -r "$HOME/.claude/.credentials.json" ]; then
-    echo "E008: ERROR: Credentials symlink not readable"
+    echo "E009: ERROR: Credentials symlink not readable"
     exit 1
   fi
   echo "    ✓ Credentials symlinked to shared"
@@ -417,7 +418,7 @@ else
       fi
       track_symlink "$HOME/.claude/.credentials.json"
       if [ ! -r "$HOME/.claude/.credentials.json" ]; then
-        echo "E008: ERROR: Credentials symlink not readable"
+        echo "E009: ERROR: Credentials symlink not readable"
         exit 1
       fi
       echo "    ✓ Credentials promoted and symlinked"

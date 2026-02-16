@@ -21,7 +21,7 @@ setup() {
   # Path to script under test - prefer repo version for development
   SCRIPT="${BATS_TEST_DIRNAME}/../setup-instance-isolation.sh"
 
-  # Fall back to installed version in container
+  # If repo script is not available (e.g., in a container), fall back to installed version
   if [ ! -f "$SCRIPT" ]; then
     SCRIPT="/usr/local/bin/setup-instance-isolation.sh"
   fi
