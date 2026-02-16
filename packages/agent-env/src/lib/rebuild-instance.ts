@@ -30,7 +30,6 @@ import type { StateFsDeps } from './state.js';
 import type { ContainerResult, InstanceState, WorkspacePath } from './types.js';
 import type { FsDeps } from './workspace.js';
 
-import { findWorkspaceByName } from './attach-instance.js';
 import { createContainerLifecycle } from './container.js';
 import {
   getBaselineConfigPath,
@@ -41,7 +40,7 @@ import {
 } from './devcontainer.js';
 import { readState, writeStateAtomic } from './state.js';
 import { AGENT_ENV_DIR } from './types.js';
-import { getWorkspacePathByName } from './workspace.js';
+import { getWorkspacePathByName, resolveInstance } from './workspace.js';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -191,29 +190,16 @@ type WorkspaceLookupResult =
 
 async function lookupWorkspace(
   instanceName: string,
-  deps: Pick<RebuildInstanceDeps, 'workspaceFsDeps' | 'stateFsDeps'>
+  deps: Pick<RebuildInstanceDeps, 'workspaceFsDeps' | 'stateFsDeps'>,
+  repoSlug?: string
 ): Promise<WorkspaceLookupResult> {
-  const lookup = await findWorkspaceByName(instanceName, deps.workspaceFsDeps);
+  const lookup = await resolveInstance(instanceName, repoSlug, {
+    fsDeps: deps.workspaceFsDeps,
+    readFile,
+  });
 
   if (!lookup.found) {
-    if (lookup.reason === 'ambiguous') {
-      return {
-        ok: false,
-        error: {
-          code: 'AMBIGUOUS_MATCH',
-          message: `Multiple instances match '${instanceName}': ${lookup.matches.join(', ')}`,
-          suggestion: 'Use the full workspace name to specify which instance.',
-        },
-      };
-    }
-    return {
-      ok: false,
-      error: {
-        code: 'WORKSPACE_NOT_FOUND',
-        message: `Instance '${instanceName}' not found`,
-        suggestion: 'Use `agent-env list` to see available instances.',
-      },
-    };
+    return { ok: false, error: lookup.error };
   }
 
   const wsPath = getWorkspacePathByName(lookup.workspaceName, deps.workspaceFsDeps);
@@ -367,7 +353,8 @@ async function teardownContainer(
 export async function rebuildInstance(
   instanceName: string,
   deps: RebuildInstanceDeps,
-  options?: RebuildOptions
+  options?: RebuildOptions,
+  repoSlug?: string
 ): Promise<RebuildResult> {
   const {
     force = false,
@@ -377,7 +364,7 @@ export async function rebuildInstance(
   } = options ?? {};
 
   // Step 1: Find workspace
-  const wsLookup = await lookupWorkspace(instanceName, deps);
+  const wsLookup = await lookupWorkspace(instanceName, deps, repoSlug);
   if (!wsLookup.ok) {
     return { ok: false, error: wsLookup.error };
   }
