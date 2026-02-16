@@ -1,8 +1,8 @@
 // Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
 
 exports[`InstanceList > Docker unavailable (AC: #5) > renders unknown status and warning when Docker is unavailable 1`] = `
-"NAME   STATUS                        GIT  LAST ATTACHED  SSH   PURPOSE
-my-ws  unknown (Docker unavailable)  ?    1 hour ago     -     Auth work
+"NAME   REPO  STATUS                        GIT  LAST ATTACHED  SSH   PURPOSE
+my-ws  repo  unknown (Docker unavailable)  ?    1 hour ago     -     Auth work
 
 ⚠ Docker is not available. Container status cannot be determined."
 `;
@@ -13,38 +13,38 @@ Create one with: agent-env create <name> --repo <url>"
 `;
 
 exports[`InstanceList > git state indicators > renders all git state indicators correctly (AC: #1-5) 1`] = `
-"NAME          STATUS   GIT  LAST ATTACHED  SSH   PURPOSE
-clean         running  ✓    1 hour ago     -     -
-uncommitted   running  ●    1 hour ago     -     -
-unpushed      running  ↑    1 hour ago     -     -
-never-pushed  running  ⚠ 2  1 hour ago     -     -
-combined      running  ● ↑  1 hour ago     -     -
-unavailable   running  ?    1 hour ago     -     -"
+"NAME          REPO  STATUS   GIT  LAST ATTACHED  SSH   PURPOSE
+clean         repo  running  ✓    1 hour ago     -     -
+uncommitted   repo  running  ●    1 hour ago     -     -
+unpushed      repo  running  ↑    1 hour ago     -     -
+never-pushed  repo  running  ⚠ 2  1 hour ago     -     -
+combined      repo  running  ● ↑  1 hour ago     -     -
+unavailable   repo  running  ?    1 hour ago     -     -"
 `;
 
 exports[`InstanceList > last attached formatting (AC: #6) > renders relative time and dash for null 1`] = `
-"NAME    STATUS   GIT  LAST ATTACHED  SSH   PURPOSE
-recent  running  ✓    a few seconds ago       -     -
-none    running  ✓    -              -     -"
+"NAME    REPO  STATUS   GIT  LAST ATTACHED  SSH   PURPOSE
+recent  repo  running  ✓    a few seconds ago       -     -
+none    repo  running  ✓    -              -     -"
 `;
 
 exports[`InstanceList > purpose column > renders purpose and truncates long text 1`] = `
-"NAME  STATUS   GIT  LAST ATTACHED  SSH   PURPOSE
-p1    running  ✓    1 hour ago     -     OAuth
-p2    running  ✓    1 hour ago     -     -
-p3    running  ✓    1 hour ago     -     This is a very long purpose..."
+"NAME  REPO  STATUS   GIT  LAST ATTACHED  SSH   PURPOSE
+p1    repo  running  ✓    1 hour ago     -     OAuth
+p2    repo  running  ✓    1 hour ago     -     -
+p3    repo  running  ✓    1 hour ago     -     This is a very long purpose..."
 `;
 
 exports[`InstanceList > status rendering > renders correct colors for all statuses (AC: #2, #3, #4) 1`] = `
-"NAME    STATUS    GIT  LAST ATTACHED  SSH   PURPOSE
-run     running   ✓    1 hour ago     -     -
-stop    stopped   ✓    1 hour ago     -     -
-orphan  orphaned  ✓    1 hour ago     -     -"
+"NAME    REPO  STATUS    GIT  LAST ATTACHED  SSH   PURPOSE
+run     repo  running   ✓    1 hour ago     -     -
+stop    repo  stopped   ✓    1 hour ago     -     -
+orphan  repo  orphaned  ✓    1 hour ago     -     -"
 `;
 
 exports[`InstanceList > table rendering (AC: #1) > renders header row and data for multiple instances 1`] = `
-"NAME   STATUS    GIT  LAST ATTACHED  SSH   PURPOSE
-alpha  running   ✓    1 hour ago     -     Auth service
-beta   stopped   ✓    1 hour ago     -     Database
-gamma  orphaned  ✓    -              -     -"
+"NAME   REPO  STATUS    GIT  LAST ATTACHED  SSH   PURPOSE
+alpha  repo  running   ✓    1 hour ago     -     Auth service
+beta   repo  stopped   ✓    1 hour ago     -     Database
+gamma  repo  orphaned  ✓    -              -     -"
 `;

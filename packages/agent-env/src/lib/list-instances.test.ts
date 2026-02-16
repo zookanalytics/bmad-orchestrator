@@ -955,4 +955,206 @@ describe('listInstances', () => {
       expect(result.instances[0].gitState?.ok).toBe(false);
     });
   });
+
+  describe('repo fields (Story 7.4)', () => {
+    it('includes repoSlug and repoUrl from state', async () => {
+      const container = mockContainer();
+      const wsFsDeps = mockFsDeps(['bmad-orch-auth']);
+      const stateFsDeps = mockStateFsDeps({
+        'bmad-orch-auth': makeState({
+          instance: 'auth',
+          repoSlug: 'bmad-orchestrator',
+          repoUrl: 'https://github.com/user/bmad-orchestrator.git',
+          containerName: 'ae-bmad-orchestrator-auth',
+        }),
+      });
+
+      const result = await listInstances({
+        container,
+        gitDetector: mockGitDetector(),
+        workspaceFsDeps: wsFsDeps,
+        stateFsDeps,
+      });
+      assertSuccess(result);
+
+      expect(result.instances[0].repoSlug).toBe('bmad-orchestrator');
+      expect(result.instances[0].repoUrl).toBe('https://github.com/user/bmad-orchestrator.git');
+    });
+
+    it('includes fallback repoSlug/repoUrl for missing state', async () => {
+      const container = mockContainer();
+      const wsFsDeps = mockFsDeps(['my-instance']);
+      const stateFsDeps = mockStateFsDeps({});
+      stateFsDeps.readFile = vi
+        .fn()
+        .mockRejectedValue(Object.assign(new Error('ENOENT'), { code: 'ENOENT' }));
+
+      const result = await listInstances({
+        container,
+        gitDetector: mockGitDetector(),
+        workspaceFsDeps: wsFsDeps,
+        stateFsDeps,
+      });
+      assertSuccess(result);
+
+      // Fallback state has 'unknown' for repoSlug and repoUrl
+      expect(result.instances[0].repoSlug).toBe('unknown');
+      expect(result.instances[0].repoUrl).toBe('unknown');
+    });
+
+    it('includes different repoSlugs for instances from different repos', async () => {
+      const container = mockContainer();
+      const wsFsDeps = mockFsDeps(['bmad-orch-auth', 'awesome-cli-dev']);
+      const stateFsDeps = mockStateFsDeps({
+        'bmad-orch-auth': makeState({
+          instance: 'auth',
+          repoSlug: 'bmad-orchestrator',
+          repoUrl: 'https://github.com/user/bmad-orchestrator.git',
+          containerName: 'ae-bmad-orchestrator-auth',
+        }),
+        'awesome-cli-dev': makeState({
+          instance: 'dev',
+          repoSlug: 'awesome-cli',
+          repoUrl: 'https://github.com/user/awesome-cli.git',
+          containerName: 'ae-awesome-cli-dev',
+        }),
+      });
+
+      const result = await listInstances({
+        container,
+        gitDetector: mockGitDetector(),
+        workspaceFsDeps: wsFsDeps,
+        stateFsDeps,
+      });
+      assertSuccess(result);
+
+      expect(result.instances).toHaveLength(2);
+      expect(result.instances[0].repoSlug).toBe('bmad-orchestrator');
+      expect(result.instances[1].repoSlug).toBe('awesome-cli');
+    });
+  });
+
+  describe('repo filter (Story 7.4)', () => {
+    it('filters instances by repoSlug when repoFilter is provided', async () => {
+      const container = mockContainer();
+      const wsFsDeps = mockFsDeps(['bmad-orch-auth', 'awesome-cli-dev', 'bmad-orch-api']);
+      const stateFsDeps = mockStateFsDeps({
+        'bmad-orch-auth': makeState({
+          instance: 'auth',
+          repoSlug: 'bmad-orchestrator',
+          repoUrl: 'https://github.com/user/bmad-orchestrator.git',
+          containerName: 'ae-bmad-orchestrator-auth',
+        }),
+        'awesome-cli-dev': makeState({
+          instance: 'dev',
+          repoSlug: 'awesome-cli',
+          repoUrl: 'https://github.com/user/awesome-cli.git',
+          containerName: 'ae-awesome-cli-dev',
+        }),
+        'bmad-orch-api': makeState({
+          instance: 'api',
+          repoSlug: 'bmad-orchestrator',
+          repoUrl: 'https://github.com/user/bmad-orchestrator.git',
+          containerName: 'ae-bmad-orchestrator-api',
+        }),
+      });
+
+      const result = await listInstances(
+        {
+          container,
+          gitDetector: mockGitDetector(),
+          workspaceFsDeps: wsFsDeps,
+          stateFsDeps,
+        },
+        { repoFilter: 'bmad-orchestrator' }
+      );
+      assertSuccess(result);
+
+      expect(result.instances).toHaveLength(2);
+      expect(result.instances[0].repoSlug).toBe('bmad-orchestrator');
+      expect(result.instances[1].repoSlug).toBe('bmad-orchestrator');
+    });
+
+    it('returns empty array when no instances match repoFilter', async () => {
+      const container = mockContainer();
+      const wsFsDeps = mockFsDeps(['bmad-orch-auth']);
+      const stateFsDeps = mockStateFsDeps({
+        'bmad-orch-auth': makeState({
+          instance: 'auth',
+          repoSlug: 'bmad-orchestrator',
+          repoUrl: 'https://github.com/user/bmad-orchestrator.git',
+          containerName: 'ae-bmad-orchestrator-auth',
+        }),
+      });
+
+      const result = await listInstances(
+        {
+          container,
+          gitDetector: mockGitDetector(),
+          workspaceFsDeps: wsFsDeps,
+          stateFsDeps,
+        },
+        { repoFilter: 'nonexistent-repo' }
+      );
+      assertSuccess(result);
+
+      expect(result.instances).toHaveLength(0);
+    });
+
+    it('performs case-insensitive repoFilter matching', async () => {
+      const container = mockContainer();
+      const wsFsDeps = mockFsDeps(['bmad-orch-auth']);
+      const stateFsDeps = mockStateFsDeps({
+        'bmad-orch-auth': makeState({
+          instance: 'auth',
+          repoSlug: 'bmad-orchestrator',
+          repoUrl: 'https://github.com/user/bmad-orchestrator.git',
+          containerName: 'ae-bmad-orchestrator-auth',
+        }),
+      });
+
+      const result = await listInstances(
+        {
+          container,
+          gitDetector: mockGitDetector(),
+          workspaceFsDeps: wsFsDeps,
+          stateFsDeps,
+        },
+        { repoFilter: 'BMAD-ORCHESTRATOR' }
+      );
+      assertSuccess(result);
+
+      expect(result.instances).toHaveLength(1);
+      expect(result.instances[0].repoSlug).toBe('bmad-orchestrator');
+    });
+
+    it('returns all instances when repoFilter is undefined', async () => {
+      const container = mockContainer();
+      const wsFsDeps = mockFsDeps(['bmad-orch-auth', 'awesome-cli-dev']);
+      const stateFsDeps = mockStateFsDeps({
+        'bmad-orch-auth': makeState({
+          instance: 'auth',
+          repoSlug: 'bmad-orchestrator',
+          repoUrl: 'https://github.com/user/bmad-orchestrator.git',
+          containerName: 'ae-bmad-orchestrator-auth',
+        }),
+        'awesome-cli-dev': makeState({
+          instance: 'dev',
+          repoSlug: 'awesome-cli',
+          repoUrl: 'https://github.com/user/awesome-cli.git',
+          containerName: 'ae-awesome-cli-dev',
+        }),
+      });
+
+      const result = await listInstances({
+        container,
+        gitDetector: mockGitDetector(),
+        workspaceFsDeps: wsFsDeps,
+        stateFsDeps,
+      });
+      assertSuccess(result);
+
+      expect(result.instances).toHaveLength(2);
+    });
+  });
 });

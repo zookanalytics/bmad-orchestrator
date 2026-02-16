@@ -72,6 +72,8 @@ function makeDirtyGitState(): GitStateResult {
 function makeInstance(overrides: Partial<Instance> = {}): Instance {
   return {
     name: 'test-instance',
+    repoSlug: 'repo',
+    repoUrl: 'https://github.com/user/repo.git',
     status: 'running',
     lastAttached: '2026-02-03T08:30:00.000Z',
     purpose: null,
@@ -230,6 +232,24 @@ describe('list command --json', () => {
       }
     });
 
+    it('includes repoSlug and repoUrl in JSON output (Story 7.4 AC: #2)', async () => {
+      const instances = [
+        makeInstance({
+          name: 'auth',
+          repoSlug: 'bmad-orchestrator',
+          repoUrl: 'https://github.com/user/bmad-orchestrator.git',
+        }),
+      ];
+      mockListInstances.mockResolvedValue(makeSuccessResult(instances));
+
+      await listCommand.parseAsync(['--json'], { from: 'user' });
+
+      const output = getCapturedJson();
+      const instance = output.data?.[0];
+      expect(instance).toHaveProperty('repoSlug', 'bmad-orchestrator');
+      expect(instance).toHaveProperty('repoUrl', 'https://github.com/user/bmad-orchestrator.git');
+    });
+
     it('does not include extra fields beyond the contract', async () => {
       const instances = [makeInstance({ name: 'clean-ws' })];
       mockListInstances.mockResolvedValue(makeSuccessResult(instances));
@@ -244,6 +264,8 @@ describe('list command --json', () => {
       expect(keys).toEqual(
         expect.arrayContaining([
           'name',
+          'repoSlug',
+          'repoUrl',
           'status',
           'lastAttached',
           'purpose',
@@ -251,7 +273,7 @@ describe('list command --json', () => {
           'sshConnection',
         ])
       );
-      expect(keys).toHaveLength(6);
+      expect(keys).toHaveLength(8);
     });
   });
 
@@ -347,6 +369,38 @@ describe('list command --json', () => {
       await listCommand.parseAsync([], { from: 'user' });
 
       expect(process.exitCode).toBe(1);
+    });
+  });
+
+  describe('--repo filter (Story 7.4 AC: #3)', () => {
+    it('passes repoFilter to listInstances when --repo is provided', async () => {
+      mockListInstances.mockResolvedValue(makeSuccessResult([]));
+
+      await listCommand.parseAsync(['--json', '--repo', 'bmad-orchestrator'], { from: 'user' });
+
+      expect(mockListInstances).toHaveBeenCalledWith(undefined, {
+        repoFilter: 'bmad-orchestrator',
+      });
+    });
+
+    it('passes undefined repoFilter when --repo is not provided', async () => {
+      mockListInstances.mockResolvedValue(makeSuccessResult([]));
+
+      await listCommand.parseAsync(['--json'], { from: 'user' });
+
+      expect(mockListInstances).toHaveBeenCalledWith(undefined, {
+        repoFilter: undefined,
+      });
+    });
+
+    it('works with --repo in non-JSON mode', async () => {
+      mockListInstances.mockResolvedValue(makeSuccessResult([]));
+
+      await listCommand.parseAsync(['--repo', 'my-repo'], { from: 'user' });
+
+      expect(mockListInstances).toHaveBeenCalledWith(undefined, {
+        repoFilter: 'my-repo',
+      });
     });
   });
 });
