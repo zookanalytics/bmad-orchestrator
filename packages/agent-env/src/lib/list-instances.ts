@@ -123,13 +123,17 @@ export async function listInstances(deps?: Partial<ListInstancesDeps>): Promise<
       // Calculate SSH connection string
       let sshConnection: string | null = null;
       if (status === 'running' && containerResult && containerResult.ok) {
-        const sshPort = containerResult.ports['22/tcp'];
-        if (sshPort) {
-          // Primary: OrbStack DNS (handles collisions via dedicated IP per container)
-          sshConnection = `node@${state.containerName}.orb.local`;
-          // Fallback: host port mapping (works with Docker Desktop and non-OrbStack runtimes)
-          if (sshPort !== '22') {
-            sshConnection += ` (localhost:${sshPort})`;
+        // Port 22 may be exposed but not published (OrbStack direct networking)
+        // — the key exists in ports with an empty string value
+        if ('22/tcp' in containerResult.ports) {
+          // Use OrbStack domain label override if present, otherwise default .orb.local DNS
+          const orbDomain = containerResult.labels['dev.orbstack.domains'];
+          const hostname = orbDomain || `${state.containerName}.orb.local`;
+          sshConnection = `node@${hostname}`;
+          // Append localhost port fallback when port is published to non-standard port
+          const hostPort = containerResult.ports['22/tcp'];
+          if (hostPort && hostPort !== '22') {
+            sshConnection += ` (localhost:${hostPort})`;
           }
         }
       }

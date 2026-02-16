@@ -95,8 +95,13 @@ RUN mkdir -p /etc/ssh && \
   ssh-keyscan -t ed25519,ecdsa,rsa github.com >> /etc/ssh/ssh_known_hosts 2>/dev/null
 
 # SSH server setup: runtime dir, hardened config, remove default host keys (generated per-container)
+# Unlock the node account for SSH pubkey auth — the base node:22 image sets the
+# password field to '!' (locked), and with UsePAM=no sshd rejects locked accounts
+# even when using key-based auth. Setting it to '*' unlocks the account while
+# keeping password login impossible (PasswordAuthentication no in sshd_config).
 RUN mkdir -p /run/sshd && \
-  rm -f /etc/ssh/ssh_host_*_key /etc/ssh/ssh_host_*_key.pub
+  rm -f /etc/ssh/ssh_host_*_key /etc/ssh/ssh_host_*_key.pub && \
+  usermod -p '*' node
 COPY image/config/sshd_config /etc/ssh/sshd_config
 
 EXPOSE 22
