@@ -128,18 +128,36 @@ describe('InteractiveMenu', () => {
     it('calls onAction with selected action and instance name', async () => {
       const instances = [makeInstance({ name: 'alpha', status: 'running' })];
       const onAction = vi.fn();
-      const { stdin } = render(
+      const { stdin, lastFrame } = render(
         <InteractiveMenu instances={instances} onAction={onAction} terminalWidth={80} />
       );
 
       // Select 'alpha'
       stdin.write('\r'); // Enter key
-      await new Promise((resolve) => setTimeout(resolve, 50));
+
+      // Wait for action menu to render (polls to handle CI/parallel-test load)
+      const waitForFrame = async (match: string, timeoutMs = 2000) => {
+        const start = Date.now();
+        while (Date.now() - start < timeoutMs) {
+          if ((lastFrame() ?? '').includes(match)) return;
+          await new Promise((resolve) => setTimeout(resolve, 20));
+        }
+      };
+      await waitForFrame('Manage alpha:');
 
       // Action menu is now visible, select 'rebuild' (down arrow once from 'attach')
       stdin.write('\x1B[B'); // Down arrow key
       stdin.write('\r'); // Enter key
-      await new Promise((resolve) => setTimeout(resolve, 50));
+
+      // Wait for onAction to be called
+      const waitForCall = async (fn: ReturnType<typeof vi.fn>, timeoutMs = 2000) => {
+        const start = Date.now();
+        while (Date.now() - start < timeoutMs) {
+          if (fn.mock.calls.length > 0) return;
+          await new Promise((resolve) => setTimeout(resolve, 20));
+        }
+      };
+      await waitForCall(onAction);
 
       expect(onAction).toHaveBeenCalledWith('rebuild', 'alpha');
     });

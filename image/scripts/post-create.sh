@@ -17,12 +17,12 @@ echo "==============================================="
 
 # Step 1: Fix SSH agent socket permissions (if mounted)
 echo ""
-echo "[1/13] Fixing SSH agent socket permissions..."
+echo "[Step 1] Fixing SSH agent socket permissions..."
 sudo /usr/local/bin/fix-ssh-socket-permissions.sh
 
 # Step 2: SSH server setup (host keys + authorized_keys)
 echo ""
-echo "[2/13] Setting up SSH server..."
+echo "[Step 2] Setting up SSH server..."
 
 # Generate persistent host keys (stored in workspace so they survive stop/start)
 SSH_HOST_KEY_DIR="$WORKSPACE_ROOT/.agent-env/ssh"
@@ -70,13 +70,13 @@ echo "✓ SSH server setup complete"
 
 # Step 3: Assemble Claude Code managed settings
 echo ""
-echo "[3/13] Assembling Claude Code managed settings..."
+echo "[Step 3] Assembling Claude Code managed settings..."
 sudo /usr/local/bin/assemble-managed-settings.sh
 echo "✓ Managed settings assembled"
 
 # Step 4: Instance isolation (if applicable)
 echo ""
-echo "[4/13] Checking for instance isolation..."
+echo "[Step 4] Checking for instance isolation..."
 
 # Fix shared-data volume permissions if needed (Docker creates volumes as root)
 if [ -n "${SHARED_DATA_DIR:-}" ] && [ -d "$SHARED_DATA_DIR" ] && [ ! -w "$SHARED_DATA_DIR" ]; then
@@ -109,19 +109,19 @@ fi
 
 # Step 5: Check for package updates (daily)
 echo ""
-echo "[5/13] Checking for package updates..."
+echo "[Step 5] Checking for package updates..."
 /usr/local/bin/check-daily-updates.sh
 echo "✓ Package update check complete"
 
 # Step 6: Fix node_modules ownership
 echo ""
-echo "[6/13] Fixing node_modules ownership..."
+echo "[Step 6] Fixing node_modules ownership..."
 sudo /usr/local/bin/fix-node-modules-ownership.sh
 echo "✓ Node modules ownership fixed"
 
 # Step 7: Install CLI tools
 echo ""
-echo "[7/13] Installing CLI tools..."
+echo "[Step 7] Installing CLI tools..."
 
 # Install Claude Code via official installer (https://claude.ai/install.sh)
 # Security note: Piping to bash is the official install method. The script is served
@@ -175,36 +175,63 @@ if ! pnpm install -g @zookanalytics/keystone-workflows; then
   echo "  ⚠ keystone-workflows update failed, using existing version"
 fi
 
+# Install agent-env CLI (dev mode: link local build; production: install from npm)
+echo "  - Installing agent-env CLI..."
+AGENT_ENV_DEV_MOUNT="/opt/agent-env-dev"
+if [ -d "$AGENT_ENV_DEV_MOUNT" ]; then
+  echo "    Dev mount detected at $AGENT_ENV_DEV_MOUNT — linking local build"
+  if (cd "$AGENT_ENV_DEV_MOUNT" && pnpm link --global); then
+    echo "    ✓ agent-env linked from dev mount"
+  else
+    echo "    ❌ CRITICAL: agent-env dev link failed!"
+    echo "    If you are using a dev mount, your local build must be valid."
+    echo "    Check for build errors in $AGENT_ENV_DEV_MOUNT"
+    exit 1
+  fi
+else
+  echo "    No dev mount — installing from npm"
+  if ! pnpm install -g @zookanalytics/agent-env; then
+    echo "    ⚠ agent-env installation failed, using existing version if available"
+  fi
+fi
+
+# Verify agent-env installation
+if command -v agent-env >/dev/null 2>&1; then
+  echo "  ✓ agent-env installed: $(agent-env --version 2>/dev/null || echo 'version unknown')"
+else
+  echo "  ⚠ agent-env binary not found in PATH after installation"
+fi
+
 echo "✓ CLI tools installed"
 
 # Step 8: Register plugin marketplaces from project settings
 # NOTE: Must run BEFORE firewall init (step 11) — marketplace registration
 # clones git repos and needs unrestricted network access.
 echo ""
-echo "[8/13] Registering plugin marketplaces..."
+echo "[Step 8] Registering plugin marketplaces..."
 /usr/local/bin/register-plugin-marketplaces.sh "$WORKSPACE_ROOT"
 echo "✓ Plugin marketplaces registered"
 
 # Step 9: Start dnsmasq for DNS logging
 echo ""
-echo "[9/13] Starting dnsmasq DNS forwarder..."
+echo "[Step 9] Starting dnsmasq DNS forwarder..."
 sudo /usr/local/bin/start-dnsmasq.sh
 
 # Step 10: Start ulogd for firewall logging
 echo ""
-echo "[10/13] Starting ulogd firewall logger..."
+echo "[Step 10] Starting ulogd firewall logger..."
 sudo /usr/local/bin/start-ulogd.sh
 echo "✓ ulogd started"
 
 # Step 11: Initialize firewall
 echo ""
-echo "[11/13] Initializing firewall rules..."
+echo "[Step 11] Initializing firewall rules..."
 sudo /usr/local/bin/init-firewall.sh
 echo "✓ Firewall initialized"
 
 # Step 12: Run sanity check
 echo ""
-echo "[12/13] Running sanity check..."
+echo "[Step 12] Running sanity check..."
 if /usr/local/bin/devcontainer-sanity-check.sh; then
   echo "✓ Sanity check passed"
 else
@@ -213,7 +240,7 @@ fi
 
 # Step 13: Run project-specific post-create if it exists
 echo ""
-echo "[13/13] Running project-specific setup..."
+echo "[Step 13] Running project-specific setup..."
 PROJECT_POST_CREATE="$WORKSPACE_ROOT/.devcontainer/post-create-project.sh"
 if [ -f "$PROJECT_POST_CREATE" ]; then
     echo "Running $PROJECT_POST_CREATE..."

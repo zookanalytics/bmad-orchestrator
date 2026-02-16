@@ -187,13 +187,13 @@ This document provides the complete epic and story breakdown for agent-env, deco
 
 **Revised Naming Model (supersedes flat workspace layout):**
 - Instance name is user-chosen, scoped to a repository. Unique key is `(repo-slug, instance-name)`
-- Workspace folder structure: `~/.agent-env/workspaces/<repo-slug>/<instance>/`
+- Workspace folder structure: `~/.agent-env/workspaces/<repo-slug>-<instance>/` (flat, globally unique basename)
 - Repo slug derived from git remote URL (last path segment, minus `.git`)
 - Slug compression for slugs > 39 chars: `<first 15>_<6-char SHA-256>_<last 15>`
 - Instance name max 20 chars, validated at create time
 - Container naming: `ae-<repo-slug>-<instance>` (max 63 chars)
 - Two-phase repo resolution: (1) resolve repo from `--repo` or cwd, (2) resolve instance — unambiguous resolves directly, ambiguous errors with suggestion
-- BREAKING CHANGE: existing flat workspaces need migration to nested structure
+- BREAKING CHANGE: existing flat workspaces use old compound naming (ad-hoc); new naming uses explicit `<repo-slug>-<instance>`. Old workspaces are NOT detected.
 - BREAKING CHANGE: existing state.json schema changes (`name` → `instance`, adds `repoSlug`, `repoUrl`)
 
 **Baseline Config Prompt (supersedes silent copy-if-missing):**
@@ -1361,7 +1361,7 @@ This delivers the "context is always visible" experience from Journey 5 in the P
 
 **Architecture Decisions (from ADR review):**
 - **tmux reads purpose via jq:** `jq -r '"\(.instance // "?") | \(.purpose // "")"' /etc/agent-env/state.json 2>/dev/null || echo "?"` — single invocation for both fields, file guard for missing state. jq is a hard dependency — baseline guarantees it. Non-baseline containers without jq get a clear error message, not a silent fallback. If you opt out of the baseline, you need jq in your image for purpose display.
-- **`AGENT_ENV_INSTANCE` is opaque:** With current flat model it's the compound name (e.g., `bmad-orch-auth`). Epic 7 changes it to the short instance name (`auth`). Consumers treat it as opaque. The "break" is a UX improvement (shorter tmux display).
+- **`AGENT_ENV_INSTANCE` is opaque:** With current flat model it's the ad-hoc compound name (e.g., `bmad-orch-auth`). Epic 7 changes it to the explicit `<repo-slug>-<instance>` compound name (still globally unique — flat layout preserved). Consumers treat it as opaque. Zero runtime consumers in image scripts confirmed. The value change is non-breaking.
 - **First story is tmux spike:** Validate jq parsing, tmux `status-interval 15`, status bar format before building the full pipeline.
 - **CLI-in-container with dev mode:** `post-create.sh` checks for local dev mount at `/opt/agent-env-dev` and runs `pnpm link --global`. Falls back to `pnpm add -g @zookanalytics/agent-env`. Full CLI inside container from day one — required for VS Code template regeneration in Epic 8.
 - **Purpose update writes state.json only.** tmux refreshes on its 15s interval. VS Code template regeneration added in Epic 8 by extending the purpose command.
@@ -1369,7 +1369,7 @@ This delivers the "context is always visible" experience from Journey 5 in the P
 **UX Decisions (from War Room):**
 - **Purpose truncation in tmux:** Truncate purpose at 40 characters with `…` in the tmux status script. Full purpose always available via `agent-env purpose <name>`. The bar is a reminder, not the source of truth.
 - **No-purpose display:** If purpose is null/empty, show instance name only — no trailing pipe, no placeholder text. Clean and intentional.
-- **tmux display improves retroactively after Epic 7:** Current compound names (e.g., `bmad-orch-auth | JWT auth`) are longer. After Epic 7, short names (`auth | JWT auth`) are cleaner. No action needed — it just gets better.
+- **tmux display improves retroactively after Epic 7:** The tmux status bar reads `.instance` from state.json (via jq), which will be the short user-chosen name (`auth`) instead of the current `.name` compound value (`bmad-orch-auth`). Display changes from `bmad-orch-auth | JWT auth` to `auth | JWT auth`. Note: the `AGENT_ENV_INSTANCE` env var remains a compound name (`<repo-slug>-<instance>`) derived from `localWorkspaceFolderBasename` — the short display is tmux-specific because it reads from state.json. No action needed — it just gets better.
 - **tmux testing strategy:** Unit test the jq data extraction command against fixture JSON files (various states: purpose set, purpose null, file missing, malformed JSON). Manual validation for tmux wiring in the spike story. Don't try to mock tmux in vitest.
 - **Existing instances:** New baseline features (bind-mount, env vars, tmux status bar, CLI installation) only apply to newly created instances. Existing instances must be recreated. A `rebuild` command is being spec'd separately to address this for future baseline updates. Document in release notes.
 - **Parallel development note:** Recommended order is Epic 6 first, then Epic 7. While architecturally independent, simultaneous development creates merge conflicts in 4+ shared files (`create.ts`, `devcontainer.json`, `state.ts`, `workspace.ts`). Sequential development is significantly cleaner.
@@ -1517,7 +1517,7 @@ Focused on the naming/workspace refactor plus baseline config prompt. No migrati
 
 **What it delivers:**
 - Multiple instances from same repo with user-chosen names
-- Nested workspace layout: `~/.agent-env/workspaces/<repo-slug>/<instance>/`
+- Flat workspace layout with repo-scoped naming: `~/.agent-env/workspaces/<repo-slug>-<instance>/`
 - Repo slug derivation and compression for long names (>39 chars)
 - Two-phase repo resolution (repo context from `--repo`/cwd, then instance lookup)
 - Source repo visible in `list` output
@@ -1529,35 +1529,36 @@ Focused on the naming/workspace refactor plus baseline config prompt. No migrati
 **Architecture Decisions (from ADR review):**
 - **No migration code.** Negligible existing instances. Old flat-layout workspaces are NOT detected by the new code. This is intentional — documented as such in code comments and epic description. Users recreate instances if needed.
 - **Two-phase resolution edge case matrix in ACs:** no remote, multiple remotes, fork remote, subdirectory of git repo, no .git directory, bare repo, remote URL mismatch.
-- **AGENT_ENV_INSTANCE updates:** When Epic 7 lands, the env var value changes from compound name to short instance name. Non-breaking — consumers treat it as opaque per ADR-E6-2.
+- **AGENT_ENV_INSTANCE updates:** When Epic 7 lands, the env var value changes from old ad-hoc compound name to new explicit `<repo-slug>-<instance>`. Non-breaking — consumers treat it as opaque per ADR-E6-2. Confirmed: zero runtime consumers in image scripts.
 - **Baseline prompt stories:** (1) prompt logic when repo has `.devcontainer/`, (2) `--baseline`/`--no-baseline` flag handling. Three states: force-baseline, force-repo-config, ask-user (default when repo has `.devcontainer/`).
 
 **UX Decisions (from War Room):**
 - **Baseline prompt default:** When user presses Enter without choosing, default to "use repo config" (respect repo authors' intent). `--baseline` flag exists for users who know they want agent-env's setup.
-- **First story is scanning refactor:** Story 7.1 updates workspace scanning from flat (`workspaces/*/`) to nested (`workspaces/*/*/`) and updates ALL consumers: `list-instances.ts`, `attach-instance.ts`, `remove-instance.ts`, `purpose-instance.ts`, `interactive-menu.ts`, `commands/list.ts`, and any others. This is the foundation — subsequent stories add new features (slug compression, two-phase resolution, baseline prompt) on top.
+- **First story is state schema + naming refactor:** Story 7.1 updates `createWorkspace()` to use `<repo-slug>-<instance>` naming, updates state.json schema (`name` → `instance`, adds `repoSlug`/`repoUrl`), and updates ALL consumers: `list-instances.ts`, `attach-instance.ts`, `remove-instance.ts`, `purpose-instance.ts`, `interactive-menu.ts`, `commands/list.ts`, plus Epic 6 state.json consumers (`tmux-purpose.sh`, `purpose-instance.ts` container handlers, `tmux-purpose.test.ts`). Scanning glob (`workspaces/*/`) is unchanged. This is the foundation — subsequent stories add new features (slug compression, two-phase resolution, baseline prompt) on top.
+- **Flat layout decision:** Nested layout (`workspaces/<repo-slug>/<instance>/`) was rejected because `localWorkspaceFolderBasename` would lose global uniqueness, breaking named Docker volumes, `AGENT_INSTANCE`, and any system using the folder basename as a unique key. Flat layout with `<repo-slug>-<instance>` naming preserves global uniqueness with zero workarounds. See architecture.md "Decision: Instance Naming Model (Revised)" for full rationale.
 
 **Dependencies:** Requires Epics 1-5 (complete). Independent of Epics 6 and 8.
 
-#### Story 7.1: Refactor workspace scanning and state schema for nested layout
+#### Story 7.1: Refactor workspace naming and state schema for repo-scoped instances
 
 As a developer,
-I want workspaces organized by repository in a nested layout,
-So that multiple instances from the same repo are cleanly organized.
+I want workspaces named with explicit repo-slug-instance format and state.json carrying structured fields,
+So that instances are scoped to repositories with globally unique workspace identifiers.
 
 **Acceptance Criteria:**
 
 **Given** I create an instance "auth" for repo `bmad-orchestrator`
 **When** the workspace is created
-**Then** it exists at `~/.agent-env/workspaces/bmad-orchestrator/auth/`
+**Then** it exists at `~/.agent-env/workspaces/bmad-orchestrator-auth/`
 **And** state.json contains `"instance": "auth"`, `"repoSlug": "bmad-orchestrator"`, `"repoUrl": "<full URL>"`
 
-**Given** workspaces exist at `~/.agent-env/workspaces/bmad-orch/auth/` and `~/.agent-env/workspaces/awesome-cli/bugfix/`
+**Given** workspaces exist at `~/.agent-env/workspaces/bmad-orch-auth/` and `~/.agent-env/workspaces/awesome-cli-bugfix/`
 **When** `scanWorkspaces()` is called
-**Then** both instances are returned with their repo slug and instance name
+**Then** both instances are returned with their repo slug and instance name (from state.json, not parsed from directory name)
 
-**Given** old flat-layout workspaces exist at `~/.agent-env/workspaces/bmad-orch-auth/`
+**Given** old-format workspaces exist (pre-Epic 7 compound names like `bmad-orch-auth`)
 **When** `scanWorkspaces()` is called
-**Then** the old flat workspaces are NOT detected
+**Then** old workspaces with missing `repoSlug`/`instance` fields in state.json are NOT detected
 **And** this is documented in code comments as intentional
 
 **Given** I run `agent-env list`
@@ -1566,21 +1567,27 @@ So that multiple instances from the same repo are cleanly organized.
 
 **Given** I run `agent-env attach auth`
 **When** the instance exists
-**Then** attach works with the new workspace path structure
+**Then** attach works with the new naming scheme
 
 **Given** I run `agent-env remove auth`
 **When** the instance passes safety checks
-**Then** remove works with the new workspace path structure
+**Then** remove works with the new naming scheme
 
 **Given** I run `agent-env purpose auth "new purpose"`
 **When** the instance exists
-**Then** purpose command works with the new workspace path structure
+**Then** purpose command works with the new naming scheme
 
 **Technical Requirements:**
-- Update `lib/workspace.ts`: scanning from `workspaces/*/` to `workspaces/*/*/`, `createWorkspace()` creates nested structure
+- Update `lib/workspace.ts`: `createWorkspace()` uses `<repo-slug>-<instance>` naming; scanning glob unchanged (`workspaces/*/`)
 - Update `lib/state.ts`: schema change (`name` → `instance`, add `repoSlug`, `repoUrl`)
 - Update `lib/types.ts`: `InstanceState` interface reflects new fields
 - Update ALL consumers: `list-instances.ts`, `attach-instance.ts`, `remove-instance.ts`, `purpose-instance.ts`, `interactive-menu.ts`, `commands/list.ts`
+- Update ALL state.json consumers added in Epic 6:
+  - `image/scripts/tmux-purpose.sh`: reads `.name` from state.json via jq; update field reference `.name` to `.instance`
+  - `packages/agent-env/src/lib/purpose-instance.ts`: `getContainerPurpose()` and `setContainerPurpose()` read/write state.json; update for new schema (`name` → `instance`, new `repoSlug`/`repoUrl`). `setContainerPurpose()` constructs a `WorkspacePath` with `name: read.state.name` — must change to match new field.
+  - `packages/agent-env/src/lib/tmux-purpose.test.ts`: test fixtures with state.json format; update to new schema
+- Note: `AGENT_INSTANCE` and `AGENT_ENV_INSTANCE` are unaffected — flat layout preserves `localWorkspaceFolderBasename` as globally unique compound name. No image script changes needed for the naming refactor.
+- Fix `grep -q` → `grep -qF` and add sed marker escaping in `image/scripts/setup-instance-isolation.sh` Steps 9 and 11: marker strings contain bracket characters (`[setup-instance-isolation:...]`) treated as regex metacharacters. Step 11b (added in Epic 6) already uses `grep -qF` and escapes the marker for sed via `ESCAPED_MARKER=$(printf '%s' "$MARKER" | sed 's/[][\\.^$*]/\\&/g')`. Steps 9 and 11 predate Epic 6 and must be updated to match both patterns: (1) `grep -q` → `grep -qF` for fixed-string detection, (2) add `ESCAPED_MARKER` for sed replacement patterns.
 - Update test fixtures to new state schema
 - All existing tests must pass after refactor (adapt to new schema)
 - FR43 (partially — workspace structure), FR45 (partially — state has repo info)
@@ -1646,7 +1653,7 @@ So that I can type `agent-env attach auth` without specifying the repo every tim
 
 **Given** I'm in a directory with git remote `bmad-orchestrator` and instance "auth" exists for that repo
 **When** I run `agent-env attach auth`
-**Then** it resolves to the `bmad-orchestrator/auth` workspace (cwd provides repo context)
+**Then** it resolves to the `bmad-orchestrator-auth` workspace (cwd provides repo context)
 
 **Given** I run `agent-env attach auth --repo bmad-orchestrator`
 **When** instance "auth" exists for that repo
@@ -1662,7 +1669,7 @@ So that I can type `agent-env attach auth` without specifying the repo every tim
 
 **Given** I'm in the `awesome-cli` directory but "auth" only exists under `bmad-orchestrator`
 **When** I run `agent-env attach auth`
-**Then** it resolves to `bmad-orchestrator/auth` (cwd narrows scope but doesn't block resolution)
+**Then** it resolves to `bmad-orchestrator-auth` (cwd narrows scope but doesn't block resolution)
 
 **Given** I'm in a subdirectory of a git repo
 **When** I run `agent-env attach auth`
@@ -1886,7 +1893,7 @@ So that I know which workstream I'm in when using VS Code.
 
 **Deferrability:** System is fully functional without Epic 8. Repo registry is a convenience — `--repo .` covers most cases without re-entering URLs. VS Code purpose is polish for users who work in VS Code alongside tmux. Neither feature is a hidden dependency for Epics 6 or 7.
 
-**Dependencies:** Requires Epic 7 (repo registry needs nested workspace structure for scanning). VS Code purpose story requires Epic 6 (purpose in state.json + CLI inside container).
+**Dependencies:** Requires Epic 7 (repo registry needs repo-scoped workspace structure for scanning). VS Code purpose story requires Epic 6 (purpose in state.json + CLI inside container).
 
 ---
 
@@ -1918,7 +1925,7 @@ Epic 2 (Create) ──→ Epic 3 (List/Git) ──→ Epic 5 (Remove)
 
 **Dependency Notes (Epics 6-8, new):**
 - Epics 6 and 7 can be done in any order (no mutual dependency)
-- Epic 8 requires both Epic 6 (purpose pipeline + CLI inside container) and Epic 7 (nested workspaces for repo scanning)
+- Epic 8 requires both Epic 6 (purpose pipeline + CLI inside container) and Epic 7 (repo-scoped workspaces for scanning)
 - Recommended order: Epic 6 first (most user-visible, immediate daily value), then Epic 7 (architectural improvement), then Epic 8 (Growth polish)
 - Epics 6 and 7 both touch the create command — if developed concurrently, expect merge conflicts
 

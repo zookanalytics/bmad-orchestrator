@@ -111,10 +111,11 @@ RUN mkdir -p /home/node/.claude \
              /home/node/.cache/ms-playwright \
              /home/node/.local/bin
 
-# Copy tmux configuration
+# Copy tmux configuration and purpose display script
 COPY --chown=node:node image/config/tmux.conf /home/node/.tmux.conf
 COPY --chown=node:node image/scripts/tmux-session.sh /home/node/.local/bin/tmux-session
-RUN chmod +x /home/node/.local/bin/tmux-session
+COPY --chown=node:node image/scripts/tmux-purpose.sh /home/node/.local/bin/tmux-purpose
+RUN chmod +x /home/node/.local/bin/tmux-session /home/node/.local/bin/tmux-purpose
 
 # Set default shell and editor
 ENV SHELL=/bin/zsh
@@ -247,7 +248,8 @@ LABEL devcontainer.metadata='[ \
       "source=agent-devcontainer-node-modules-${localWorkspaceFolderBasename},target=/workspaces/${localWorkspaceFolderBasename}/node_modules,type=volume", \
       "source=${localEnv:HOME}/.gitconfig,target=/home/node/.gitconfig,type=bind,readonly", \
       "source=/run/host-services/ssh-auth.sock,target=/run/host-services/ssh-auth.sock,type=bind", \
-      "source=${localEnv:HOME}/.agent-env/ssh-pub-keys,target=/home/node/.ssh-host,type=bind,readonly" \
+      "source=${localEnv:HOME}/.agent-env/ssh-pub-keys,target=/home/node/.ssh-host,type=bind,readonly", \
+      "source=${localWorkspaceFolder}/.agent-env,target=/etc/agent-env,type=bind" \
     ], \
     "containerEnv": { \
       "SSH_AUTH_SOCK": "/run/host-services/ssh-auth.sock", \
@@ -255,7 +257,8 @@ LABEL devcontainer.metadata='[ \
       "SHARED_DATA_DIR": "/shared-data", \
       "PNPM_HOME": "/pnpm", \
       "npm_config_store_dir": "/workspaces/.pnpm-store", \
-      "CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC": "true" \
+      "CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC": "true", \
+      "AGENT_ENV_CONTAINER": "true" \
     }, \
     "postCreateCommand": "/usr/local/bin/post-create.sh", \
     "postStartCommand": "sudo /usr/local/bin/start-sshd.sh; tmux new-session -d -s main 2>/dev/null || true", \

@@ -104,16 +104,16 @@ export async function writeStateAtomic(
 export function createInitialState(
   name: string,
   repo: string,
-  options?: { containerName?: string; configSource?: 'baseline' | 'repo' }
+  options?: { containerName?: string; configSource?: 'baseline' | 'repo'; purpose?: string | null }
 ): InstanceState {
-  const { containerName, configSource } = options ?? {};
+  const { containerName, configSource, purpose } = options ?? {};
   const now = new Date().toISOString();
   return {
     name,
     repo,
     createdAt: now,
     lastAttached: now,
-    purpose: null,
+    purpose: purpose ?? null,
     containerName: containerName ?? `${CONTAINER_PREFIX}${name}`,
     configSource: configSource ?? 'baseline',
   };
@@ -124,7 +124,7 @@ export function createInitialState(
 /**
  * Type guard to validate parsed JSON is a valid InstanceState
  */
-function isValidState(value: unknown): value is InstanceState {
+export function isValidState(value: unknown): value is InstanceState {
   if (typeof value !== 'object' || value === null) return false;
 
   const obj = value as Record<string, unknown>;
@@ -134,7 +134,7 @@ function isValidState(value: unknown): value is InstanceState {
     typeof obj.repo === 'string' &&
     typeof obj.createdAt === 'string' &&
     typeof obj.lastAttached === 'string' &&
-    (obj.purpose === null || typeof obj.purpose === 'string') &&
+    (obj.purpose === undefined || obj.purpose === null || typeof obj.purpose === 'string') &&
     typeof obj.containerName === 'string'
   );
 }

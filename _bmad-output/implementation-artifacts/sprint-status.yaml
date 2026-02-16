@@ -148,18 +148,18 @@ development_status:
   # Purpose propagation into containers: env vars, tmux status bar, CLI inside containers.
   # Dependencies: Requires Epics 1-5 (complete). Independent of Epics 7 and 8.
   # PRD revision 2026-02-14: FR46-FR50, NFR22-NFR24
-  env-epic-6: backlog
-  env-6-1-baseline-devcontainer-updates-for-purpose-infrastructure: backlog
-  env-6-2-purpose-flag-on-create-and-agent-env-purpose-env-var: backlog
-  env-6-3-agent-env-cli-inside-containers-with-live-purpose-updates: backlog
-  env-epic-6-retrospective: optional
+  env-epic-6: done
+  env-6-1-baseline-devcontainer-updates-for-purpose-infrastructure: done
+  env-6-2-purpose-flag-on-create-and-agent-env-purpose-env-var: done
+  env-6-3-agent-env-cli-inside-containers-with-live-purpose-updates: done
+  env-epic-6-retrospective: done
 
   # ─── agent-env Epic 7: Naming Model, Multi-Instance & Baseline Prompt ───
-  # Nested workspace layout, multi-instance per repo, user-chosen names, baseline config prompt.
+  # Flat workspace layout with repo-scoped naming, multi-instance per repo, user-chosen names, baseline config prompt.
   # Dependencies: Requires Epics 1-5 (complete). Independent of Epics 6 and 8.
   # PRD revision 2026-02-14: FR43, FR45, FR27 (revision)
   env-epic-7: backlog
-  env-7-1-refactor-workspace-scanning-and-state-schema-for-nested-layout: backlog
+  env-7-1-refactor-workspace-naming-and-state-schema-for-repo-scoped-instances: backlog
   env-7-2-repo-slug-derivation-compression-and-instance-name-validation: backlog
   env-7-3-two-phase-repo-resolution-for-commands: backlog
   env-7-4-source-repo-in-list-output: backlog
@@ -168,7 +168,7 @@ development_status:
 
   # ─── agent-env Epic 8: Growth — Repo Registry & VS Code Purpose ───
   # Convenience features: repo registry, create from slug, VS Code purpose display.
-  # Dependencies: Requires Epic 6 (purpose pipeline + CLI inside container) AND Epic 7 (nested workspaces).
+  # Dependencies: Requires Epic 6 (purpose pipeline + CLI inside container) AND Epic 7 (repo-scoped workspaces).
   # PRD revision 2026-02-14: FR51-FR54
   env-epic-8: backlog
   env-8-1-repo-registry-command: backlog
@@ -257,7 +257,7 @@ cross_dependencies:
 
   - blocker: env-epic-7
     blocked: env-epic-8
-    note: "Epic 8 requires nested workspace structure from Epic 7 for repo scanning"
+    note: "Epic 8 requires repo-scoped workspace structure from Epic 7 for repo scanning"
 
 # ══════════════════════════════════════════════════════════════════════════════
 # NOTES

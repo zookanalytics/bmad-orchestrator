@@ -12,8 +12,9 @@ export const createCommand = new Command('create')
   .description('Create a new isolated development environment')
   .argument('<name>', 'Name for the new instance')
   .option('--repo <url>', 'Git repository URL to clone (use "." for current directory)')
+  .option('--purpose <text>', 'Set the instance purpose/label at creation time')
   .option('--attach', 'Attach immediately after creation')
-  .action(async (name: string, options: { repo?: string; attach?: boolean }) => {
+  .action(async (name: string, options: { repo?: string; purpose?: string; attach?: boolean }) => {
     if (!options.repo) {
       console.error(
         formatError(
@@ -40,7 +41,7 @@ export const createCommand = new Command('create')
     const repoUrl = resolved.url;
     console.log(`Creating instance '${name}' from ${repoUrl}...`);
 
-    const result = await createInstance(name, repoUrl, deps);
+    const result = await createInstance(name, repoUrl, deps, { purpose: options.purpose });
 
     if (!result.ok) {
       const { code, message, suggestion } = result.error;

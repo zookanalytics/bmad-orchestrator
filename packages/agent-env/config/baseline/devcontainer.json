@@ -1,4 +1,10 @@
 {
   "image": "ghcr.io/zookanalytics/bmad-orchestrator/devcontainer:latest",
-  "initializeCommand": "bash .agent-env/init-host.sh"
+  "initializeCommand": "bash .agent-env/init-host.sh",
+  "mounts": [
+    "source=${localWorkspaceFolder}/.agent-env,target=/etc/agent-env,type=bind"
+  ],
+  "containerEnv": {
+    "AGENT_ENV_CONTAINER": "true"
+  }
 }
