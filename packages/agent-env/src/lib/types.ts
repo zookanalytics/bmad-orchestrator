@@ -62,7 +62,8 @@ export type ContainerSuccess = {
   ok: true;
   status: ContainerStatus;
   containerId: string | null;
-  ports: Record<string, string>; // e.g. { "22/tcp": "12345" }
+  ports: Record<string, string>; // e.g. { "22/tcp": "12345" } — empty string means exposed but not published
+  labels: Record<string, string>; // e.g. { "dev.orbstack.domains": "myapp.local" }
 };
 
 export type ContainerError = {

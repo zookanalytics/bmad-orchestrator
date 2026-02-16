@@ -255,7 +255,7 @@ describe('containerStatus', () => {
     expect(result.ports).toEqual({});
   });
 
-  it('skips null port mappings (exposed but not bound)', async () => {
+  it('includes exposed-but-not-published ports with empty string value', async () => {
     const executor = mockExecutor({
       'docker inspect': {
         ok: true,
@@ -279,7 +279,54 @@ describe('containerStatus', () => {
     const result = await lifecycle.containerStatus('ae-test');
     expect(result.ok).toBe(true);
     if (!result.ok) throw new Error('Expected success');
-    expect(result.ports).toEqual({ '22/tcp': '49152' });
+    expect(result.ports).toEqual({ '22/tcp': '49152', '80/tcp': '' });
+  });
+
+  it('extracts labels from docker inspect output', async () => {
+    const executor = mockExecutor({
+      'docker inspect': {
+        ok: true,
+        stdout: JSON.stringify([
+          {
+            State: { Status: 'running' },
+            Config: {
+              Labels: {
+                'dev.orbstack.domains': 'my-app.repo.local',
+                'devcontainer.local_folder': '/workspaces/test',
+              },
+            },
+          },
+        ]),
+        stderr: '',
+        exitCode: 0,
+      },
+    });
+    const lifecycle = createContainerLifecycle(executor);
+
+    const result = await lifecycle.containerStatus('ae-test');
+    expect(result.ok).toBe(true);
+    if (!result.ok) throw new Error('Expected success');
+    expect(result.labels).toEqual({
+      'dev.orbstack.domains': 'my-app.repo.local',
+      'devcontainer.local_folder': '/workspaces/test',
+    });
+  });
+
+  it('returns empty labels when Config.Labels is absent', async () => {
+    const executor = mockExecutor({
+      'docker inspect': {
+        ok: true,
+        stdout: JSON.stringify([{ State: { Status: 'running' } }]),
+        stderr: '',
+        exitCode: 0,
+      },
+    });
+    const lifecycle = createContainerLifecycle(executor);
+
+    const result = await lifecycle.containerStatus('ae-test');
+    expect(result.ok).toBe(true);
+    if (!result.ok) throw new Error('Expected success');
+    expect(result.labels).toEqual({});
   });
 
   it('calls docker inspect with correct container name and format', async () => {

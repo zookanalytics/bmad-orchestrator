@@ -193,6 +193,7 @@ export function createContainerLifecycle(executor: Execute = createExecutor()): 
           status: 'not-found',
           containerId: null,
           ports: {},
+          labels: {},
         };
       }
 
@@ -213,6 +214,9 @@ export function createContainerLifecycle(executor: Execute = createExecutor()): 
       const inspectData = JSON.parse(result.stdout) as Array<{
         Id?: string;
         State?: { Status?: string };
+        Config?: {
+          Labels?: Record<string, string>;
+        };
         NetworkSettings?: {
           Ports?: Record<string, Array<{ HostPort: string }> | null>;
         };
@@ -224,6 +228,7 @@ export function createContainerLifecycle(executor: Execute = createExecutor()): 
           status: 'not-found',
           containerId: null,
           ports: {},
+          labels: {},
         };
       }
 
@@ -234,22 +239,30 @@ export function createContainerLifecycle(executor: Execute = createExecutor()): 
       // We intentionally map all non-running states to 'stopped' for simplicity
       const status: ContainerStatus = dockerStatus === 'running' ? 'running' : 'stopped';
 
-      // Extract ports
+      // Extract ports — includes exposed-but-not-published ports (empty string value)
+      // so callers can distinguish "port exists" from "port is published"
       const ports: Record<string, string> = {};
       const dockerPorts = container.NetworkSettings?.Ports;
       if (dockerPorts) {
         for (const [key, mappings] of Object.entries(dockerPorts)) {
           if (mappings && mappings.length > 0) {
             ports[key] = mappings[0].HostPort;
+          } else {
+            // Port is exposed but not published (e.g., OrbStack direct networking)
+            ports[key] = '';
           }
         }
       }
+
+      // Extract labels
+      const labels: Record<string, string> = container.Config?.Labels ?? {};
 
       return {
         ok: true,
         status,
         containerId,
         ports,
+        labels,
       };
     } catch (e) {
       const errorMessage = e instanceof Error ? e.message : String(e);
@@ -413,6 +426,7 @@ export function createContainerLifecycle(executor: Execute = createExecutor()): 
       status: 'running',
       containerId,
       ports: {},
+      labels: {},
     };
   }
 
