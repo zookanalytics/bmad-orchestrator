@@ -148,10 +148,10 @@ development_status:
   # Purpose propagation into containers: env vars, tmux status bar, CLI inside containers.
   # Dependencies: Requires Epics 1-5 (complete). Independent of Epics 7 and 8.
   # PRD revision 2026-02-14: FR46-FR50, NFR22-NFR24
-  env-epic-6: in-progress
+  env-epic-6: done
   env-6-1-baseline-devcontainer-updates-for-purpose-infrastructure: done
   env-6-2-purpose-flag-on-create-and-agent-env-purpose-env-var: done
-  env-6-3-agent-env-cli-inside-containers-with-live-purpose-updates: backlog
+  env-6-3-agent-env-cli-inside-containers-with-live-purpose-updates: done
   env-epic-6-retrospective: optional
 
   # ─── agent-env Epic 7: Naming Model, Multi-Instance & Baseline Prompt ───

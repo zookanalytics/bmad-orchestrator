@@ -124,7 +124,7 @@ export function createInitialState(
 /**
  * Type guard to validate parsed JSON is a valid InstanceState
  */
-function isValidState(value: unknown): value is InstanceState {
+export function isValidState(value: unknown): value is InstanceState {
   if (typeof value !== 'object' || value === null) return false;
 
   const obj = value as Record<string, unknown>;
@@ -134,7 +134,7 @@ function isValidState(value: unknown): value is InstanceState {
     typeof obj.repo === 'string' &&
     typeof obj.createdAt === 'string' &&
     typeof obj.lastAttached === 'string' &&
-    (obj.purpose === null || typeof obj.purpose === 'string') &&
+    (obj.purpose === undefined || obj.purpose === null || typeof obj.purpose === 'string') &&
     typeof obj.containerName === 'string'
   );
 }
