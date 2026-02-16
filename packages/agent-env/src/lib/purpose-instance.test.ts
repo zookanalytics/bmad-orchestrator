@@ -242,6 +242,34 @@ describe('setPurpose', () => {
     const updatedState = JSON.parse(content) as InstanceState;
     expect(updatedState.purpose).toBe('New purpose');
   });
+
+  it('accepts a purpose at exactly MAX_PURPOSE_LENGTH characters', async () => {
+    const state = createTestState('repo-auth');
+    await createTestWorkspace('repo-auth', state);
+    const deps = createTestDeps();
+
+    const exactLengthPurpose = 'x'.repeat(200);
+    const result = await setPurpose('auth', exactLengthPurpose, deps);
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) throw new Error('Expected success');
+    expect(result.cleared).toBe(false);
+  });
+
+  it('returns PURPOSE_TOO_LONG when purpose exceeds MAX_PURPOSE_LENGTH', async () => {
+    const state = createTestState('repo-auth');
+    await createTestWorkspace('repo-auth', state);
+    const deps = createTestDeps();
+
+    const tooLongPurpose = 'x'.repeat(201);
+    const result = await setPurpose('auth', tooLongPurpose, deps);
+
+    expect(result.ok).toBe(false);
+    if (result.ok) throw new Error('Expected failure');
+    expect(result.error.code).toBe('PURPOSE_TOO_LONG');
+    expect(result.error.message).toContain('200');
+    expect(result.error.message).toContain('201');
+  });
 });
 
 // ─── Container-mode helpers ─────────────────────────────────────────────────
@@ -466,5 +494,35 @@ describe('setContainerPurpose', () => {
     const content = await readFile(statePath, 'utf-8');
     const updatedState = JSON.parse(content) as InstanceState;
     expect(updatedState.purpose).toBe('New purpose');
+  });
+
+  it('accepts a purpose at exactly MAX_PURPOSE_LENGTH characters', async () => {
+    const stateDir = join(tempDir, 'agent-env');
+    const state = createTestState('repo-auth');
+    const statePath = await createContainerStateFile(stateDir, state);
+    const deps = createContainerDeps(stateDir, statePath);
+
+    const exactLengthPurpose = 'x'.repeat(200);
+    const result = await setContainerPurpose(exactLengthPurpose, deps);
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) throw new Error('Expected success');
+    expect(result.cleared).toBe(false);
+  });
+
+  it('returns PURPOSE_TOO_LONG when purpose exceeds MAX_PURPOSE_LENGTH', async () => {
+    const stateDir = join(tempDir, 'agent-env');
+    const state = createTestState('repo-auth');
+    const statePath = await createContainerStateFile(stateDir, state);
+    const deps = createContainerDeps(stateDir, statePath);
+
+    const tooLongPurpose = 'x'.repeat(201);
+    const result = await setContainerPurpose(tooLongPurpose, deps);
+
+    expect(result.ok).toBe(false);
+    if (result.ok) throw new Error('Expected failure');
+    expect(result.error.code).toBe('PURPOSE_TOO_LONG');
+    expect(result.error.message).toContain('200');
+    expect(result.error.message).toContain('201');
   });
 });

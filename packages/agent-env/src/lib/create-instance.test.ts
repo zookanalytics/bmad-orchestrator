@@ -751,6 +751,23 @@ describe('createInstance', () => {
     expect(writtenContent.containerEnv.AGENT_ENV_PURPOSE).toBe('JWT authentication');
   });
 
+  it('returns PURPOSE_TOO_LONG when purpose exceeds MAX_PURPOSE_LENGTH', async () => {
+    const deps = createTestDeps(gitCloneSuccess);
+    const tooLongPurpose = 'x'.repeat(201);
+
+    const result = await createInstance('auth', 'https://github.com/user/bmad-orch.git', deps, {
+      purpose: tooLongPurpose,
+    });
+
+    expect(result.ok).toBe(false);
+    if (result.ok) throw new Error('Expected failure');
+    expect(result.error.code).toBe('PURPOSE_TOO_LONG');
+    expect(result.error.message).toContain('200');
+    expect(result.error.message).toContain('201');
+    // Should not have attempted clone
+    expect(deps.executor).not.toHaveBeenCalled();
+  });
+
   it('sets AGENT_ENV_PURPOSE to empty string in patchContainerEnv when no purpose', async () => {
     const deps = createTestDeps(gitCloneSuccess, {}, false);
 

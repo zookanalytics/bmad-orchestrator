@@ -35,6 +35,7 @@ import {
   patchContainerEnv,
   patchContainerName,
 } from './devcontainer.js';
+import { MAX_PURPOSE_LENGTH } from './purpose-instance.js';
 import { createInitialState, ensureGitExclude, writeStateAtomic } from './state.js';
 import { AGENT_ENV_DIR } from './types.js';
 import { deriveContainerName, getWorkspacePath, workspaceExists } from './workspace.js';
@@ -319,6 +320,17 @@ export async function createInstance(
 ): Promise<CreateResult> {
   const purposeText = options?.purpose ?? '';
   const purposeState = options?.purpose ?? null;
+
+  // Validate purpose length before any I/O
+  if (purposeText.length > MAX_PURPOSE_LENGTH) {
+    return {
+      ok: false,
+      error: {
+        code: 'PURPOSE_TOO_LONG',
+        message: `Purpose must be ${MAX_PURPOSE_LENGTH} characters or fewer (got ${purposeText.length})`,
+      },
+    };
+  }
 
   // Step 1: Extract repo name from URL
   let repoName: string;
