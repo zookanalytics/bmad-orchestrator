@@ -19,6 +19,9 @@ revisions:
   - date: '2026-02-16'
     trigger: 'Epic 7 pre-implementation validation against codebase'
     changes: 'Added Drift #9-14 (rebuild command, sshConnection, image directory growth, baseline config correction, configSource/lastRebuilt fields). Added Epic 7 pre-implementation validation section with current state analysis, story validation, file change matrix, and risk identification. Corrected Drift #3 description. Updated InstanceState target schema to include configSource and lastRebuilt.'
+  - date: '2026-02-16'
+    trigger: 'Epic 7 post-implementation validation'
+    changes: 'Epic 7 marked complete. Added Drift #15 (extractRepoName dead code), #16 (readline vs Ink Select for baseline prompt), #17 (rebuild missing --repo). Added post-implementation validation section confirming Stories 7.1, 7.2, 7.4, 7.5 complete; Story 7.3 partial (rebuild gap).'
 ---
 
 # Architecture Decision Document
@@ -1247,7 +1250,7 @@ Workspace-as-atomic-unit model provides clean separation of durable state (works
 
 ---
 
-## Implementation Status (Updated 2026-02-16, validated 2026-02-16)
+## Implementation Status (Updated 2026-02-16, post-Epic 7 validated 2026-02-16)
 
 This section tracks actual implementation against the architecture to identify drift and maintain alignment.
 
@@ -1261,6 +1264,7 @@ This section tracks actual implementation against the architecture to identify d
 | Epic 4: Instance Access & Management | ✅ Complete | attach, purpose, interactive menu, shell completion |
 | Epic 5: Safe Instance Removal | ✅ Complete | remove command with safety checks, force-remove, audit log |
 | Epic 6: In-Container Purpose & Tmux | ✅ Complete | --purpose flag, container env vars, tmux status bar, CLI inside container |
+| Epic 7: Naming Model, Multi-Instance & Baseline Prompt | ✅ Complete | State schema refactor, deriveRepoSlug, compressSlug, two-phase resolution, --repo on attach/remove/purpose/list, baseline prompt with --baseline/--no-baseline flags, InstanceList repo column, grep -qF fixes. See Drift #15-17. |
 
 ### Architecture Drift Log
 
@@ -1409,6 +1413,21 @@ These items were implemented but not previously recorded in the architecture dri
 - Actual: `lastRebuilt?: string` (ISO 8601) field exists on `InstanceState` — set when rebuild completes successfully.
 - Impact: Neutral — related to Drift #9 (rebuild command)
 
+**Drift #15: extractRepoName() Not Removed** (Epic 7)
+- Original: Epic 7 Story 7.2 specifies renaming `extractRepoName()` → `deriveRepoSlug()`
+- Actual: `deriveRepoSlug()` was created in `workspace.ts` (correct location, with lowercase normalization and compression). `extractRepoName()` in `create-instance.ts` is now dead code — production code at line 501 calls `deriveRepoSlug()` from workspace.ts. However, `extractRepoName()` still exists at line 128 with its test suite in `create-instance.test.ts`.
+- Impact: Minor — dead code and redundant tests. Should be cleaned up. No runtime impact since all callers use `deriveRepoSlug()`.
+
+**Drift #16: Baseline Prompt Uses readline, Not Ink Select** (Epic 7)
+- Original: Epic 7 Story 7.5 and architecture specify "Interactive prompt using Ink Select component"
+- Actual: `createBaselinePrompt()` in `commands/create.ts` uses Node.js `readline.createInterface()` with a numbered text menu (`[1] Use repo config` / `[2] Use agent-env baseline`). Non-TTY fallback correctly defaults to 'repo'.
+- Impact: Neutral — functionally equivalent. The readline approach is simpler, works correctly, and avoids the complexity of rendering Ink during the create flow (which already uses Ink for other output). Default-on-Enter behavior and non-TTY handling both work correctly.
+
+**Drift #17: Rebuild Command Missing --repo Option** (Epic 7)
+- Original: Epic 7 Story 7.3 specifies adding `--repo` option to all commands including rebuild. Architecture file change matrix lists `commands/rebuild.ts` for Story 7.3.
+- Actual: `rebuild.ts` has no `--repo` flag. `rebuild-instance.ts` uses `findWorkspaceByName()` (simple suffix match) instead of the two-phase `resolveInstance()` used by attach/remove/purpose. No `repoSlug` parameter accepted.
+- Impact: Minor for now — rebuild uses the pre-Epic-7 resolution pattern. Will cause ambiguity errors once a user has multiple instances with the same name across different repos. Should be addressed before Epic 8 or when multi-repo usage becomes common.
+
 ### Epic 7 Pre-Implementation Validation (2026-02-16)
 
 This section validates the current codebase state against Epic 7 requirements before implementation begins. Confirms what needs to change and identifies any assumptions in the epic stories that need revision.
@@ -1494,7 +1513,7 @@ This section validates the current codebase state against Epic 7 requirements be
 **Story 7.5 (Baseline prompt + flags):**
 - ⚠️ `setupDevcontainerConfig()` in `create-instance.ts` currently auto-selects — needs prompt and flag logic
 - ⚠️ `commands/create.ts` needs `--baseline` and `--no-baseline` mutually exclusive flags
-- ⚠️ Need interactive prompt (Ink Select component) when repo has `.devcontainer/` and no flag provided
+- ⚠️ Need interactive prompt (Node.js readline) when repo has `.devcontainer/` and no flag provided
 - ⚠️ Default on Enter: "use repo config" (respect repo authors' intent)
 
 #### Files Requiring Changes for Epic 7
@@ -1529,7 +1548,7 @@ This section validates the current codebase state against Epic 7 requirements be
 1. **Rebuild command not in epic scope:** Story 7.1 lists consumers to update but does not mention `rebuild-instance.ts` or `commands/rebuild.ts`. These read state.json and must be updated alongside other consumers.
 2. **sshConnection field in list output:** The `Instance` interface has an `sshConnection` field not mentioned in the architecture. Story 7.4 adds `repoSlug`/`repoUrl` — the JSON output mapping in `commands/list.ts` must include all existing fields plus new ones.
 3. **configSource and lastRebuilt state fields:** These fields exist in `InstanceState` but aren't in the Epic 7 revised schema. The new schema must preserve them: `configSource?: 'baseline' | 'repo'` and `lastRebuilt?: string`.
-4. **Baseline prompt in non-interactive contexts:** Story 7.5 specifies an Ink Select prompt, but the create command currently runs without Ink rendering. The prompt must handle non-TTY environments gracefully (e.g., default to repo config when stdin is not a TTY).
+4. **Baseline prompt in non-interactive contexts:** Story 7.5 specifies an interactive prompt (implemented as Node.js readline). The prompt must handle non-TTY environments gracefully (e.g., default to repo config when stdin is not a TTY).
 
 ## Architecture Update: PRD Revision (2026-02-14)
 
@@ -1778,4 +1797,60 @@ interface InstanceState {
 **Gap Resolution:** FR48 resolved by adding `export AGENT_ENV_PURPOSE=...` to baseline shell init scripts. Purpose env var is set fresh per shell session from state.json.
 
 **Implementation Readiness:** Update introduces 7 new architectural decisions, all with clear rationale, examples, and impact analysis. AI agents can implement from this document.
+
+### Epic 7 Post-Implementation Validation (2026-02-16)
+
+This section records the post-implementation validation of Epic 7 against the architecture and pre-implementation plan.
+
+#### Validation Results
+
+**Story 7.1 (State schema + naming refactor): ✅ COMPLETE**
+- `InstanceState` interface: `name`→`instance`, `repo`→`repoUrl`, `repoSlug` added
+- `configSource` and `lastRebuilt` optional fields preserved
+- `isValidState()` validates all three new required fields
+- `createInitialState()` produces correct schema with `configSource` defaulting to `'baseline'`
+- `createFallbackState()` returns safe defaults with `'unknown'` values
+- ALL consumers updated: `list-instances.ts`, `attach-instance.ts`, `remove-instance.ts`, `purpose-instance.ts`, `interactive-menu.ts`, `commands/list.ts`, `rebuild-instance.ts`
+- Image scripts updated: `tmux-purpose.sh` reads `.instance`, `setup-instance-isolation.sh` uses `grep -qF` + `ESCAPED_MARKER`
+- Components updated: `InstanceList.tsx` (repo column), `InteractiveMenu.tsx` (field references)
+
+**Story 7.2 (Slug derivation + compression + validation): ✅ COMPLETE**
+- `deriveRepoSlug()` created in `workspace.ts` with lowercase normalization and `compressSlug()` integration
+- `compressSlug()` uses SHA-256 deterministic compression for slugs >39 chars
+- Instance name validation: max 20 chars, enforced in `validateCreateInputs()`
+- Name segment validation via `validateNameSegment()` with regex pattern
+- See Drift #15: old `extractRepoName()` in `create-instance.ts` is dead code (not removed)
+
+**Story 7.3 (Two-phase repo resolution): ✅ PARTIAL**
+- `resolveInstance()` in `workspace.ts` implements full two-phase resolution
+- `--repo` option added to: attach, remove, purpose, list commands
+- `--repo` option NOT added to rebuild command (see Drift #17)
+- Resolution handles: explicit repo, cwd git remote, global unambiguous search, ambiguity error
+
+**Story 7.4 (Repo in list output): ✅ COMPLETE**
+- `InstanceList.tsx` has Repo column with `repoSlug` display
+- JSON output includes `repoSlug`, `repoUrl`, preserves `sshConnection`
+- `--repo` filter on list command works correctly
+
+**Story 7.5 (Baseline prompt + flags): ✅ COMPLETE**
+- `--baseline` and `--no-baseline` mutually exclusive flags implemented
+- Baseline prompt uses `readline` (not Ink Select — see Drift #16)
+- Non-TTY fallback: defaults to 'repo' when stdin is not a TTY
+- Three states work correctly: force-baseline, force-repo-config, ask-user
+
+#### Deviations Summary
+
+| # | Deviation | Severity | Action Required |
+|---|-----------|----------|-----------------|
+| Drift #15 | `extractRepoName()` dead code not removed | Low | Cleanup: delete function and its tests from `create-instance.ts` |
+| Drift #16 | Baseline prompt uses readline instead of Ink Select | None | Accepted — functionally equivalent, simpler |
+| Drift #17 | Rebuild command missing `--repo` option | Medium | Fix before multi-repo usage; rebuild will fail on ambiguous instance names |
+
+#### Architecture Accuracy
+
+The Epic 7 pre-implementation validation plan (file change matrix, risk identification) was accurate:
+- **Risk 1** (rebuild not in scope): Confirmed — rebuild consumers updated for schema (Story 7.1) but not for `--repo` resolution (Story 7.3)
+- **Risk 2** (sshConnection): Resolved — preserved in JSON output
+- **Risk 3** (configSource/lastRebuilt): Resolved — preserved in InstanceState
+- **Risk 4** (non-TTY prompt): Resolved — readline with `isTTY` check
 

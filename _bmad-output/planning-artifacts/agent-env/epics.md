@@ -1753,7 +1753,7 @@ So that I get the right environment for each use case.
 **Technical Requirements:**
 - Add `--baseline` and `--no-baseline` mutually exclusive flags to create command
 - Detect `.devcontainer/` in cloned repo before applying config
-- Interactive prompt using Ink Select component
+- Interactive prompt using Node.js readline (intentional simplification over Ink Select)
 - Default selection: "Use repo config" (first option, selected on Enter)
 - Three states: force-baseline, force-repo-config, ask-user
 - Non-TTY fallback: when stdin is not a TTY (piped, CI, scripted), default to "use repo config" without prompting
