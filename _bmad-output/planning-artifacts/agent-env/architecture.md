@@ -2,7 +2,7 @@
 stepsCompleted: [1, 2, 3, 4, 5, 6, 7, 8]
 workflowComplete: true
 completedAt: '2026-01-27'
-lastUpdated: '2026-02-14'
+lastUpdated: '2026-02-16'
 inputDocuments:
   - '_bmad-output/planning-artifacts/agent-env/prd.md'
   - '_bmad-output/planning-artifacts/agent-env/product-brief.md'
@@ -647,14 +647,15 @@ packages/
 │   │   │   ├── workspace.ts     # Workspace folder operations
 │   │   │   ├── state.ts         # State file management (atomic writes)
 │   │   │   ├── container.ts     # Docker/devcontainer lifecycle
+│   │   │   ├── container-env.ts # Container environment detection (Epic 6)
 │   │   │   ├── git.ts           # Git state detection
-│   │   │   ├── devcontainer.ts  # Devcontainer config handling
+│   │   │   ├── devcontainer.ts  # Devcontainer config handling + patching
 │   │   │   ├── completion.ts    # Shell completion generation
 │   │   │   ├── interactive-menu.ts  # Interactive menu logic
 │   │   │   ├── create-instance.ts   # Create orchestration
 │   │   │   ├── attach-instance.ts   # Attach orchestration
 │   │   │   ├── list-instances.ts    # List orchestration
-│   │   │   ├── purpose-instance.ts  # Purpose orchestration
+│   │   │   ├── purpose-instance.ts  # Purpose orchestration (host + container modes)
 │   │   │   ├── remove-instance.ts   # Remove orchestration with safety checks
 │   │   │   ├── safety-report.ts     # Safety check formatting with severity tags
 │   │   │   ├── audit-log.ts         # Force-remove audit logging (JSON Lines)
@@ -664,19 +665,16 @@ packages/
 │   │   │   ├── InteractiveMenu.tsx
 │   │   │   └── StatusIndicator.tsx
 │   │   └── commands/            # Commander subcommands
-│   │       ├── create.ts
+│   │       ├── create.ts        # --repo, --purpose, --attach flags
 │   │       ├── list.ts
 │   │       ├── attach.ts
-│   │       ├── remove.ts        # Remove with --force/--yes flags
-│   │       ├── purpose.ts
+│   │       ├── remove.ts        # --force/--yes flags
+│   │       ├── purpose.ts       # Container-aware (host/container modes)
 │   │       └── completion.ts
 │   └── config/
-│       └── baseline/            # Baseline devcontainer config
-│           ├── devcontainer.json
-│           ├── Dockerfile
-│           ├── post-create.sh
-│           ├── init-host.sh
-│           └── git-config
+│       └── baseline/            # Per-instance devcontainer customization
+│           ├── devcontainer.json # Bind-mount, AGENT_ENV_CONTAINER env var
+│           └── init-host.sh     # Host-side pre-container setup
 ├── orchestrator/                # bmad-orchestrator CLI (same structure)
 └── shared/                      # Cross-CLI utilities
     └── src/
@@ -684,9 +682,20 @@ packages/
         ├── errors.ts
         ├── subprocess.ts
         └── types.ts
+
+image/                           # Pre-built container image (published to GHCR)
+├── config/
+│   └── tmux.conf                # tmux: status-interval 15, purpose display
+└── scripts/
+    ├── post-create.sh           # Container init: agent-env CLI installation
+    ├── tmux-purpose.sh          # tmux status bar: jq-based purpose display
+    ├── tmux-session.sh          # tmux session wrapper using $AGENT_INSTANCE
+    └── setup-instance-isolation.sh  # Shell init: $AGENT_ENV_PURPOSE in .zshrc
 ```
 
 **Note:** The `hooks/` directory was not implemented. Instead, orchestration logic lives in `lib/*-instance.ts` modules which are called directly by commands and components. This provides equivalent functionality with better testability through dependency injection.
+
+**Note:** The `image/` directory contains scripts and config baked into the pre-built container image at `ghcr.io/zookanalytics/bmad-orchestrator/devcontainer:latest`. These are NOT copied per-instance — they ship with the published image. Only `config/baseline/` contents are applied per-instance at create time. See Drift #8 for details.
 
 **Import Order (ESLint enforced):**
 1. Node built-ins (`node:fs`, `node:path`)
@@ -1227,15 +1236,15 @@ Workspace-as-atomic-unit model provides clean separation of durable state (works
 
 ---
 
-**Architecture Status:** ✅ IMPLEMENTATION COMPLETE (All 5 Epics)
+**Architecture Status:** ✅ IMPLEMENTATION IN PROGRESS (6 of 8 Epics Complete)
 
-**Completed:** 2026-02-06. All epics (1-5) delivered. See Implementation Status section for drift log and known limitations.
+**Completed:** Epics 1-6 delivered as of 2026-02-16. Epics 7-8 pending implementation. See Implementation Status section for drift log.
 
 **Document Maintenance:** Update this architecture when post-MVP enhancements or new epics introduce architectural changes.
 
 ---
 
-## Implementation Status (Updated 2026-02-06)
+## Implementation Status (Updated 2026-02-16)
 
 This section tracks actual implementation against the architecture to identify drift and maintain alignment.
 
@@ -1248,6 +1257,7 @@ This section tracks actual implementation against the architecture to identify d
 | Epic 3: Instance Discovery & Git State | ✅ Complete | list command, git state detection, JSON output |
 | Epic 4: Instance Access & Management | ✅ Complete | attach, purpose, interactive menu, shell completion |
 | Epic 5: Safe Instance Removal | ✅ Complete | remove command with safety checks, force-remove, audit log |
+| Epic 6: In-Container Purpose & Tmux | ✅ Complete | --purpose flag, container env vars, tmux status bar, CLI inside container |
 
 ### Architecture Drift Log
 
@@ -1281,12 +1291,23 @@ This section tracks actual implementation against the architecture to identify d
 - Rationale: Clean separation of concerns — audit logging and safety formatting are distinct responsibilities
 - Impact: Positive — follows DI pattern with `AuditLogDeps` and co-located tests
 
-**Drift #6: GitState Type Limitations** (Epic 5)
+**Drift #6: GitState Type Limitations** (Epic 5) — **RESOLVED**
 - Original: Story 5.2 ACs expected file counts per type (staged/unstaged/untracked), unpushed commit counts per branch, and first stash message
-- Actual: `GitState` from Epic 3 only provides booleans (`hasStaged`, `hasUnstaged`, `hasUntracked`) and arrays of branch names without counts
-- Rationale: GitState was designed for Epic 3's list display (indicators only). Enriching it for detailed safety reports would require upstream changes to `git.ts`
-- Impact: Minor — safety report shows presence/absence rather than counts. Functionally sufficient for safety blocking decisions. Enhancement candidate for post-MVP
-- Status: Documented as known limitation in Story 5.2
+- Actual (at time of Epic 5): `GitState` only provided booleans and arrays of branch names without counts
+- Resolution: `GitState` in `types.ts` now includes `stagedCount`, `unstagedCount`, `untrackedCount`, `unpushedCommitCounts: Record<string, number>`, and `firstStashMessage: string`. The limitation documented here has been addressed.
+- Status: Resolved
+
+**Drift #7: Container Env Var Injection Mechanism** (Epic 6)
+- Original: Architecture specifies `AGENT_ENV_CONTAINER`, `AGENT_ENV_INSTANCE`, and `AGENT_ENV_REPO` as static entries in baseline `devcontainer.json` `containerEnv`
+- Actual: Only `AGENT_ENV_CONTAINER` is static in the baseline template. `AGENT_ENV_INSTANCE`, `AGENT_ENV_REPO`, and `AGENT_ENV_PURPOSE` are injected dynamically via `patchContainerEnv()` in `create-instance.ts` at create time
+- Rationale: Instance-specific values (name, repo, purpose) differ per invocation and cannot be hardcoded in a template. Dynamic patching is the correct approach.
+- Impact: Positive — functionally equivalent result, cleaner design
+
+**Drift #8: Image Directory Structure** (Epics 2-6)
+- Original: Architecture project structure shows `config/baseline/` containing `Dockerfile`, `post-create.sh`, `init-host.sh`, `git-config`
+- Actual: `config/baseline/` only contains `devcontainer.json` and `init-host.sh`. Container image scripts live in `image/scripts/` (post-create.sh, tmux-purpose.sh, tmux-session.sh, setup-instance-isolation.sh). Container config lives in `image/config/` (tmux.conf). No Dockerfile in `config/baseline/` — the container image is pre-built and published to GHCR (`ghcr.io/zookanalytics/bmad-orchestrator/devcontainer:latest`).
+- Rationale: Pre-built image on GHCR is faster than building per-instance. Image scripts are baked into the published image, not copied at create time. Baseline config is the minimal per-instance customization layer.
+- Impact: Significant structural difference from documented project structure. The `image/` directory at repo root is the actual home for container scripts and config.
 
 ### Epic 5 Implementation Checklist (Completed 2026-02-06)
 
@@ -1308,6 +1329,48 @@ This section tracks actual implementation against the architecture to identify d
 
 **Audit Log:**
 - [x] `~/.agent-env/audit.log` - JSON Lines format tracking: timestamp, action, instanceName, gitState, confirmationMethod
+
+### Epic 6 Implementation Checklist (Completed 2026-02-16)
+
+**Existing Modules Used:**
+- [x] `lib/state.ts` - State file reading/writing with atomic writes (purpose field)
+- [x] `lib/create-instance.ts` - Orchestration for create command (extended with --purpose)
+- [x] `lib/devcontainer.ts` - Devcontainer JSON patching (patchContainerEnv for env vars)
+- [x] `lib/container.ts` - Container lifecycle (devcontainerUp with remoteEnv support)
+- [x] `lib/purpose-instance.ts` - Purpose get/set orchestration (extended with container mode)
+- [x] `commands/create.ts` - Create CLI command (extended with --purpose flag)
+- [x] `commands/purpose.ts` - Purpose CLI command (extended with container detection)
+
+**New Modules Delivered:**
+- [x] `lib/container-env.ts` - Container environment detection (`isInsideContainer()`, `resolveContainerStatePath()`) with DI pattern
+- [x] `lib/container-env.test.ts` - Tests for container detection (strict equality, edge cases)
+- [x] `lib/tmux-purpose.test.ts` - Tests for tmux purpose display formatting
+
+**Image Scripts Delivered (in `image/` directory):**
+- [x] `image/scripts/tmux-purpose.sh` - tmux status bar script: single jq invocation, file guard, 40-char truncation with `…`
+- [x] `image/config/tmux.conf` - tmux config: `status-interval 15`, `status-right` calls tmux-purpose script
+- [x] `image/scripts/tmux-session.sh` - Session wrapper using `$AGENT_INSTANCE` for session name
+
+**Baseline Config Updates:**
+- [x] `config/baseline/devcontainer.json` - Bind-mount `.agent-env/` → `/etc/agent-env/` (read-write), `AGENT_ENV_CONTAINER=true`
+
+**Container Shell Init (in `image/scripts/setup-instance-isolation.sh`):**
+- [x] `AGENT_ENV_PURPOSE` export added to `.zshrc` — reads from state.json via jq at shell startup, idempotent marker pattern
+
+**Post-Create Script Updates (in `image/scripts/post-create.sh`):**
+- [x] agent-env CLI installation: dev mode check at `/opt/agent-env-dev` → `pnpm link --global`, fallback to `pnpm install -g @zookanalytics/agent-env`
+
+**FR Coverage:**
+- [x] FR46: `--purpose` flag on create command
+- [x] FR47: `$AGENT_ENV_INSTANCE` env var inside container (via `patchContainerEnv`)
+- [x] FR48: `$AGENT_ENV_PURPOSE` env var inside container (via `patchContainerEnv` + shell init from state.json)
+- [x] FR49: tmux status bar shows instance name + purpose (via `tmux-purpose.sh`)
+- [x] FR50: Live tmux updates within 30 seconds (15s `status-interval`)
+
+**NFR Coverage:**
+- [x] NFR22: Purpose in tmux < 1s on attach (tmux refreshes immediately on session create)
+- [x] NFR23: Live purpose updates < 30s (15s interval guarantees ≤15s)
+- [x] NFR24: tmux integration non-interfering (only modifies `status-right`)
 
 ## Architecture Update: PRD Revision (2026-02-14)
 
