@@ -16,6 +16,9 @@ revisions:
   - date: '2026-02-14'
     trigger: 'PRD revision (6 new features, validation fixes)'
     changes: 'Revised naming model, baseline config prompt, purpose propagation, CLI inside container, slug compression, repo registry'
+  - date: '2026-02-16'
+    trigger: 'Epic 7 pre-implementation validation against codebase'
+    changes: 'Added Drift #9-14 (rebuild command, sshConnection, image directory growth, baseline config correction, configSource/lastRebuilt fields). Added Epic 7 pre-implementation validation section with current state analysis, story validation, file change matrix, and risk identification. Corrected Drift #3 description. Updated InstanceState target schema to include configSource and lastRebuilt.'
 ---
 
 # Architecture Decision Document
@@ -1244,7 +1247,7 @@ Workspace-as-atomic-unit model provides clean separation of durable state (works
 
 ---
 
-## Implementation Status (Updated 2026-02-16)
+## Implementation Status (Updated 2026-02-16, validated 2026-02-16)
 
 This section tracks actual implementation against the architecture to identify drift and maintain alignment.
 
@@ -1273,11 +1276,11 @@ This section tracks actual implementation against the architecture to identify d
 - Rationale: Emerged from implementation needs
 - Impact: Neutral - follows same patterns
 
-**Drift #3: Baseline Config Files** (Epic 2)
-- Original: devcontainer.json, Dockerfile, features.json
-- Actual: devcontainer.json, Dockerfile, post-create.sh, init-host.sh, git-config
-- Rationale: Shell scripts needed for proper container initialization
-- Impact: Positive - better container setup
+**Drift #3: Baseline Config Files** (Epic 2) — **CORRECTED in 2026-02-16 validation**
+- Original: devcontainer.json, Dockerfile, features.json in `config/baseline/`
+- Actual: `config/baseline/` contains only `devcontainer.json` and `init-host.sh`. Dockerfile lives at `image/Dockerfile`. `post-create.sh` and other scripts live at `image/scripts/` (baked into published GHCR image). No `features.json` or `git-config` files exist.
+- Rationale: Pre-built image on GHCR is faster than building per-instance. Baseline config is the minimal per-instance customization layer.
+- Impact: See also Drift #12 for full details
 
 **Drift #4: SafetyPrompt Component → safety-report Module** (Epic 5)
 - Original: `components/SafetyPrompt.tsx` React component specified
@@ -1371,6 +1374,162 @@ This section tracks actual implementation against the architecture to identify d
 - [x] NFR22: Purpose in tmux < 1s on attach (tmux refreshes immediately on session create)
 - [x] NFR23: Live purpose updates < 30s (15s interval guarantees ≤15s)
 - [x] NFR24: tmux integration non-interfering (only modifies `status-right`)
+
+### Undocumented Implementation Additions (Discovered 2026-02-16 Validation)
+
+These items were implemented but not previously recorded in the architecture drift log.
+
+**Drift #9: Rebuild Command** (Post-Epic 6)
+- Original: Architecture mentions `rebuild` as a future feature ("rebuild command for updating instances without recreating")
+- Actual: `commands/rebuild.ts` and `lib/rebuild-instance.ts` are fully implemented with tests. Registered in `cli.ts`. Supports baseline reapplication, container recreation, and running instance confirmation prompts.
+- Impact: Positive — fills a documented Growth gap. Architecture should reference this as implemented.
+
+**Drift #10: SSH Connection in List Output** (Epics 2-6)
+- Original: Architecture specifies `Instance` display type with `name`, `status`, `lastAttached`, `purpose`, `gitState`
+- Actual: `Instance` interface in `list-instances.ts` also includes `sshConnection: string | null` — an SSH connection string (e.g., `node@ae-repo-auth.orb.local`) displayed when containers are running with port 22 exposed. JSON output also includes this field.
+- Impact: Neutral — additional field, no conflicts
+
+**Drift #11: Image Directory Growth** (Epics 2-6)
+- Original: Architecture documents `image/` as containing `config/tmux.conf`, `scripts/post-create.sh`, `scripts/tmux-purpose.sh`, `scripts/tmux-session.sh`, `scripts/setup-instance-isolation.sh`
+- Actual: `image/` now contains 40+ files including firewall (init-firewall.sh, dnsmasq.conf, ulogd.conf, allowed-domains.txt), SSH server (sshd_config, start-sshd.sh, install-ssh-host-keys.sh), hooks (prevent-admin-flag.sh, prevent-main-push.sh, prevent-no-verify.sh, prevent-sensitive-files.py, prevent-env-leakage.py, prevent-bash-sensitive-args.py, bmad-phase-complete.sh), Gemini (settings.json), managed settings (assemble-managed-settings.sh), package updates (update-packages.sh, check-daily-updates.sh), project init (init-project.sh, derive-project-name.sh), and bats test suites
+- Impact: Significant — the image has evolved well beyond the architecture's documentation. These additions relate to security hardening, multi-agent support (Gemini), and operational concerns not originally scoped in the agent-env architecture
+
+**Drift #12: Baseline Config Simplification** (Epics 2-6)
+- Original: Architecture's "Drift #3" says baseline contains `devcontainer.json, Dockerfile, post-create.sh, init-host.sh, git-config`
+- Actual: `packages/agent-env/config/baseline/` contains only `devcontainer.json` and `init-host.sh`. The Dockerfile lives at `image/Dockerfile`. `post-create.sh` lives at `image/scripts/post-create.sh` (baked into published GHCR image). No `git-config` file exists — git configuration is handled by the devcontainer image directly.
+- Impact: Drift #3 description needs correction. The baseline config directory is minimal by design — heavy setup lives in the pre-built image.
+
+**Drift #13: InstanceState.configSource Field** (Epic 2)
+- Original: Architecture's `InstanceState` schema does not include `configSource`
+- Actual: `configSource?: 'baseline' | 'repo'` field exists on `InstanceState` — tracks whether the devcontainer config was agent-env's baseline or the repo's own config. Used by `rebuild-instance.ts` to know which config to apply on rebuild.
+- Impact: Positive — needed for rebuild functionality
+
+**Drift #14: InstanceState.lastRebuilt Field** (Post-Epic 6)
+- Original: Architecture's `InstanceState` schema does not include `lastRebuilt`
+- Actual: `lastRebuilt?: string` (ISO 8601) field exists on `InstanceState` — set when rebuild completes successfully.
+- Impact: Neutral — related to Drift #9 (rebuild command)
+
+### Epic 7 Pre-Implementation Validation (2026-02-16)
+
+This section validates the current codebase state against Epic 7 requirements before implementation begins. Confirms what needs to change and identifies any assumptions in the epic stories that need revision.
+
+#### Current State (Pre-Epic 7)
+
+**State Schema (`InstanceState` in `lib/types.ts`):**
+- Uses `name: string` (workspace compound name, e.g., "bmad-orch-auth")
+- Uses `repo: string` (full git remote URL)
+- Does NOT have `instance`, `repoSlug`, or `repoUrl` fields
+- Has additional fields not in original architecture: `configSource`, `lastRebuilt`
+
+**Workspace Naming (`lib/workspace.ts`):**
+- `deriveWorkspaceName(repo, instance)` → `"${repo}-${instance}"` — already uses the `<repo>-<instance>` pattern
+- `createWorkspace(repo, instance)` — takes separate repo and instance args
+- `scanWorkspaces()` — returns flat list of workspace folder names
+- No slug compression function exists
+- No instance name length validation exists
+
+**Repo Name Extraction (`lib/create-instance.ts`):**
+- `extractRepoName(url)` — extracts last path segment minus `.git` from URL
+- This is functionally equivalent to Epic 7's `deriveRepoSlug()` but named differently
+- No compression for long names (>39 chars)
+
+**Instance Resolution (`lib/attach-instance.ts`):**
+- `findWorkspaceByName(instanceName, deps)` — suffix match on workspace folder names
+- Supports exact match and `-<instanceName>` suffix match
+- Returns `ambiguous` when multiple suffix matches exist
+- Does NOT accept `--repo` context for scoping
+- Does NOT use cwd git remote for implicit repo context
+- Used by: attach, remove, purpose, rebuild, interactive-menu
+
+**List Command (`commands/list.ts`):**
+- No `--repo` filter flag
+- JSON output includes: `name`, `status`, `lastAttached`, `purpose`, `gitState`, `sshConnection`
+- No `repoSlug` or `repoUrl` in output
+
+**Create Command (`commands/create.ts`):**
+- No `--baseline` or `--no-baseline` flags
+- Baseline is applied automatically when repo has no `.devcontainer/` — no prompt
+- When repo has `.devcontainer/`, repo config is used silently (no prompt, no override option)
+
+**Image Scripts:**
+- `tmux-purpose.sh` reads `.name` from state.json (needs update to `.instance` per Story 7.1)
+- `setup-instance-isolation.sh` Steps 9 and 11 use `grep -q` with bracket-containing markers (need `grep -qF` per Story 7.1)
+- Step 11b correctly uses `grep -qF` and `ESCAPED_MARKER` — the pattern to follow
+
+#### Epic 7 Story Validation
+
+**Story 7.1 (State schema + naming refactor):**
+- ✅ `createWorkspace()` already takes `(repo, instance)` separately — minimal rename
+- ✅ `deriveWorkspaceName()` already produces `<repo>-<instance>` format
+- ⚠️ State schema change: `name` → `instance`, `repo` → `repoUrl`, add `repoSlug` — touches ALL state consumers
+- ⚠️ `createFallbackState()` in `types.ts` must be updated for new field names
+- ⚠️ `isValidState()` in `state.ts` must validate new required fields (`instance`, `repoSlug`, `repoUrl`)
+- ⚠️ `createInitialState()` in `state.ts` must produce new schema
+- ⚠️ Additional consumers not in epic spec: `rebuild-instance.ts`, `commands/rebuild.ts` — also read state.json
+- ⚠️ JSON output in `commands/list.ts` maps `i.name` — must update to new field name
+- ⚠️ `InstanceList.tsx` component renders instance names — must update field references
+- ⚠️ `InteractiveMenu.tsx` and `interactive-menu.ts` reference state fields — must update
+- ✅ `grep -q` → `grep -qF` fix in setup-instance-isolation.sh Steps 9 and 11 is well-scoped
+- ✅ tmux-purpose.sh `.name` → `.instance` is straightforward jq field rename
+
+**Story 7.2 (Slug derivation + compression + validation):**
+- ✅ `extractRepoName()` in `create-instance.ts` already does slug derivation — can be renamed to `deriveRepoSlug()`
+- ⚠️ Need to add `compressSlug()` with SHA-256 hashing for slugs >39 chars
+- ⚠️ Need to add instance name validation (max 20 chars) in create command
+- ⚠️ Container name length enforcement (max 63 chars: `ae-` + slug ≤39 + `-` + instance ≤20)
+
+**Story 7.3 (Two-phase repo resolution):**
+- ⚠️ `findWorkspaceByName()` is the current resolution mechanism — needs significant enhancement
+- ⚠️ Must add `--repo` option to attach, remove, purpose commands
+- ⚠️ Must add cwd git remote detection for implicit repo context
+- ⚠️ Resolution must read `state.json` to get `repoSlug` for scoped lookups (currently only checks folder names)
+- ⚠️ `resolveRepoUrl()` in create-instance.ts handles `--repo .` — similar pattern needed for all commands
+
+**Story 7.4 (Repo in list output):**
+- ⚠️ `Instance` interface in `list-instances.ts` needs `repoSlug` and `repoUrl` fields
+- ⚠️ `InstanceList.tsx` component needs repo column
+- ⚠️ `commands/list.ts` needs `--repo` filter option
+- ⚠️ JSON output needs `repoSlug` and `repoUrl` fields
+
+**Story 7.5 (Baseline prompt + flags):**
+- ⚠️ `setupDevcontainerConfig()` in `create-instance.ts` currently auto-selects — needs prompt and flag logic
+- ⚠️ `commands/create.ts` needs `--baseline` and `--no-baseline` mutually exclusive flags
+- ⚠️ Need interactive prompt (Ink Select component) when repo has `.devcontainer/` and no flag provided
+- ⚠️ Default on Enter: "use repo config" (respect repo authors' intent)
+
+#### Files Requiring Changes for Epic 7
+
+| File | Stories | Change Type |
+|------|---------|-------------|
+| `lib/types.ts` | 7.1 | Schema: `name`→`instance`, `repo`→`repoUrl`, add `repoSlug`; update `createFallbackState()` |
+| `lib/state.ts` | 7.1 | Update `isValidState()`, `createInitialState()` |
+| `lib/workspace.ts` | 7.2 | Add `compressSlug()`, instance name validation |
+| `lib/create-instance.ts` | 7.1, 7.2, 7.5 | Rename `extractRepoName()`→`deriveRepoSlug()`, add compression, add baseline prompt |
+| `lib/attach-instance.ts` | 7.1, 7.3 | Update `findWorkspaceByName()` → two-phase resolution with `--repo` support |
+| `lib/list-instances.ts` | 7.1, 7.4 | Add `repoSlug`/`repoUrl` to `Instance`, update field references |
+| `lib/remove-instance.ts` | 7.1, 7.3 | Update state field references, add `--repo` resolution |
+| `lib/purpose-instance.ts` | 7.1, 7.3 | Update state field references, add `--repo` resolution |
+| `lib/rebuild-instance.ts` | 7.1, 7.3 | Update state field references, add `--repo` resolution |
+| `lib/interactive-menu.ts` | 7.1 | Update state field references |
+| `lib/safety-report.ts` | 7.1 | Update if it references state field names |
+| `commands/create.ts` | 7.2, 7.5 | Add `--baseline`/`--no-baseline` flags, name validation |
+| `commands/list.ts` | 7.4 | Add `--repo` filter, add `repoSlug`/`repoUrl` to JSON output |
+| `commands/attach.ts` | 7.3 | Add `--repo` option |
+| `commands/remove.ts` | 7.3 | Add `--repo` option |
+| `commands/purpose.ts` | 7.3 | Add `--repo` option |
+| `commands/rebuild.ts` | 7.3 | Add `--repo` option |
+| `components/InstanceList.tsx` | 7.1, 7.4 | Update field references, add repo column |
+| `components/InteractiveMenu.tsx` | 7.1 | Update field references |
+| `image/scripts/tmux-purpose.sh` | 7.1 | `.name` → `.instance` |
+| `image/scripts/setup-instance-isolation.sh` | 7.1 | Steps 9/11: `grep -q` → `grep -qF`, add `ESCAPED_MARKER` |
+| Test files (all co-located `.test.ts`) | 7.1-7.5 | Update fixtures and assertions for new schema |
+
+#### Epic 7 Risks Identified
+
+1. **Rebuild command not in epic scope:** Story 7.1 lists consumers to update but does not mention `rebuild-instance.ts` or `commands/rebuild.ts`. These read state.json and must be updated alongside other consumers.
+2. **sshConnection field in list output:** The `Instance` interface has an `sshConnection` field not mentioned in the architecture. Story 7.4 adds `repoSlug`/`repoUrl` — the JSON output mapping in `commands/list.ts` must include all existing fields plus new ones.
+3. **configSource and lastRebuilt state fields:** These fields exist in `InstanceState` but aren't in the Epic 7 revised schema. The new schema must preserve them: `configSource?: 'baseline' | 'repo'` and `lastRebuilt?: string`.
+4. **Baseline prompt in non-interactive contexts:** Story 7.5 specifies an Ink Select prompt, but the create command currently runs without Ink rendering. The prompt must handle non-TTY environments gracefully (e.g., default to repo config when stdin is not a TTY).
 
 ## Architecture Update: PRD Revision (2026-02-14)
 
@@ -1574,16 +1733,18 @@ agent-env purpose <name> "text"
 
 ### Updated State Model
 
-**InstanceState schema update:**
+**InstanceState schema update (Epic 7 target — includes fields from existing implementation):**
 ```typescript
 interface InstanceState {
-  instance: string;       // "auth" (user-chosen name, max 20 chars)
-  repoSlug: string;       // "bmad-orch" (derived from URL, max 39 chars)
-  repoUrl: string;        // Full git remote URL
-  createdAt: string;      // ISO 8601
-  lastAttached: string;   // ISO 8601
-  purpose: string | null; // User-provided description
-  containerName: string;  // "ae-bmad-orch-auth" (internal, max 63 chars)
+  instance: string;                    // "auth" (user-chosen name, max 20 chars) — renamed from `name`
+  repoSlug: string;                    // "bmad-orch" (derived from URL, max 39 chars) — NEW
+  repoUrl: string;                     // Full git remote URL — renamed from `repo`
+  createdAt: string;                   // ISO 8601
+  lastAttached: string;                // ISO 8601
+  lastRebuilt?: string;                // ISO 8601 — exists since rebuild command (Drift #14)
+  purpose: string | null;              // User-provided description
+  containerName: string;               // "ae-bmad-orch-auth" (internal, max 63 chars)
+  configSource?: 'baseline' | 'repo';  // How devcontainer config was provisioned (Drift #13)
 }
 ```
 

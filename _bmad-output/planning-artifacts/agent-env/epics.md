@@ -1580,8 +1580,8 @@ So that instances are scoped to repositories with globally unique workspace iden
 **Technical Requirements:**
 - Update `lib/workspace.ts`: `createWorkspace()` uses `<repo-slug>-<instance>` naming; scanning glob unchanged (`workspaces/*/`)
 - Update `lib/state.ts`: schema change (`name` → `instance`, add `repoSlug`, `repoUrl`)
-- Update `lib/types.ts`: `InstanceState` interface reflects new fields
-- Update ALL consumers: `list-instances.ts`, `attach-instance.ts`, `remove-instance.ts`, `purpose-instance.ts`, `interactive-menu.ts`, `commands/list.ts`
+- Update `lib/types.ts`: `InstanceState` interface reflects new fields; preserve existing `configSource?: 'baseline' | 'repo'` and `lastRebuilt?: string` fields
+- Update ALL consumers: `list-instances.ts`, `attach-instance.ts`, `remove-instance.ts`, `purpose-instance.ts`, `interactive-menu.ts`, `commands/list.ts`, `rebuild-instance.ts`, `commands/rebuild.ts`
 - Update ALL state.json consumers added in Epic 6:
   - `image/scripts/tmux-purpose.sh`: reads `.name` from state.json via jq; update field reference `.name` to `.instance`
   - `packages/agent-env/src/lib/purpose-instance.ts`: `getContainerPurpose()` and `setContainerPurpose()` read/write state.json; update for new schema (`name` → `instance`, new `repoSlug`/`repoUrl`). `setContainerPurpose()` constructs a `WorkspacePath` with `name: read.state.name` — must change to match new field.
@@ -1716,7 +1716,7 @@ So that I can distinguish instances from different repos at a glance.
 **Technical Requirements:**
 - Update `components/InstanceList.tsx`: add Repo column
 - Update `commands/list.ts`: add `--repo` filter option
-- Update JSON output to include `repoSlug` and `repoUrl`
+- Update JSON output to include `repoSlug` and `repoUrl`; preserve existing `sshConnection` field in JSON mapping
 - FR45 covered.
 
 ---
@@ -1756,6 +1756,7 @@ So that I get the right environment for each use case.
 - Interactive prompt using Ink Select component
 - Default selection: "Use repo config" (first option, selected on Enter)
 - Three states: force-baseline, force-repo-config, ask-user
+- Non-TTY fallback: when stdin is not a TTY (piped, CI, scripted), default to "use repo config" without prompting
 - FR27 (revision) covered.
 
 ---
