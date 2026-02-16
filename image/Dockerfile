@@ -172,6 +172,7 @@ COPY image/scripts/register-plugin-marketplaces.sh /usr/local/bin/
 COPY image/scripts/devcontainer-sanity-check.sh /usr/local/bin/
 COPY image/scripts/fix-ssh-socket-permissions.sh /usr/local/bin/
 COPY image/scripts/start-sshd.sh /usr/local/bin/
+COPY image/scripts/install-ssh-host-keys.sh /usr/local/bin/
 
 # Make scripts executable and configure sudo
 RUN chmod 755 /usr/local/bin/init-firewall.sh && \
@@ -194,6 +195,7 @@ RUN chmod 755 /usr/local/bin/init-firewall.sh && \
   chmod 755 /usr/local/bin/devcontainer-sanity-check.sh && \
   chmod 755 /usr/local/bin/fix-ssh-socket-permissions.sh && \
   chmod 755 /usr/local/bin/start-sshd.sh && \
+  chmod 755 /usr/local/bin/install-ssh-host-keys.sh && \
   echo "node ALL=(root) NOPASSWD: /usr/local/bin/init-firewall.sh" > /etc/sudoers.d/node-commands && \
   echo "node ALL=(root) NOPASSWD: /usr/local/bin/assemble-managed-settings.sh" >> /etc/sudoers.d/node-commands && \
   echo "node ALL=(root) NOPASSWD: /usr/local/bin/fix-node-modules-ownership.sh" >> /etc/sudoers.d/node-commands && \
@@ -204,6 +206,7 @@ RUN chmod 755 /usr/local/bin/init-firewall.sh && \
   echo "node ALL=(root) NOPASSWD: /usr/local/bin/fix-shared-data-permissions.sh" >> /etc/sudoers.d/node-commands && \
   echo "node ALL=(root) NOPASSWD: /usr/local/bin/fix-ssh-socket-permissions.sh" >> /etc/sudoers.d/node-commands && \
   echo "node ALL=(root) NOPASSWD: /usr/local/bin/start-sshd.sh" >> /etc/sudoers.d/node-commands && \
+  echo "node ALL=(root) NOPASSWD: /usr/local/bin/install-ssh-host-keys.sh" >> /etc/sudoers.d/node-commands && \
   chmod 0440 /etc/sudoers.d/node-commands
 
 # Create log files with proper permissions

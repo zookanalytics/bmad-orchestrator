@@ -38,10 +38,7 @@ else
 fi
 
 # Install host keys where sshd expects them
-sudo cp "$SSH_HOST_KEY_DIR"/ssh_host_*_key "$SSH_HOST_KEY_DIR"/ssh_host_*_key.pub /etc/ssh/
-sudo chown root:root /etc/ssh/ssh_host_*_key /etc/ssh/ssh_host_*_key.pub
-sudo chmod 600 /etc/ssh/ssh_host_*_key
-sudo chmod 644 /etc/ssh/ssh_host_*_key.pub
+sudo /usr/local/bin/install-ssh-host-keys.sh "$SSH_HOST_KEY_DIR"
 
 # Set up authorized_keys from staged public keys (mounted read-only by init-host.sh)
 mkdir -p "$HOME/.ssh"
