@@ -9,6 +9,7 @@ import {
   copyBaselineConfig,
   listBaselineFiles,
   patchContainerName,
+  patchContainerEnv,
   resolveDockerfilePath,
   parseDockerfileImages,
 } from './devcontainer.js';
@@ -178,8 +179,20 @@ describe('devcontainer.json content', () => {
     expect(config.build).toBeUndefined();
   });
 
-  it('does not define mounts (provided by image LABEL metadata)', () => {
-    expect(config.mounts).toBeUndefined();
+  it('defines mounts for .agent-env bind-mount to /etc/agent-env', () => {
+    expect(config.mounts).toBeDefined();
+    expect(Array.isArray(config.mounts)).toBe(true);
+    const mounts = config.mounts as string[];
+    expect(mounts).toHaveLength(1);
+    expect(mounts[0]).toContain('.agent-env');
+    expect(mounts[0]).toContain('/etc/agent-env');
+    expect(mounts[0]).toContain('type=bind');
+  });
+
+  it('defines containerEnv with AGENT_ENV_CONTAINER=true', () => {
+    expect(config.containerEnv).toBeDefined();
+    const env = config.containerEnv as Record<string, string>;
+    expect(env.AGENT_ENV_CONTAINER).toBe('true');
   });
 
   it('has initializeCommand referencing .agent-env/init-host.sh', () => {
@@ -227,6 +240,80 @@ describe('patchContainerName', () => {
     const content = await readFile(join(tempDir, '.devcontainer', 'devcontainer.json'), 'utf-8');
     const config = JSON.parse(content);
     expect(config.runArgs).toEqual(['--hostname=test', '--name=ae-new-name']);
+  });
+});
+
+// ─── patchContainerEnv ───────────────────────────────────────────────────────
+
+describe('patchContainerEnv', () => {
+  it('adds containerEnv entries to baseline devcontainer.json', async () => {
+    await copyBaselineConfig(tempDir);
+    await patchContainerEnv(
+      tempDir,
+      { AGENT_ENV_INSTANCE: 'bmad-orch-auth', AGENT_ENV_REPO: 'bmad-orch' },
+      undefined,
+      '.agent-env'
+    );
+
+    const content = await readFile(join(tempDir, '.agent-env', 'devcontainer.json'), 'utf-8');
+    const config = JSON.parse(content);
+    expect(config.containerEnv.AGENT_ENV_INSTANCE).toBe('bmad-orch-auth');
+    expect(config.containerEnv.AGENT_ENV_REPO).toBe('bmad-orch');
+  });
+
+  it('preserves existing containerEnv entries', async () => {
+    await copyBaselineConfig(tempDir);
+    await patchContainerEnv(
+      tempDir,
+      { AGENT_ENV_INSTANCE: 'test-instance' },
+      undefined,
+      '.agent-env'
+    );
+
+    const content = await readFile(join(tempDir, '.agent-env', 'devcontainer.json'), 'utf-8');
+    const config = JSON.parse(content);
+    // Should preserve the AGENT_ENV_CONTAINER=true from baseline
+    expect(config.containerEnv.AGENT_ENV_CONTAINER).toBe('true');
+    expect(config.containerEnv.AGENT_ENV_INSTANCE).toBe('test-instance');
+  });
+
+  it('overwrites existing env var with same key', async () => {
+    await mkdir(join(tempDir, '.devcontainer'), { recursive: true });
+    await writeFile(
+      join(tempDir, '.devcontainer', 'devcontainer.json'),
+      JSON.stringify({ containerEnv: { FOO: 'old-value', BAR: 'keep' } })
+    );
+
+    await patchContainerEnv(tempDir, { FOO: 'new-value' });
+
+    const content = await readFile(join(tempDir, '.devcontainer', 'devcontainer.json'), 'utf-8');
+    const config = JSON.parse(content);
+    expect(config.containerEnv.FOO).toBe('new-value');
+    expect(config.containerEnv.BAR).toBe('keep');
+  });
+
+  it('creates containerEnv when none exists', async () => {
+    await mkdir(join(tempDir, '.devcontainer'), { recursive: true });
+    await writeFile(
+      join(tempDir, '.devcontainer', 'devcontainer.json'),
+      JSON.stringify({ image: 'node:22' })
+    );
+
+    await patchContainerEnv(tempDir, { MY_VAR: 'my-value' });
+
+    const content = await readFile(join(tempDir, '.devcontainer', 'devcontainer.json'), 'utf-8');
+    const config = JSON.parse(content);
+    expect(config.containerEnv.MY_VAR).toBe('my-value');
+  });
+
+  it('preserves other devcontainer.json properties', async () => {
+    await copyBaselineConfig(tempDir);
+    await patchContainerEnv(tempDir, { AGENT_ENV_INSTANCE: 'test' }, undefined, '.agent-env');
+
+    const content = await readFile(join(tempDir, '.agent-env', 'devcontainer.json'), 'utf-8');
+    const config = JSON.parse(content);
+    expect(config.image).toBe('ghcr.io/zookanalytics/bmad-orchestrator/devcontainer:latest');
+    expect(config.initializeCommand).toContain('init-host.sh');
   });
 });
 

@@ -163,6 +163,39 @@ export async function patchContainerName(
   await deps.writeFile(configPath, JSON.stringify(config, null, 2) + '\n');
 }
 
+// ─── Container env patching ──────────────────────────────────────────────────
+
+/**
+ * Patch the copied devcontainer.json to set per-instance environment variables.
+ *
+ * Merges the provided env vars into the existing `containerEnv` object,
+ * overwriting any existing keys with the same name.
+ *
+ * @param workspacePath - Absolute path to the workspace root
+ * @param envVars - Environment variables to set (e.g., { AGENT_ENV_INSTANCE: "bmad-orch-auth" })
+ * @param deps - Injectable filesystem deps
+ * @param configDir - Config directory within workspace (default: .devcontainer)
+ */
+export async function patchContainerEnv(
+  workspacePath: string,
+  envVars: Record<string, string>,
+  deps: Pick<DevcontainerFsDeps, 'readFile' | 'writeFile'> = defaultFsDeps,
+  configDir: string = DEVCONTAINER_DIR
+): Promise<void> {
+  const configPath = join(workspacePath, configDir, DEVCONTAINER_JSON);
+  const content = await deps.readFile(configPath, 'utf-8');
+  const config = JSON.parse(content);
+
+  // Merge with any existing containerEnv
+  const existing: Record<string, string> =
+    typeof config.containerEnv === 'object' && config.containerEnv !== null
+      ? config.containerEnv
+      : {};
+  config.containerEnv = { ...existing, ...envVars };
+
+  await deps.writeFile(configPath, JSON.stringify(config, null, 2) + '\n');
+}
+
 // ─── Listing ─────────────────────────────────────────────────────────────────
 
 /**

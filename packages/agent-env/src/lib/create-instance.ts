@@ -29,7 +29,12 @@ import type { ContainerError, WorkspacePath } from './types.js';
 import type { FsDeps } from './workspace.js';
 
 import { createContainerLifecycle } from './container.js';
-import { copyBaselineConfig, hasDevcontainerConfig, patchContainerName } from './devcontainer.js';
+import {
+  copyBaselineConfig,
+  hasDevcontainerConfig,
+  patchContainerEnv,
+  patchContainerName,
+} from './devcontainer.js';
 import { createInitialState, ensureGitExclude, writeStateAtomic } from './state.js';
 import { AGENT_ENV_DIR } from './types.js';
 import { deriveContainerName, getWorkspacePath, workspaceExists } from './workspace.js';
@@ -350,18 +355,29 @@ export async function createInstance(
       };
     }
 
-    // Step 5b: Patch our baseline devcontainer.json with the container name.
-    // Only done for baseline configs we control (valid JSON). Repo-provided
-    // configs may use JSONC (comments/trailing commas) and shouldn't be modified.
+    // Step 5b: Patch our baseline devcontainer.json with container name and
+    // per-instance environment variables. Only done for baseline configs we
+    // control (valid JSON). Repo-provided configs may use JSONC and shouldn't
+    // be modified. AGENT_ENV_INSTANCE and AGENT_ENV_REPO are per-instance
+    // values that can't be set via devcontainer variable substitution.
     try {
       await patchContainerName(wsPath.root, containerName, deps.devcontainerFsDeps, AGENT_ENV_DIR);
+      await patchContainerEnv(
+        wsPath.root,
+        {
+          AGENT_ENV_INSTANCE: wsPath.name,
+          AGENT_ENV_REPO: repoName,
+        },
+        deps.devcontainerFsDeps,
+        AGENT_ENV_DIR
+      );
     } catch (err) {
       await safeRollback(wsPath.root, deps.rm, deps.logger);
       return {
         ok: false,
         error: {
           code: 'CONTAINER_ERROR',
-          message: `Failed to patch devcontainer.json with container name: ${err instanceof Error ? err.message : String(err)}`,
+          message: `Failed to patch baseline devcontainer.json: ${err instanceof Error ? err.message : String(err)}`,
         },
       };
     }
