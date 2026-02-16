@@ -175,12 +175,28 @@ describe('agent-env CLI', () => {
       expect(stderrStripped).toMatch(/❌ \[MISSING_OPTION\] The --repo flag is required\./);
     });
 
-    it('create --help shows --repo, --purpose, and --attach options', async () => {
+    it('create --help shows --repo, --purpose, --attach, --baseline and --no-baseline options', async () => {
       const result = await runCli(['create', '--help']);
       expect(result.exitCode).toBe(0);
       expect(result.stdout).toContain('--repo');
       expect(result.stdout).toContain('--purpose');
       expect(result.stdout).toContain('--attach');
+      expect(result.stdout).toContain('--baseline');
+      expect(result.stdout).toContain('--no-baseline');
+    });
+
+    it('create with both --baseline and --no-baseline shows mutual exclusion error', async () => {
+      const result = await runCli([
+        'create',
+        'test-instance',
+        '--repo',
+        'https://github.com/user/repo.git',
+        '--baseline',
+        '--no-baseline',
+      ]);
+      const stderrStripped = stripAnsiCodes(result.stderr);
+      expect(result.exitCode).toBe(1);
+      expect(stderrStripped).toContain('Cannot specify both --baseline and --no-baseline');
     });
 
     it('create with --repo . resolves current directory git remote', async () => {

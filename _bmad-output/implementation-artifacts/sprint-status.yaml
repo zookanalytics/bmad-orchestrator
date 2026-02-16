@@ -163,7 +163,7 @@ development_status:
   env-7-2-repo-slug-derivation-compression-and-instance-name-validation: done
   env-7-3-two-phase-repo-resolution-for-commands: review
   env-7-4-source-repo-in-list-output: done
-  env-7-5-baseline-config-prompt-with-flag-overrides: backlog
+  env-7-5-baseline-config-prompt-with-flag-overrides: done
   env-epic-7-retrospective: optional
 
   # ─── agent-env Epic 8: Growth — Repo Registry & VS Code Purpose ───

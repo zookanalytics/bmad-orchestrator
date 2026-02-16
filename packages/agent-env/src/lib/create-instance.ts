@@ -270,6 +270,46 @@ export function createDefaultDeps(): CreateInstanceDeps {
 }
 
 /**
+ * Determine whether to use baseline or repo config.
+ *
+ * Logic:
+ * - No repo config → always use baseline (regardless of flags)
+ * - Has repo config + force-baseline → use baseline
+ * - Has repo config + force-repo-config → use repo
+ * - Has repo config + ask-user → call askUser callback, default to repo if no callback
+ */
+async function resolveConfigChoice(
+  hasConfig: boolean,
+  baselineChoice: BaselineChoice,
+  askUser?: AskBaselineChoice
+): Promise<'baseline' | 'repo'> {
+  if (!hasConfig) {
+    return 'baseline';
+  }
+  if (baselineChoice === 'force-baseline') {
+    return 'baseline';
+  }
+  if (baselineChoice === 'force-repo-config') {
+    return 'repo';
+  }
+  // ask-user: call callback if available, default to repo config
+  if (askUser) {
+    return askUser();
+  }
+  return 'repo';
+}
+
+/**
+ * Derive the BaselineChoice enum from the boolean options flag.
+ * true = --baseline (force baseline), false = --no-baseline (force repo config), undefined = ask user
+ */
+function deriveBaselineChoice(baseline: boolean | undefined): BaselineChoice {
+  if (baseline === true) return 'force-baseline';
+  if (baseline === false) return 'force-repo-config';
+  return 'ask-user';
+}
+
+/**
  * Set up the devcontainer configuration for the workspace.
  * Returns the config source ('baseline' or 'repo') on success, or a CreateResult error on failure.
  */
@@ -278,13 +318,18 @@ async function setupDevcontainerConfig(
   containerName: string,
   repoName: string,
   purposeText: string,
-  deps: CreateInstanceDeps
+  deps: CreateInstanceDeps,
+  baselineChoice: BaselineChoice = 'ask-user',
+  askUser?: AskBaselineChoice
 ): Promise<{ ok: true; configSource: 'baseline' | 'repo' } | (CreateResult & { ok: false })> {
   const hasConfig = await hasDevcontainerConfig(wsPath.root, deps.devcontainerFsDeps);
-  if (hasConfig) {
+  const choice = await resolveConfigChoice(hasConfig, baselineChoice, askUser);
+
+  if (choice === 'repo') {
     return { ok: true, configSource: 'repo' };
   }
 
+  // Use baseline config
   try {
     await copyBaselineConfig(wsPath.root, deps.devcontainerFsDeps);
   } catch (err) {
@@ -324,6 +369,19 @@ async function setupDevcontainerConfig(
   return { ok: true, configSource: 'baseline' };
 }
 
+/** Callback for asking the user which config to use when repo has .devcontainer/ */
+export type AskBaselineChoice = () => Promise<'baseline' | 'repo'>;
+
+export type BaselineChoice = 'force-baseline' | 'force-repo-config' | 'ask-user';
+
+export interface CreateInstanceOptions {
+  purpose?: string;
+  /** true = --baseline (force baseline), false = --no-baseline (force repo config), undefined = ask user */
+  baseline?: boolean;
+  /** Callback to prompt user for baseline choice. Required when baseline is undefined and repo has config. */
+  askUser?: AskBaselineChoice;
+}
+
 /**
  * Create a new instance from a git repository.
  *
@@ -342,14 +400,93 @@ async function setupDevcontainerConfig(
  * @param instanceName - User-provided instance name (e.g., "auth")
  * @param repoUrl - Git repository URL (HTTPS or SSH)
  * @param deps - Injectable dependencies
- * @param options - Optional parameters (purpose)
+ * @param options - Optional parameters (purpose, baseline choice, askUser callback)
  * @returns CreateResult with success/failure info
  */
+/**
+ * Clone the repository and create the .agent-env directory in the workspace.
+ * Returns success or a CreateResult error (with rollback on failure).
+ */
+async function cloneAndPrepareWorkspace(
+  repoUrl: string,
+  wsPath: WorkspacePath,
+  deps: CreateInstanceDeps
+): Promise<{ ok: true } | (CreateResult & { ok: false })> {
+  // Create parent directories
+  try {
+    await deps.workspaceFsDeps.mkdir(dirname(wsPath.root), { recursive: true });
+  } catch (err) {
+    return {
+      ok: false,
+      error: {
+        code: 'WORKSPACE_ERROR',
+        message: `Failed to create workspace directory: ${err instanceof Error ? err.message : String(err)}`,
+        suggestion: 'Check filesystem permissions for the ~/.agent-env directory.',
+      },
+    };
+  }
+
+  const cloneResult = await deps.executor('git', ['clone', repoUrl, wsPath.root], {
+    timeout: GIT_CLONE_TIMEOUT,
+  });
+
+  if (!cloneResult.ok) {
+    await safeRollback(wsPath.root, deps.rm, deps.logger);
+    return {
+      ok: false,
+      error: {
+        code: 'GIT_ERROR',
+        message: `Git clone failed: ${cloneResult.stderr}`,
+        suggestion: 'Check the repository URL and your access permissions.',
+      },
+    };
+  }
+
+  // Create .agent-env directory in workspace
+  try {
+    await deps.workspaceFsDeps.mkdir(wsPath.agentEnvDir, { recursive: true });
+  } catch (err) {
+    await safeRollback(wsPath.root, deps.rm, deps.logger);
+    return {
+      ok: false,
+      error: {
+        code: 'WORKSPACE_ERROR',
+        message: `Failed to create .agent-env directory: ${err instanceof Error ? err.message : String(err)}`,
+        suggestion: 'Check filesystem permissions in the cloned workspace directory.',
+      },
+    };
+  }
+
+  return { ok: true };
+}
+
+/**
+ * Discover the actual container name after devcontainer up.
+ * The repo's devcontainer.json may override our derived name via runArgs.
+ */
+async function discoverContainerName(
+  containerName: string,
+  containerId: string | undefined,
+  deps: CreateInstanceDeps
+): Promise<string> {
+  if (containerId) {
+    const discovered = await deps.container.getContainerNameById(containerId);
+    if (discovered) {
+      return discovered;
+    }
+  } else {
+    deps.logger?.warn(
+      `Warning: devcontainer started successfully but no containerId returned. Using derived name '${containerName}'.`
+    );
+  }
+  return containerName;
+}
+
 export async function createInstance(
   instanceName: string,
   repoUrl: string,
   deps: CreateInstanceDeps,
-  options?: { purpose?: string }
+  options?: CreateInstanceOptions
 ): Promise<CreateResult> {
   const purposeText = options?.purpose ?? '';
   const purposeState = options?.purpose ?? null;
@@ -389,60 +526,21 @@ export async function createInstance(
     };
   }
 
-  // Step 3: Clone repo into workspace path
-  // Create parent directories first
-  try {
-    await deps.workspaceFsDeps.mkdir(dirname(wsPath.root), { recursive: true });
-  } catch (err) {
-    return {
-      ok: false,
-      error: {
-        code: 'WORKSPACE_ERROR',
-        message: `Failed to create workspace directory: ${err instanceof Error ? err.message : String(err)}`,
-        suggestion: 'Check filesystem permissions for the ~/.agent-env directory.',
-      },
-    };
-  }
+  // Step 3-4: Clone repo and create .agent-env directory
+  const prepResult = await cloneAndPrepareWorkspace(repoUrl, wsPath, deps);
+  if (!prepResult.ok) return prepResult;
 
-  const cloneResult = await deps.executor('git', ['clone', repoUrl, wsPath.root], {
-    timeout: GIT_CLONE_TIMEOUT,
-  });
+  // Step 5: Determine config choice and set up devcontainer config
+  const baselineChoice = deriveBaselineChoice(options?.baseline);
 
-  if (!cloneResult.ok) {
-    // Clean up any partial clone
-    await safeRollback(wsPath.root, deps.rm, deps.logger);
-    return {
-      ok: false,
-      error: {
-        code: 'GIT_ERROR',
-        message: `Git clone failed: ${cloneResult.stderr}`,
-        suggestion: 'Check the repository URL and your access permissions.',
-      },
-    };
-  }
-
-  // Step 4: Create .agent-env directory in workspace
-  try {
-    await deps.workspaceFsDeps.mkdir(wsPath.agentEnvDir, { recursive: true });
-  } catch (err) {
-    await safeRollback(wsPath.root, deps.rm, deps.logger);
-    return {
-      ok: false,
-      error: {
-        code: 'WORKSPACE_ERROR',
-        message: `Failed to create .agent-env directory: ${err instanceof Error ? err.message : String(err)}`,
-        suggestion: 'Check filesystem permissions in the cloned workspace directory.',
-      },
-    };
-  }
-
-  // Step 5: Copy baseline devcontainer config if none exists, patch with instance env vars
   const configResult = await setupDevcontainerConfig(
     wsPath,
     containerName,
     repoName,
     purposeText,
-    deps
+    deps,
+    baselineChoice,
+    options?.askUser
   );
   if (!configResult.ok) {
     return configResult;
@@ -482,20 +580,11 @@ export async function createInstance(
   }
 
   // Step 6b: Discover actual container name
-  // The repo's devcontainer.json may have its own --name in runArgs, so the actual
-  // container name may differ from our derived ae-* name. Query Docker to find out.
-  let actualContainerName = containerName;
-  if (containerResult.containerId) {
-    const discovered = await deps.container.getContainerNameById(containerResult.containerId);
-    if (discovered) {
-      actualContainerName = discovered;
-    }
-  } else {
-    // Container started but no containerId returned - unusual state, log for debugging
-    deps.logger?.warn(
-      `Warning: devcontainer started successfully but no containerId returned. Using derived name '${containerName}'.`
-    );
-  }
+  const actualContainerName = await discoverContainerName(
+    containerName,
+    containerResult.containerId,
+    deps
+  );
 
   // Step 7: Write initial state
   const state = createInitialState(instanceName, repoName, repoUrl, {
