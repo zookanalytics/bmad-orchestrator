@@ -1,5 +1,5 @@
 ---
-"@bmad-orchestrator/agent-env": minor
+"@zookanalytics/agent-env": minor
 ---
 
 Add purpose support to agent environments
