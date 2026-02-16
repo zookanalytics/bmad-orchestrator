@@ -127,8 +127,9 @@ export async function listInstances(deps?: Partial<ListInstancesDeps>): Promise<
         // — the key exists in ports with an empty string value
         if ('22/tcp' in containerResult.ports) {
           // Use OrbStack domain label override if present, otherwise default .orb.local DNS
-          const orbDomain = containerResult.labels['dev.orbstack.domains'];
-          const hostname = orbDomain || `${state.containerName}.orb.local`;
+          // Label may contain comma-separated domains; use the first one
+          const orbDomains = containerResult.labels['dev.orbstack.domains'];
+          const hostname = orbDomains?.split(',')[0]?.trim() || `${state.containerName}.orb.local`;
           sshConnection = `node@${hostname}`;
           // Append localhost port fallback when port is published to non-standard port
           const hostPort = containerResult.ports['22/tcp'];

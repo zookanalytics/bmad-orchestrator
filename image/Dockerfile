@@ -101,7 +101,7 @@ RUN mkdir -p /etc/ssh && \
 # keeping password login impossible (PasswordAuthentication no in sshd_config).
 RUN mkdir -p /run/sshd && \
   rm -f /etc/ssh/ssh_host_*_key /etc/ssh/ssh_host_*_key.pub && \
-  usermod -p '*' node
+  usermod -p '*' -s /bin/zsh node
 COPY image/config/sshd_config /etc/ssh/sshd_config
 
 EXPOSE 22
@@ -122,9 +122,7 @@ COPY --chown=node:node image/scripts/tmux-session.sh /home/node/.local/bin/tmux-
 COPY --chown=node:node image/scripts/tmux-purpose.sh /home/node/.local/bin/tmux-purpose
 RUN chmod +x /home/node/.local/bin/tmux-session /home/node/.local/bin/tmux-purpose
 
-# Set default shell and editor (both the env var and the login shell in /etc/passwd,
-# so that SSH sessions and interactive terminals both use zsh)
-RUN usermod -s /bin/zsh node
+# Set default shell and editor
 ENV SHELL=/bin/zsh
 ENV EDITOR=vim
 ENV VISUAL=vim

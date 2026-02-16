@@ -185,15 +185,13 @@ describe('listInstances', () => {
 
     it('shows running status in green (AC: #2)', async () => {
       const container = mockContainer({
-        containerStatus: vi
-          .fn()
-          .mockResolvedValue({
-            ok: true,
-            status: 'running',
-            containerId: 'a',
-            ports: {},
-            labels: {},
-          }),
+        containerStatus: vi.fn().mockResolvedValue({
+          ok: true,
+          status: 'running',
+          containerId: 'a',
+          ports: {},
+          labels: {},
+        }),
       });
       const wsFsDeps = mockFsDeps(['my-instance']);
       const stateFsDeps = mockStateFsDeps({
@@ -213,15 +211,13 @@ describe('listInstances', () => {
 
     it('shows stopped status (AC: #3)', async () => {
       const container = mockContainer({
-        containerStatus: vi
-          .fn()
-          .mockResolvedValue({
-            ok: true,
-            status: 'stopped',
-            containerId: 'a',
-            ports: {},
-            labels: {},
-          }),
+        containerStatus: vi.fn().mockResolvedValue({
+          ok: true,
+          status: 'stopped',
+          containerId: 'a',
+          ports: {},
+          labels: {},
+        }),
       });
       const wsFsDeps = mockFsDeps(['my-instance']);
       const stateFsDeps = mockStateFsDeps({
@@ -553,6 +549,32 @@ describe('listInstances', () => {
       assertSuccess(result);
 
       expect(result.instances[0].sshConnection).toBe('node@my-instance.repo.local');
+    });
+
+    it('uses first domain when dev.orbstack.domains contains comma-separated list', async () => {
+      const container = mockContainer({
+        containerStatus: vi.fn().mockResolvedValue({
+          ok: true,
+          status: 'running',
+          containerId: 'abc',
+          ports: { '22/tcp': '' },
+          labels: { 'dev.orbstack.domains': 'primary.local,secondary.local' },
+        }),
+      });
+      const wsFsDeps = mockFsDeps(['my-instance']);
+      const stateFsDeps = mockStateFsDeps({
+        'my-instance': makeState({ name: 'my-instance', containerName: 'ae-my-instance' }),
+      });
+
+      const result = await listInstances({
+        container,
+        gitDetector: mockGitDetector(),
+        workspaceFsDeps: wsFsDeps,
+        stateFsDeps,
+      });
+      assertSuccess(result);
+
+      expect(result.instances[0].sshConnection).toBe('node@primary.local');
     });
 
     it('includes localhost port fallback when mapped to non-standard port', async () => {
