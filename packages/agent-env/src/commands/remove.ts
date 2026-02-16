@@ -1,4 +1,4 @@
-import { formatError, createError } from '@zookanalytics/shared';
+import { formatError, createError, createExecutor } from '@zookanalytics/shared';
 import chalk from 'chalk';
 import { Command } from 'commander';
 import { createInterface } from 'node:readline';
@@ -13,6 +13,7 @@ import {
 } from '../lib/audit-log.js';
 import { createRemoveDefaultDeps, removeInstance } from '../lib/remove-instance.js';
 import { formatSafetyReport } from '../lib/safety-report.js';
+import { resolveRepo } from '../lib/workspace.js';
 
 /**
  * Prompt the user to type the instance name to confirm force removal.
@@ -101,12 +102,13 @@ async function resolveConfirmation(
 export const removeCommand = new Command('remove')
   .description('Remove an instance with safety checks')
   .argument('<name>', 'Instance name to remove')
+  .option('--repo <slug>', 'Repo slug or URL to scope instance lookup')
   .option('--force', 'Force removal, bypassing safety checks')
   .option(
     '--yes',
     'Skip confirmation prompt for --force (DANGEROUS: skips all safety prompts, for scripts only)'
   )
-  .action(async (name: string, options: { force?: boolean; yes?: boolean }) => {
+  .action(async (name: string, options: { repo?: string; force?: boolean; yes?: boolean }) => {
     if (options.yes && !options.force) {
       console.error(
         formatError(
@@ -121,8 +123,25 @@ export const removeCommand = new Command('remove')
       return;
     }
 
+    // Phase 1: Resolve repo context
+    const executor = createExecutor();
+    const repoResult = await resolveRepo({ repo: options.repo, cwd: process.cwd() }, executor);
+
+    let repoSlug: string | undefined;
+    if (repoResult.resolved) {
+      repoSlug = repoResult.repoSlug;
+    } else if ('error' in repoResult && repoResult.error) {
+      console.error(
+        formatError(
+          createError(repoResult.error.code, repoResult.error.message, repoResult.error.suggestion)
+        )
+      );
+      process.exit(1);
+      return;
+    }
+
     const deps = createRemoveDefaultDeps();
-    const checkResult = await removeInstance(name, deps, false);
+    const checkResult = await removeInstance(name, deps, false, repoSlug);
 
     if (checkResult.ok) {
       if (options.force) {
@@ -160,7 +179,7 @@ export const removeCommand = new Command('remove')
       return;
     }
 
-    const forceResult = await removeInstance(name, deps, true);
+    const forceResult = await removeInstance(name, deps, true, repoSlug);
     if (!forceResult.ok) {
       const { code, message, suggestion } = forceResult.error;
       console.error(formatError(createError(code, message, suggestion)));

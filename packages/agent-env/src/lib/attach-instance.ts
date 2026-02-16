@@ -20,7 +20,7 @@ import { createContainerLifecycle } from './container.js';
 import { attachToInstance } from './create-instance.js';
 import { readState, writeStateAtomic } from './state.js';
 import { AGENT_ENV_DIR } from './types.js';
-import { getWorkspacePathByName, scanWorkspaces } from './workspace.js';
+import { getWorkspacePathByName, resolveInstance, scanWorkspaces } from './workspace.js';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -106,7 +106,7 @@ export async function findWorkspaceByName(
  * Attach to an existing instance's tmux session.
  *
  * Orchestration flow:
- * 1. Find workspace by instance name
+ * 1. Resolve instance using two-phase resolution (repo-scoped → global)
  * 2. Read state to get container name
  * 3. Check Docker availability
  * 4. Check container status
@@ -117,36 +117,25 @@ export async function findWorkspaceByName(
  * @param instanceName - User-provided instance name (e.g., "auth")
  * @param deps - Injectable dependencies
  * @param onContainerStarting - Optional callback for progress output
+ * @param onAttaching - Optional callback when attaching to tmux
+ * @param repoSlug - Optional repo slug from --repo flag or cwd inference
  * @returns AttachResult with success/failure info
  */
 export async function attachInstance(
   instanceName: string,
   deps: AttachInstanceDeps,
   onContainerStarting?: () => void,
-  onAttaching?: () => void
+  onAttaching?: () => void,
+  repoSlug?: string
 ): Promise<AttachResult> {
-  // Step 1: Find workspace
-  const lookup = await findWorkspaceByName(instanceName, deps.workspaceFsDeps);
+  // Step 1: Resolve instance using two-phase resolution
+  const lookup = await resolveInstance(instanceName, repoSlug, {
+    fsDeps: deps.workspaceFsDeps,
+    readFile,
+  });
 
   if (!lookup.found) {
-    if (lookup.reason === 'ambiguous') {
-      return {
-        ok: false,
-        error: {
-          code: 'AMBIGUOUS_MATCH',
-          message: `Multiple instances match '${instanceName}': ${lookup.matches.join(', ')}`,
-          suggestion: 'Use the full workspace name to specify which instance.',
-        },
-      };
-    }
-    return {
-      ok: false,
-      error: {
-        code: 'WORKSPACE_NOT_FOUND',
-        message: `Instance '${instanceName}' not found`,
-        suggestion: 'Use `agent-env list` to see available instances.',
-      },
-    };
+    return { ok: false, error: lookup.error };
   }
 
   const wsPath = getWorkspacePathByName(lookup.workspaceName, deps.workspaceFsDeps);

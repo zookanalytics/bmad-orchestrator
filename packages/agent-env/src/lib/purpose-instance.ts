@@ -17,10 +17,9 @@ import type { StateFsDeps } from './state.js';
 import type { InstanceState, WorkspacePath } from './types.js';
 import type { FsDeps } from './workspace.js';
 
-import { findWorkspaceByName } from './attach-instance.js';
 import { CONTAINER_AGENT_ENV_DIR, CONTAINER_STATE_PATH } from './container-env.js';
 import { readState, writeStateAtomic, isValidState } from './state.js';
-import { getWorkspacePathByName } from './workspace.js';
+import { getWorkspacePathByName, resolveInstance } from './workspace.js';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -70,32 +69,6 @@ function validatePurposeLength(value: string): PurposeSetResult | null {
   return null;
 }
 
-type LookupError = { ok: false; error: { code: string; message: string; suggestion?: string } };
-
-function mapLookupError(
-  lookup: Exclude<Awaited<ReturnType<typeof findWorkspaceByName>>, { found: true }>,
-  instanceName: string
-): LookupError {
-  if (lookup.reason === 'ambiguous') {
-    return {
-      ok: false,
-      error: {
-        code: 'AMBIGUOUS_MATCH',
-        message: `Multiple instances match '${instanceName}': ${lookup.matches.join(', ')}`,
-        suggestion: 'Use the full workspace name to specify which instance.',
-      },
-    };
-  }
-  return {
-    ok: false,
-    error: {
-      code: 'WORKSPACE_NOT_FOUND',
-      message: `Instance '${instanceName}' not found`,
-      suggestion: 'Use `agent-env list` to see available instances.',
-    },
-  };
-}
-
 // ─── Purpose Operations ──────────────────────────────────────────────────────
 
 /**
@@ -103,16 +76,21 @@ function mapLookupError(
  *
  * @param instanceName - User-provided instance name (e.g., "auth")
  * @param deps - Injectable dependencies
+ * @param repoSlug - Optional repo slug from --repo flag or cwd inference
  * @returns PurposeGetResult with purpose string or null
  */
 export async function getPurpose(
   instanceName: string,
-  deps: PurposeInstanceDeps
+  deps: PurposeInstanceDeps,
+  repoSlug?: string
 ): Promise<PurposeGetResult> {
-  const lookup = await findWorkspaceByName(instanceName, deps.workspaceFsDeps);
+  const lookup = await resolveInstance(instanceName, repoSlug, {
+    fsDeps: deps.workspaceFsDeps,
+    readFile: deps.stateFsDeps.readFile,
+  });
 
   if (!lookup.found) {
-    return mapLookupError(lookup, instanceName);
+    return { ok: false, error: lookup.error };
   }
 
   const wsPath = getWorkspacePathByName(lookup.workspaceName, deps.workspaceFsDeps);
@@ -127,20 +105,25 @@ export async function getPurpose(
  * @param instanceName - User-provided instance name (e.g., "auth")
  * @param value - New purpose string, or empty string to clear
  * @param deps - Injectable dependencies
+ * @param repoSlug - Optional repo slug from --repo flag or cwd inference
  * @returns PurposeSetResult with success/failure info
  */
 export async function setPurpose(
   instanceName: string,
   value: string,
-  deps: PurposeInstanceDeps
+  deps: PurposeInstanceDeps,
+  repoSlug?: string
 ): Promise<PurposeSetResult> {
   const lengthError = validatePurposeLength(value);
   if (lengthError) return lengthError;
 
-  const lookup = await findWorkspaceByName(instanceName, deps.workspaceFsDeps);
+  const lookup = await resolveInstance(instanceName, repoSlug, {
+    fsDeps: deps.workspaceFsDeps,
+    readFile: deps.stateFsDeps.readFile,
+  });
 
   if (!lookup.found) {
-    return mapLookupError(lookup, instanceName);
+    return { ok: false, error: lookup.error };
   }
 
   const wsPath = getWorkspacePathByName(lookup.workspaceName, deps.workspaceFsDeps);

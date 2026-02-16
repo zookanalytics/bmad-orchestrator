@@ -53,10 +53,15 @@ function createTestState(
   workspaceName: string,
   overrides: Partial<InstanceState> = {}
 ): InstanceState {
+  // Derive instance name from workspace name by splitting at the LAST dash
+  // e.g., "bmad-orch-auth" → instance="auth", repoSlug="bmad-orch"
+  const lastDashIdx = workspaceName.lastIndexOf('-');
+  const instance = lastDashIdx > 0 ? workspaceName.slice(lastDashIdx + 1) : workspaceName;
+  const repoSlug = lastDashIdx > 0 ? workspaceName.slice(0, lastDashIdx) : 'repo';
   return {
-    instance: workspaceName,
-    repoSlug: 'repo',
-    repoUrl: 'https://github.com/user/repo.git',
+    instance,
+    repoSlug,
+    repoUrl: `https://github.com/user/${repoSlug}.git`,
     createdAt: '2026-01-15T10:00:00.000Z',
     lastAttached: '2026-01-20T14:00:00.000Z',
     purpose: null,
@@ -127,7 +132,7 @@ describe('getPurpose', () => {
     expect(result.error.message).toContain("Instance 'nonexistent' not found");
   });
 
-  it('returns AMBIGUOUS_MATCH when multiple workspaces match', async () => {
+  it('returns AMBIGUOUS_INSTANCE when multiple repos have same instance name', async () => {
     await createTestWorkspace('repo1-auth', createTestState('repo1-auth'));
     await createTestWorkspace('repo2-auth', createTestState('repo2-auth'));
     const deps = createTestDeps();
@@ -136,9 +141,10 @@ describe('getPurpose', () => {
 
     expect(result.ok).toBe(false);
     if (result.ok) throw new Error('Expected failure');
-    expect(result.error.code).toBe('AMBIGUOUS_MATCH');
-    expect(result.error.message).toContain('repo1-auth');
-    expect(result.error.message).toContain('repo2-auth');
+    expect(result.error.code).toBe('AMBIGUOUS_INSTANCE');
+    expect(result.error.message).toContain('repo1');
+    expect(result.error.message).toContain('repo2');
+    expect(result.error.suggestion).toContain('--repo');
   });
 });
 
@@ -203,7 +209,7 @@ describe('setPurpose', () => {
     expect(updatedState.repoUrl).toBe('https://github.com/user/special.git');
     expect(updatedState.lastAttached).toBe('2026-01-25T10:00:00.000Z');
     expect(updatedState.createdAt).toBe('2026-01-10T08:00:00.000Z');
-    expect(updatedState.instance).toBe('repo-auth');
+    expect(updatedState.instance).toBe('auth');
     expect(updatedState.containerName).toBe('ae-repo-auth');
   });
 
@@ -218,7 +224,7 @@ describe('setPurpose', () => {
     expect(result.error.message).toContain("Instance 'nonexistent' not found");
   });
 
-  it('returns AMBIGUOUS_MATCH when multiple workspaces match', async () => {
+  it('returns AMBIGUOUS_INSTANCE when multiple repos have same instance name', async () => {
     await createTestWorkspace('repo1-auth', createTestState('repo1-auth'));
     await createTestWorkspace('repo2-auth', createTestState('repo2-auth'));
     const deps = createTestDeps();
@@ -227,7 +233,8 @@ describe('setPurpose', () => {
 
     expect(result.ok).toBe(false);
     if (result.ok) throw new Error('Expected failure');
-    expect(result.error.code).toBe('AMBIGUOUS_MATCH');
+    expect(result.error.code).toBe('AMBIGUOUS_INSTANCE');
+    expect(result.error.suggestion).toContain('--repo');
   });
 
   it('overwrites existing purpose with new value', async () => {
@@ -427,7 +434,7 @@ describe('setContainerPurpose', () => {
     expect(updatedState.purpose).toBe('New purpose');
     expect(updatedState.repoUrl).toBe('https://github.com/user/special.git');
     expect(updatedState.lastAttached).toBe('2026-01-25T10:00:00.000Z');
-    expect(updatedState.instance).toBe('repo-auth');
+    expect(updatedState.instance).toBe('auth');
   });
 
   it('uses atomic write (tmp + rename) pattern', async () => {

@@ -99,7 +99,7 @@ const runCli = async (args: string[], extraEnv: Record<string, string> = {}) => 
 };
 
 /**
- * Creates a mock workspace for testing `remove` command.
+ * Creates a mock workspace for testing commands.
  */
 async function createMockWorkspace(
   instanceName: string,
@@ -112,9 +112,12 @@ async function createMockWorkspace(
   await mkdir(agentEnvDir, { recursive: true });
 
   const defaultState = {
-    name: `repo-${instanceName}`,
-    repo: 'https://github.com/test/repo.git',
+    instance: instanceName,
+    repoSlug: 'repo',
+    repoUrl: 'https://github.com/test/repo.git',
     createdAt: '2026-01-01T00:00:00Z',
+    lastAttached: '2026-01-01T00:00:00Z',
+    purpose: null,
     containerName: `ae-repo-${instanceName}`,
     ...stateOverrides,
   };
