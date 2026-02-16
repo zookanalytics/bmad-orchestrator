@@ -272,8 +272,9 @@ describe('createInstance', () => {
 
     const stateContent = await readFile(result.workspacePath.stateFile, 'utf-8');
     const state = JSON.parse(stateContent);
-    expect(state.name).toBe('bmad-orch-auth');
-    expect(state.repo).toBe('https://github.com/user/bmad-orch.git');
+    expect(state.instance).toBe('auth');
+    expect(state.repoSlug).toBe('bmad-orch');
+    expect(state.repoUrl).toBe('https://github.com/user/bmad-orch.git');
     expect(state.containerName).toBe('ae-bmad-orch-auth');
     expect(state.createdAt).toBeDefined();
   });

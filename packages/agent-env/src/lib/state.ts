@@ -96,25 +96,29 @@ export async function writeStateAtomic(
 /**
  * Create initial state for a new workspace
  *
- * @param name - Workspace name (e.g., "bmad-orch-auth")
- * @param repo - Git remote URL
+ * @param instance - User-chosen instance name (e.g., "auth")
+ * @param repoSlug - Repo slug derived from URL (e.g., "bmad-orchestrator")
+ * @param repoUrl - Full git remote URL
  * @param options - Optional container name and config source
  * @returns New InstanceState with current timestamp
  */
 export function createInitialState(
-  name: string,
-  repo: string,
+  instance: string,
+  repoSlug: string,
+  repoUrl: string,
   options?: { containerName?: string; configSource?: 'baseline' | 'repo'; purpose?: string | null }
 ): InstanceState {
   const { containerName, configSource, purpose } = options ?? {};
   const now = new Date().toISOString();
+  const workspaceName = `${repoSlug}-${instance}`;
   return {
-    name,
-    repo,
+    instance,
+    repoSlug,
+    repoUrl,
     createdAt: now,
     lastAttached: now,
     purpose: purpose ?? null,
-    containerName: containerName ?? `${CONTAINER_PREFIX}${name}`,
+    containerName: containerName ?? `${CONTAINER_PREFIX}${workspaceName}`,
     configSource: configSource ?? 'baseline',
   };
 }
@@ -122,7 +126,11 @@ export function createInitialState(
 // ─── Validation ──────────────────────────────────────────────────────────────
 
 /**
- * Type guard to validate parsed JSON is a valid InstanceState
+ * Type guard to validate parsed JSON is a valid InstanceState.
+ *
+ * Requires the new Epic 7 schema fields: instance, repoSlug, repoUrl.
+ * Old-format state files (with `name`/`repo` instead) will fail validation,
+ * which is intentional — pre-Epic 7 workspaces are not detected.
  */
 export function isValidState(value: unknown): value is InstanceState {
   if (typeof value !== 'object' || value === null) return false;
@@ -130,8 +138,9 @@ export function isValidState(value: unknown): value is InstanceState {
   const obj = value as Record<string, unknown>;
 
   return (
-    typeof obj.name === 'string' &&
-    typeof obj.repo === 'string' &&
+    typeof obj.instance === 'string' &&
+    typeof obj.repoSlug === 'string' &&
+    typeof obj.repoUrl === 'string' &&
     typeof obj.createdAt === 'string' &&
     typeof obj.lastAttached === 'string' &&
     (obj.purpose === undefined || obj.purpose === null || typeof obj.purpose === 'string') &&

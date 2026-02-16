@@ -158,8 +158,8 @@ development_status:
   # Flat workspace layout with repo-scoped naming, multi-instance per repo, user-chosen names, baseline config prompt.
   # Dependencies: Requires Epics 1-5 (complete). Independent of Epics 6 and 8.
   # PRD revision 2026-02-14: FR43, FR45, FR27 (revision)
-  env-epic-7: backlog
-  env-7-1-refactor-workspace-naming-and-state-schema-for-repo-scoped-instances: backlog
+  env-epic-7: in-progress
+  env-7-1-refactor-workspace-naming-and-state-schema-for-repo-scoped-instances: done
   env-7-2-repo-slug-derivation-compression-and-instance-name-validation: backlog
   env-7-3-two-phase-repo-resolution-for-commands: backlog
   env-7-4-source-repo-in-list-output: backlog

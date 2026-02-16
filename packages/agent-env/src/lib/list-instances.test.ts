@@ -37,8 +37,9 @@ function mockDirent(name: string): Dirent {
 /** Create a valid InstanceState */
 function makeState(overrides: Partial<InstanceState> = {}): InstanceState {
   return {
-    name: 'test-instance',
-    repo: 'https://github.com/user/repo.git',
+    instance: 'test-instance',
+    repoSlug: 'repo',
+    repoUrl: 'https://github.com/user/repo.git',
     createdAt: '2026-01-15T10:00:00.000Z',
     lastAttached: '2026-02-03T08:30:00.000Z',
     purpose: null,
@@ -159,13 +160,25 @@ describe('listInstances', () => {
 
       const wsFsDeps = mockFsDeps(['repo-alpha', 'repo-beta', 'repo-gamma']);
       const stateFsDeps = mockStateFsDeps({
-        'repo-alpha': makeState({ name: 'repo-alpha', containerName: 'ae-repo-alpha' }),
+        'repo-alpha': makeState({
+          instance: 'repo-alpha',
+          repoSlug: 'repo',
+          repoUrl: 'https://github.com/user/repo.git',
+          containerName: 'ae-repo-alpha',
+        }),
         'repo-beta': makeState({
-          name: 'repo-beta',
+          instance: 'repo-beta',
+          repoSlug: 'repo',
+          repoUrl: 'https://github.com/user/repo.git',
           containerName: 'ae-repo-beta',
           purpose: 'Testing',
         }),
-        'repo-gamma': makeState({ name: 'repo-gamma', containerName: 'ae-repo-gamma' }),
+        'repo-gamma': makeState({
+          instance: 'repo-gamma',
+          repoSlug: 'repo',
+          repoUrl: 'https://github.com/user/repo.git',
+          containerName: 'ae-repo-gamma',
+        }),
       });
 
       const result = await listInstances({
@@ -195,7 +208,12 @@ describe('listInstances', () => {
       });
       const wsFsDeps = mockFsDeps(['my-instance']);
       const stateFsDeps = mockStateFsDeps({
-        'my-instance': makeState({ name: 'my-instance', containerName: 'ae-my-instance' }),
+        'my-instance': makeState({
+          instance: 'my-instance',
+          repoSlug: 'repo',
+          repoUrl: 'https://github.com/user/repo.git',
+          containerName: 'ae-my-instance',
+        }),
       });
 
       const result = await listInstances({
@@ -221,7 +239,12 @@ describe('listInstances', () => {
       });
       const wsFsDeps = mockFsDeps(['my-instance']);
       const stateFsDeps = mockStateFsDeps({
-        'my-instance': makeState({ name: 'my-instance', containerName: 'ae-my-instance' }),
+        'my-instance': makeState({
+          instance: 'my-instance',
+          repoSlug: 'repo',
+          repoUrl: 'https://github.com/user/repo.git',
+          containerName: 'ae-my-instance',
+        }),
       });
 
       const result = await listInstances({
@@ -247,7 +270,12 @@ describe('listInstances', () => {
       });
       const wsFsDeps = mockFsDeps(['orphaned-ws']);
       const stateFsDeps = mockStateFsDeps({
-        'orphaned-ws': makeState({ name: 'orphaned-ws', containerName: 'ae-orphaned-ws' }),
+        'orphaned-ws': makeState({
+          instance: 'orphaned-ws',
+          repoSlug: 'repo',
+          repoUrl: 'https://github.com/user/repo.git',
+          containerName: 'ae-orphaned-ws',
+        }),
       });
 
       const result = await listInstances({
@@ -270,7 +298,9 @@ describe('listInstances', () => {
       const wsFsDeps = mockFsDeps(['my-instance']);
       const stateFsDeps = mockStateFsDeps({
         'my-instance': makeState({
-          name: 'my-instance',
+          instance: 'my-instance',
+          repoSlug: 'repo',
+          repoUrl: 'https://github.com/user/repo.git',
           containerName: 'ae-my-instance',
           purpose: 'Auth work',
         }),
@@ -300,7 +330,12 @@ describe('listInstances', () => {
       });
       const wsFsDeps = mockFsDeps(['my-instance']);
       const stateFsDeps = mockStateFsDeps({
-        'my-instance': makeState({ name: 'my-instance', containerName: 'ae-my-instance' }),
+        'my-instance': makeState({
+          instance: 'my-instance',
+          repoSlug: 'repo',
+          repoUrl: 'https://github.com/user/repo.git',
+          containerName: 'ae-my-instance',
+        }),
       });
 
       await listInstances({
@@ -321,7 +356,12 @@ describe('listInstances', () => {
       });
       const wsFsDeps = mockFsDeps(['my-instance']);
       const stateFsDeps = mockStateFsDeps({
-        'my-instance': makeState({ name: 'my-instance', containerName: 'ae-my-instance' }),
+        'my-instance': makeState({
+          instance: 'my-instance',
+          repoSlug: 'repo',
+          repoUrl: 'https://github.com/user/repo.git',
+          containerName: 'ae-my-instance',
+        }),
       });
 
       const result = await listInstances({
@@ -343,7 +383,9 @@ describe('listInstances', () => {
       const wsFsDeps = mockFsDeps(['my-instance']);
       const stateFsDeps = mockStateFsDeps({
         'my-instance': makeState({
-          name: 'my-instance',
+          instance: 'my-instance',
+          repoSlug: 'repo',
+          repoUrl: 'https://github.com/user/repo.git',
           containerName: 'ae-my-instance',
           lastAttached: '2026-02-03T06:30:00.000Z',
         }),
@@ -411,7 +453,12 @@ describe('listInstances', () => {
       });
       const wsFsDeps = mockFsDeps(['my-instance']);
       const stateFsDeps = mockStateFsDeps({
-        'my-instance': makeState({ name: 'my-instance', containerName: 'ae-my-instance' }),
+        'my-instance': makeState({
+          instance: 'my-instance',
+          repoSlug: 'repo',
+          repoUrl: 'https://github.com/user/repo.git',
+          containerName: 'ae-my-instance',
+        }),
       });
 
       const result = await listInstances({
@@ -432,7 +479,9 @@ describe('listInstances', () => {
       const wsFsDeps = mockFsDeps(['my-instance']);
       const stateFsDeps = mockStateFsDeps({
         'my-instance': makeState({
-          name: 'my-instance',
+          instance: 'my-instance',
+          repoSlug: 'repo',
+          repoUrl: 'https://github.com/user/repo.git',
           containerName: 'ae-my-instance',
           purpose: 'OAuth implementation',
         }),
@@ -454,7 +503,9 @@ describe('listInstances', () => {
       const wsFsDeps = mockFsDeps(['my-instance']);
       const stateFsDeps = mockStateFsDeps({
         'my-instance': makeState({
-          name: 'my-instance',
+          instance: 'my-instance',
+          repoSlug: 'repo',
+          repoUrl: 'https://github.com/user/repo.git',
           containerName: 'ae-my-instance',
           purpose: null,
         }),
@@ -485,7 +536,12 @@ describe('listInstances', () => {
       });
       const wsFsDeps = mockFsDeps(['my-instance']);
       const stateFsDeps = mockStateFsDeps({
-        'my-instance': makeState({ name: 'my-instance', containerName: 'ae-my-instance' }),
+        'my-instance': makeState({
+          instance: 'my-instance',
+          repoSlug: 'repo',
+          repoUrl: 'https://github.com/user/repo.git',
+          containerName: 'ae-my-instance',
+        }),
       });
 
       const result = await listInstances({
@@ -589,7 +645,12 @@ describe('listInstances', () => {
       });
       const wsFsDeps = mockFsDeps(['my-instance']);
       const stateFsDeps = mockStateFsDeps({
-        'my-instance': makeState({ name: 'my-instance', containerName: 'ae-my-instance' }),
+        'my-instance': makeState({
+          instance: 'my-instance',
+          repoSlug: 'repo',
+          repoUrl: 'https://github.com/user/repo.git',
+          containerName: 'ae-my-instance',
+        }),
       });
 
       const result = await listInstances({
@@ -617,7 +678,12 @@ describe('listInstances', () => {
       });
       const wsFsDeps = mockFsDeps(['my-instance']);
       const stateFsDeps = mockStateFsDeps({
-        'my-instance': makeState({ name: 'my-instance', containerName: 'ae-my-instance' }),
+        'my-instance': makeState({
+          instance: 'my-instance',
+          repoSlug: 'repo',
+          repoUrl: 'https://github.com/user/repo.git',
+          containerName: 'ae-my-instance',
+        }),
       });
 
       const result = await listInstances({
@@ -643,7 +709,12 @@ describe('listInstances', () => {
       });
       const wsFsDeps = mockFsDeps(['my-instance']);
       const stateFsDeps = mockStateFsDeps({
-        'my-instance': makeState({ name: 'my-instance', containerName: 'ae-my-instance' }),
+        'my-instance': makeState({
+          instance: 'my-instance',
+          repoSlug: 'repo',
+          repoUrl: 'https://github.com/user/repo.git',
+          containerName: 'ae-my-instance',
+        }),
       });
 
       const result = await listInstances({
@@ -663,7 +734,12 @@ describe('listInstances', () => {
       });
       const wsFsDeps = mockFsDeps(['my-instance']);
       const stateFsDeps = mockStateFsDeps({
-        'my-instance': makeState({ name: 'my-instance', containerName: 'ae-my-instance' }),
+        'my-instance': makeState({
+          instance: 'my-instance',
+          repoSlug: 'repo',
+          repoUrl: 'https://github.com/user/repo.git',
+          containerName: 'ae-my-instance',
+        }),
       });
 
       const result = await listInstances({
@@ -688,8 +764,18 @@ describe('listInstances', () => {
       const container = mockContainer({ containerStatus: statusFn });
       const wsFsDeps = mockFsDeps(['ws-one', 'ws-two']);
       const stateFsDeps = mockStateFsDeps({
-        'ws-one': makeState({ name: 'ws-one', containerName: 'ae-ws-one' }),
-        'ws-two': makeState({ name: 'ws-two', containerName: 'ae-ws-two' }),
+        'ws-one': makeState({
+          instance: 'ws-one',
+          repoSlug: 'repo',
+          repoUrl: 'https://github.com/user/repo.git',
+          containerName: 'ae-ws-one',
+        }),
+        'ws-two': makeState({
+          instance: 'ws-two',
+          repoSlug: 'repo',
+          repoUrl: 'https://github.com/user/repo.git',
+          containerName: 'ae-ws-two',
+        }),
       });
 
       await listInstances({
@@ -712,7 +798,12 @@ describe('listInstances', () => {
       const container = mockContainer();
       const wsFsDeps = mockFsDeps(['my-instance']);
       const stateFsDeps = mockStateFsDeps({
-        'my-instance': makeState({ name: 'my-instance', containerName: 'ae-my-instance' }),
+        'my-instance': makeState({
+          instance: 'my-instance',
+          repoSlug: 'repo',
+          repoUrl: 'https://github.com/user/repo.git',
+          containerName: 'ae-my-instance',
+        }),
       });
 
       const result = await listInstances({
@@ -732,7 +823,12 @@ describe('listInstances', () => {
       const container = mockContainer();
       const wsFsDeps = mockFsDeps(['my-ws']);
       const stateFsDeps = mockStateFsDeps({
-        'my-ws': makeState({ name: 'my-ws', containerName: 'ae-my-ws' }),
+        'my-ws': makeState({
+          instance: 'my-ws',
+          repoSlug: 'repo',
+          repoUrl: 'https://github.com/user/repo.git',
+          containerName: 'ae-my-ws',
+        }),
       });
 
       await listInstances({
@@ -751,9 +847,24 @@ describe('listInstances', () => {
       const container = mockContainer();
       const wsFsDeps = mockFsDeps(['ws-a', 'ws-b', 'ws-c']);
       const stateFsDeps = mockStateFsDeps({
-        'ws-a': makeState({ name: 'ws-a', containerName: 'ae-ws-a' }),
-        'ws-b': makeState({ name: 'ws-b', containerName: 'ae-ws-b' }),
-        'ws-c': makeState({ name: 'ws-c', containerName: 'ae-ws-c' }),
+        'ws-a': makeState({
+          instance: 'ws-a',
+          repoSlug: 'repo',
+          repoUrl: 'https://github.com/user/repo.git',
+          containerName: 'ae-ws-a',
+        }),
+        'ws-b': makeState({
+          instance: 'ws-b',
+          repoSlug: 'repo',
+          repoUrl: 'https://github.com/user/repo.git',
+          containerName: 'ae-ws-b',
+        }),
+        'ws-c': makeState({
+          instance: 'ws-c',
+          repoSlug: 'repo',
+          repoUrl: 'https://github.com/user/repo.git',
+          containerName: 'ae-ws-c',
+        }),
       });
 
       await listInstances({
@@ -789,7 +900,12 @@ describe('listInstances', () => {
       const container = mockContainer();
       const wsFsDeps = mockFsDeps(['my-instance']);
       const stateFsDeps = mockStateFsDeps({
-        'my-instance': makeState({ name: 'my-instance', containerName: 'ae-my-instance' }),
+        'my-instance': makeState({
+          instance: 'my-instance',
+          repoSlug: 'repo',
+          repoUrl: 'https://github.com/user/repo.git',
+          containerName: 'ae-my-instance',
+        }),
       });
 
       const result = await listInstances({
@@ -818,7 +934,12 @@ describe('listInstances', () => {
       const container = mockContainer();
       const wsFsDeps = mockFsDeps(['my-instance']);
       const stateFsDeps = mockStateFsDeps({
-        'my-instance': makeState({ name: 'my-instance', containerName: 'ae-my-instance' }),
+        'my-instance': makeState({
+          instance: 'my-instance',
+          repoSlug: 'repo',
+          repoUrl: 'https://github.com/user/repo.git',
+          containerName: 'ae-my-instance',
+        }),
       });
 
       const result = await listInstances({

@@ -267,7 +267,7 @@ export async function setContainerPurpose(
   // Use writeStateAtomic for consistency, mocking WorkspacePath for the container
   const wsPath: WorkspacePath = {
     root: deps.agentEnvDir,
-    name: read.state.name,
+    name: `${read.state.repoSlug}-${read.state.instance}`,
     agentEnvDir: deps.agentEnvDir,
     stateFile: deps.statePath,
   };

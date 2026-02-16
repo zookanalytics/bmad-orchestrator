@@ -35,10 +35,12 @@ export interface WorkspacePath {
 
 /** Persisted instance state in .agent-env/state.json */
 export interface InstanceState {
-  /** Workspace name (e.g., "bmad-orch-auth") */
-  name: string;
-  /** Git remote URL */
-  repo: string;
+  /** User-chosen instance name (e.g., "auth") — max 20 chars */
+  instance: string;
+  /** Repo slug derived from git remote URL (e.g., "bmad-orchestrator") — max 39 chars */
+  repoSlug: string;
+  /** Full git remote URL */
+  repoUrl: string;
   /** ISO 8601 creation timestamp */
   createdAt: string;
   /** ISO 8601 last-attached timestamp */
@@ -47,7 +49,7 @@ export interface InstanceState {
   lastRebuilt?: string;
   /** User-provided description, null if not set */
   purpose: string | null;
-  /** Container name (e.g., "ae-bmad-orch-auth") */
+  /** Container name (e.g., "ae-bmad-orchestrator-auth") */
   containerName: string;
   /** How the devcontainer config was provisioned. Absent = 'baseline' for backwards compat. */
   configSource?: 'baseline' | 'repo';
@@ -124,11 +126,18 @@ export type GitStateResult = GitStateSuccess | GitStateError;
 
 // ─── Fallback ────────────────────────────────────────────────────────────────
 
-/** Fallback state returned when state.json is missing or corrupted */
+/**
+ * Fallback state returned when state.json is missing or corrupted.
+ *
+ * Old-format workspaces (pre-Epic 7) with missing `repoSlug`/`instance` fields
+ * are intentionally NOT detected by scanWorkspaces validation. This fallback
+ * provides safe defaults for edge cases where state.json exists but is incomplete.
+ */
 export function createFallbackState(workspaceName: string): InstanceState {
   return {
-    name: workspaceName,
-    repo: 'unknown',
+    instance: workspaceName,
+    repoSlug: 'unknown',
+    repoUrl: 'unknown',
     createdAt: 'unknown',
     lastAttached: 'unknown',
     purpose: null,

@@ -472,7 +472,7 @@ export async function createInstance(
   }
 
   // Step 7: Write initial state
-  const state = createInitialState(wsPath.name, repoUrl, {
+  const state = createInitialState(instanceName, repoName, repoUrl, {
     containerName: actualContainerName,
     configSource,
     purpose: purposeState,

@@ -92,8 +92,9 @@ function createTestState(
   overrides: Partial<InstanceState> = {}
 ): InstanceState {
   return {
-    name: workspaceName,
-    repo: 'https://github.com/user/repo.git',
+    instance: workspaceName,
+    repoSlug: 'repo',
+    repoUrl: 'https://github.com/user/repo.git',
     createdAt: '2026-01-15T10:00:00.000Z',
     lastAttached: '2026-01-20T14:00:00.000Z',
     purpose: null,

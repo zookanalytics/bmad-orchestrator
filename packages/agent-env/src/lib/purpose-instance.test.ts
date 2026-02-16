@@ -54,8 +54,9 @@ function createTestState(
   overrides: Partial<InstanceState> = {}
 ): InstanceState {
   return {
-    name: workspaceName,
-    repo: 'https://github.com/user/repo.git',
+    instance: workspaceName,
+    repoSlug: 'repo',
+    repoUrl: 'https://github.com/user/repo.git',
     createdAt: '2026-01-15T10:00:00.000Z',
     lastAttached: '2026-01-20T14:00:00.000Z',
     purpose: null,
@@ -184,7 +185,7 @@ describe('setPurpose', () => {
 
   it('preserves other state fields when updating purpose', async () => {
     const state = createTestState('repo-auth', {
-      repo: 'https://github.com/user/special.git',
+      repoUrl: 'https://github.com/user/special.git',
       lastAttached: '2026-01-25T10:00:00.000Z',
       createdAt: '2026-01-10T08:00:00.000Z',
     });
@@ -199,10 +200,10 @@ describe('setPurpose', () => {
     const updatedState = JSON.parse(content) as InstanceState;
 
     expect(updatedState.purpose).toBe('New purpose');
-    expect(updatedState.repo).toBe('https://github.com/user/special.git');
+    expect(updatedState.repoUrl).toBe('https://github.com/user/special.git');
     expect(updatedState.lastAttached).toBe('2026-01-25T10:00:00.000Z');
     expect(updatedState.createdAt).toBe('2026-01-10T08:00:00.000Z');
-    expect(updatedState.name).toBe('repo-auth');
+    expect(updatedState.instance).toBe('repo-auth');
     expect(updatedState.containerName).toBe('ae-repo-auth');
   });
 
@@ -328,8 +329,9 @@ describe('getContainerPurpose', () => {
     const statePath = join(stateDir, STATE_FILE);
     // Write state JSON without the purpose field
     const stateWithoutPurpose = {
-      name: 'repo-auth',
-      repo: 'https://github.com/user/repo.git',
+      instance: 'repo-auth',
+      repoSlug: 'repo',
+      repoUrl: 'https://github.com/user/repo.git',
       createdAt: '2026-01-15T10:00:00.000Z',
       lastAttached: '2026-01-20T14:00:00.000Z',
       containerName: 'ae-repo-auth',
@@ -412,7 +414,7 @@ describe('setContainerPurpose', () => {
   it('preserves other state fields when updating purpose', async () => {
     const stateDir = join(tempDir, 'agent-env');
     const state = createTestState('repo-auth', {
-      repo: 'https://github.com/user/special.git',
+      repoUrl: 'https://github.com/user/special.git',
       lastAttached: '2026-01-25T10:00:00.000Z',
     });
     const statePath = await createContainerStateFile(stateDir, state);
@@ -423,9 +425,9 @@ describe('setContainerPurpose', () => {
     const content = await readFile(statePath, 'utf-8');
     const updatedState = JSON.parse(content) as InstanceState;
     expect(updatedState.purpose).toBe('New purpose');
-    expect(updatedState.repo).toBe('https://github.com/user/special.git');
+    expect(updatedState.repoUrl).toBe('https://github.com/user/special.git');
     expect(updatedState.lastAttached).toBe('2026-01-25T10:00:00.000Z');
-    expect(updatedState.name).toBe('repo-auth');
+    expect(updatedState.instance).toBe('repo-auth');
   });
 
   it('uses atomic write (tmp + rename) pattern', async () => {

@@ -52,8 +52,9 @@ function createTestState(
   overrides: Partial<InstanceState> = {}
 ): InstanceState {
   return {
-    name: workspaceName,
-    repo: 'https://github.com/user/repo.git',
+    instance: workspaceName,
+    repoSlug: 'repo',
+    repoUrl: 'https://github.com/user/repo.git',
     createdAt: '2026-01-15T10:00:00.000Z',
     lastAttached: '2026-01-20T14:00:00.000Z',
     purpose: null,
@@ -455,7 +456,7 @@ describe('attachInstance', () => {
   it('preserves other state fields when updating lastAttached', async () => {
     const state = createTestState('repo-auth', {
       purpose: 'OAuth feature work',
-      repo: 'https://github.com/user/special.git',
+      repoUrl: 'https://github.com/user/special.git',
     });
     await createTestWorkspace('repo-auth', state);
     const deps = createTestDeps();
@@ -468,7 +469,7 @@ describe('attachInstance', () => {
     const updatedState = JSON.parse(content) as InstanceState;
 
     expect(updatedState.purpose).toBe('OAuth feature work');
-    expect(updatedState.repo).toBe('https://github.com/user/special.git');
-    expect(updatedState.name).toBe('repo-auth');
+    expect(updatedState.repoUrl).toBe('https://github.com/user/special.git');
+    expect(updatedState.instance).toBe('repo-auth');
   });
 });
