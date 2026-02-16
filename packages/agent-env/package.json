@@ -1,6 +1,6 @@
 {
   "name": "@zookanalytics/agent-env",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "CLI for creating isolated, AI-ready development environments",
   "type": "module",
   "bin": {
