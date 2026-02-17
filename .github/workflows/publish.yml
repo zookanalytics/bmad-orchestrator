@@ -2,7 +2,7 @@
 # Requirements (FRxx/NFRxx) defined in: _bmad-output/planning-artifacts/release-infrastructure/
 #
 # Trigger: push to main (after PR merge)
-# Pattern: "Version Packages" PR via changesets/action@v1
+# Pattern: "Version Packages" PR via changesets/action
 #
 # FLOW:
 # 1. Developer merges feature PR to main (with changeset file included)
@@ -42,23 +42,23 @@ jobs:
       # own branch for the Version Packages PR. Full history (fetch-depth: 0)
       # is only needed in ci.yml for `changeset status` comparison.
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: '24'
           registry-url: 'https://registry.npmjs.org'
 
       - name: Setup pnpm
-        uses: pnpm/action-setup@v4
+        uses: pnpm/action-setup@41ff72655975bd51cab0327fa583b6e92b6d3061 # v4.2.0
 
       - name: Get pnpm store directory
         shell: bash
         run: echo "STORE_PATH=$(pnpm store path --silent)" >> "$GITHUB_ENV"
 
       - name: Setup pnpm cache
-        uses: actions/cache@v4
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
         with:
           path: ${{ env.STORE_PATH }}
           key: ${{ runner.os }}-pnpm-store-${{ hashFiles('**/pnpm-lock.yaml') }}
@@ -93,6 +93,10 @@ jobs:
       #    ⚠ Note: manual publish requires an npm automation/granular access token,
       #      will NOT include SLSA provenance attestation, and will fail with 403
       #      if token-based auth has been disabled on the npm package settings.
+      #    ⚠ Note: manual commits from local checkout will be unsigned, unlike the
+      #      automated flow which uses the GitHub API (commitMode: github-api) to
+      #      produce signed commits. If branch protection requires signed commits,
+      #      you may need to temporarily bypass or use a GPG key for manual recovery.
       #
       # 3. CHANGELOG PLUGIN CRASHES during `changeset version`:
       #    → Temporarily switch changelog in .changeset/config.json:
@@ -151,10 +155,15 @@ jobs:
       # permission above authorizes release creation via the GitHub API.
       - name: Create Release Pull Request or Publish
         id: changesets
-        uses: changesets/action@v1
+        uses: changesets/action@6a0a831ff30acef54f2c6aa1cbbc1096b066edaf # v1.7.0
         with:
           publish: pnpm changeset publish
           createGithubReleases: true
+          # Use GitHub API to create commits instead of git CLI. This produces
+          # signed (verified) commits, enabling branch protection rules that
+          # require commit signing on the Version Packages PR.
+          commitMode: github-api
+          setupGitUser: false
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           # Generate SLSA provenance attestation for published packages (requires id-token: write)
