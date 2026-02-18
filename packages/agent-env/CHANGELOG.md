@@ -1,5 +1,31 @@
 # @zookanalytics/agent-env
 
+## 0.4.0
+
+### Minor Changes
+
+- [#22](https://github.com/zookanalytics/bmad-orchestrator/pull/22) [`9e20bf1`](https://github.com/zookanalytics/bmad-orchestrator/commit/9e20bf111d02549d6df50dfc7d48c688fe0b7e6d) Thanks [@johnzook](https://github.com/johnzook)! - Add purpose support to agent environments
+  - Add purpose infrastructure to baseline devcontainer (tmux status, state.json)
+  - Add --purpose flag to create command and AGENT_ENV_PURPOSE env var
+  - Add container-aware CLI with live purpose updates via `agent-env purpose` command
+
+### Patch Changes
+
+- [#25](https://github.com/zookanalytics/bmad-orchestrator/pull/25) [`8834277`](https://github.com/zookanalytics/bmad-orchestrator/commit/883427726155b4906b7e2c7b348d2ff184a12e88) Thanks [@johnzook](https://github.com/johnzook)! - fix(agent-env): auto-discover and share Claude credentials across instances
+
+  Replace empty-file credential bootstrap with discovery-based promotion. On each
+  instance startup, the isolation script now validates credential state: uses shared
+  credentials if available, discovers and promotes from instance directories if not,
+  and gracefully handles first-instance scenarios. Self-heals broken symlinks and
+  local files on every start.
+
+- [#26](https://github.com/zookanalytics/bmad-orchestrator/pull/26) [`7680f27`](https://github.com/zookanalytics/bmad-orchestrator/commit/7680f27c203a15be97a18d7c5bb5e642f0959d82) Thanks [@johnzook](https://github.com/johnzook)! - Fix SSH connection discovery for OrbStack direct networking
+  - Detect exposed-but-not-published ports (OrbStack doesn't use host port mapping)
+  - Read `dev.orbstack.domains` container label for hostname override
+  - Add `labels` field to container status results
+  - Fix node user account lock preventing SSH pubkey auth
+  - Set login shell to zsh so SSH sessions match tmux environment
+
 ## 0.3.1
 
 ### Patch Changes

@@ -1,6 +1,6 @@
 {
   "name": "@zookanalytics/keystone-workflows",
-  "version": "0.2.1",
+  "version": "0.2.2",
   "description": "Declarative automation workflows for AI-assisted development on keystone-cli",
   "files": [
     "workflows/",
