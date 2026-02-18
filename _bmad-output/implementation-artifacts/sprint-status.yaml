@@ -290,3 +290,10 @@ cross_dependencies:
 #   or templating system would replace ad-hoc JSON manipulation. Could be a story in
 #   a future epic or folded into env-epic-2 retro follow-up.
 #   Scope: story or small epic depending on how many customizations emerge.
+#
+# [env] Remove backwards compat scaffolding in state.json scanner after Epic 8
+#   Context: During Epic 7 development, backwards compatibility was added to the
+#   workspace scanner so pre-Epic-7 workspaces could still be listed. This is
+#   development-time scaffolding, not a product decision. Remove after Epic 8 when
+#   all workspaces will be repo-scoped format.
+#   Trigger: After Epic 8 completion.

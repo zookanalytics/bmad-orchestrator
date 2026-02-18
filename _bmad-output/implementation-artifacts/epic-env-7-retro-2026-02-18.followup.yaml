@@ -149,7 +149,7 @@ items:
   - id: 11
     action_item: backlog
     workflow: manual
-    status: pending
+    status: done
     summary: |
       Add to sprint-status.yaml FUTURE WORK / BACKLOG IDEAS section:
       "Remove backwards compat scaffolding in state.json scanner after Epic 8."
