@@ -287,10 +287,36 @@ steps:
       Continue to retrospective?
     inputType: confirm
 
+  # preRetroExtraction - Scan story files for unresolved items before retrospective
+  - id: preRetroExtraction
+    type: shell
+    needs: [summary]
+    if: ${{ steps.summary.output == true }}
+    allowInsecure: true
+    run: |
+      claude -p "Scan all story files for epic ${{ inputs.epic_id }} in _bmad-output/implementation-artifacts/ (files matching pattern ${{ inputs.epic_id }}-*.md, excluding retro and followup files). Extract unresolved items from these categories:
+
+      1. UNRESOLVED REVIEW RECOMMENDATIONS: Look in Code Review sections for recommendations marked 'Not Fixed', 'future work', 'follow-up', or 'out of scope'. Extract each deferred recommendation.
+
+      2. DEV NOTE IDEAS: Look in Dev Notes / Implementation Notes sections for ideas or suggestions not implemented — phrases like 'could also', 'might want to', 'future improvement', 'consider'.
+
+      3. DEBUG LOG OBSERVATIONS: Look in Debug Log sections for workarounds that should be revisited, unexpected behaviors not fully resolved, or notes about flaky tests.
+
+      4. TODO/FIXME ITEMS: Scan entire story files for TODO, FIXME, HACK, WORKAROUND, or unchecked task items (- [ ]) in completed stories.
+
+      After scanning, check the existing FUTURE WORK / BACKLOG IDEAS section in ${{ inputs.sprint_status_path }} and skip any items already tracked there.
+
+      For each NEW item found, append it to the FUTURE WORK / BACKLOG IDEAS comment section at the end of ${{ inputs.sprint_status_path }} using this format:
+      # [component] Brief description
+      #   Context: Source story and section. One-sentence explanation.
+      #   Trigger: When this should be addressed.
+
+      Preserve ALL existing content and comments in sprint-status.yaml. Report what was found and added. Do not ask questions." --dangerously-skip-permissions
+
   # retrospective - Retrospective (user runs interactively)
   - id: retrospective
     type: human
-    needs: [summary]
+    needs: [preRetroExtraction]
     if: ${{ steps.summary.output == true }}
     message: |
       Time for Epic ${{ inputs.epic_id }} retrospective.

@@ -106,7 +106,7 @@ items:
   - id: 8
     action_item: 8
     workflow: manual
-    status: pending
+    status: done
     summary: |
       Add pre-retro extraction workflow step that scans story files for unresolved items.
       New workflow step (separate from retro workflow) runs before retrospective. Scans all story
