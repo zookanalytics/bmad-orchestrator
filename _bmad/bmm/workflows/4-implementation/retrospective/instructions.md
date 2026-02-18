@@ -256,53 +256,6 @@ Bob (Scrum Master): "We'll get to all of it. But first, let me load the previous
 
 </step>
 
-<step n="2.5" goal="Epic-Level Structural Audit - Scan for Accumulated Patterns">
-
-<output>
-Bob (Scrum Master): "Before we load the previous retro, let me do a quick structural audit of the codebase. Story-level duplication is fine during development, but accumulation across an epic needs systematic detection."
-</output>
-
-<action>Scan the codebase for the following structural patterns that tend to accumulate unnoticed across an epic. This checklist is seeded from Epic 7 findings and will evolve — each retrospective may add new patterns.</action>
-
-**STRUCTURAL AUDIT CHECKLIST:**
-
-1. **Command Boilerplate Duplication**
-   - Scan command files for repeated multi-line blocks (e.g., resolve → error check → exit patterns)
-   - Flag any block duplicated across 3+ commands as a consolidation candidate
-   - Note: single-line shared calls are fine; multi-line copy-paste blocks are the target
-
-2. **DI Contract Consistency**
-   - Check that dependency injection wiring matches interface contracts
-   - Verify factory functions pass all required dependencies
-   - Look for parameters threaded through but never used, or used but never passed
-
-3. **Test Coverage by Layer**
-   - Compare unit test coverage vs CLI/integration test coverage
-   - Flag features tested only at unit level with no integration verification
-   - Note any behavioral paths exercised only by code review, not tests
-
-4. **Sprint Status Accuracy**
-   - Cross-reference story completion evidence (commits, reviews) against sprint-status.yaml
-   - Flag stories with completed work but status not updated to "done"
-   - Verify epic-level status reflects actual story completion
-
-5. **Dead Code / Unused Exports**
-   - Scan for exported functions with zero consumers
-   - Check for constants defined but never referenced at runtime
-   - Flag replaced/superseded functions still present in source
-
-<action>For each pattern found, record: location, severity (low/medium/high), and whether it was already caught by story-level reviews</action>
-
-<action>Synthesize findings into a brief audit summary — this feeds directly into the retrospective discussion in Step 6</action>
-
-<output>
-Bob (Scrum Master): "Structural audit complete. I found {{audit_finding_count}} items across {{audit_category_count}} categories. We'll weave these into the discussion."
-
-Charlie (Senior Dev): "Good — some of these are things I noticed story-by-story but never connected across the epic."
-</output>
-
-</step>
-
 <step n="3" goal="Load and Integrate Previous Epic Retrospective">
 
 <action>Calculate previous epic number: {{prev_epic_num}} = {{epic_number}} - 1</action>

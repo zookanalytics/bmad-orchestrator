@@ -287,10 +287,31 @@ steps:
       Continue to retrospective?
     inputType: confirm
 
+  # structuralAudit - Epic-level structural audit before retrospective
+  - id: structuralAudit
+    type: shell
+    needs: [summary]
+    if: ${{ steps.summary.output == true }}
+    allowInsecure: true
+    run: |
+      claude -p "Perform an epic-level structural audit of the codebase for epic ${{ inputs.epic_id }}. Scan for these accumulated patterns (seeded from Epic 7 findings):
+
+      1. COMMAND BOILERPLATE DUPLICATION: Scan command files for repeated multi-line blocks (e.g., resolve → error check → exit patterns). Flag any block duplicated across 3+ commands as a consolidation candidate.
+
+      2. DI CONTRACT CONSISTENCY: Check that dependency injection wiring matches interface contracts. Verify factory functions pass all required dependencies. Look for parameters threaded through but never used, or used but never passed.
+
+      3. TEST COVERAGE BY LAYER: Compare unit test coverage vs CLI/integration test coverage. Flag features tested only at unit level with no integration verification.
+
+      4. SPRINT STATUS ACCURACY: Cross-reference story completion evidence (commits, reviews) against ${{ inputs.sprint_status_path }}. Flag stories with completed work but status not updated to done.
+
+      5. DEAD CODE / UNUSED EXPORTS: Scan for exported functions with zero consumers, constants defined but never referenced, and replaced/superseded functions still present.
+
+      For each finding, note: location, severity (low/medium/high), and whether it was already caught by story-level reviews. Output a brief audit summary." --dangerously-skip-permissions
+
   # preRetroExtraction - Scan story files for unresolved items before retrospective
   - id: preRetroExtraction
     type: shell
-    needs: [summary]
+    needs: [structuralAudit]
     if: ${{ steps.summary.output == true }}
     allowInsecure: true
     run: |
