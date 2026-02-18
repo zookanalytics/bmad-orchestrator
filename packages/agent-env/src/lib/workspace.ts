@@ -343,8 +343,19 @@ export async function resolveRepo(
         };
       }
     }
-    // Plain slug — use as-is (lowercased)
-    return { resolved: true, repoSlug: repoFlag.toLowerCase() };
+    // Plain slug — validate, then use as-is (lowercased)
+    const slug = repoFlag.toLowerCase();
+    if (!VALID_NAME_PATTERN.test(slug)) {
+      return {
+        resolved: false,
+        error: {
+          code: 'INVALID_REPO',
+          message: `Invalid repo slug: "${repoFlag}". Only alphanumeric, dash, dot, and underscore allowed (must start with alphanumeric).`,
+          suggestion: 'Provide a valid repo slug or git URL.',
+        },
+      };
+    }
+    return { resolved: true, repoSlug: slug };
   }
 
   // Priority 2: Infer from cwd git remote

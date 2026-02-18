@@ -535,6 +535,59 @@ describe('resolveRepo', () => {
 
     expect(result).toEqual({ resolved: false });
   });
+
+  // ── Input validation for malformed plain slugs ──
+
+  it('rejects slug with spaces', async () => {
+    const executor = mockExecutor();
+    const result = await resolveRepo({ repo: 'a b c' }, executor);
+
+    expect(result.resolved).toBe(false);
+    if (result.resolved) throw new Error('Expected not resolved');
+    expect('error' in result && result.error?.code).toBe('INVALID_REPO');
+    expect('error' in result && result.error?.message).toContain('a b c');
+  });
+
+  it('rejects slug starting with dot', async () => {
+    const executor = mockExecutor();
+    const result = await resolveRepo({ repo: '.hidden' }, executor);
+
+    expect(result.resolved).toBe(false);
+    if (result.resolved) throw new Error('Expected not resolved');
+    expect('error' in result && result.error?.code).toBe('INVALID_REPO');
+  });
+
+  it('rejects slug starting with dash', async () => {
+    const executor = mockExecutor();
+    const result = await resolveRepo({ repo: '--flag' }, executor);
+
+    expect(result.resolved).toBe(false);
+    if (result.resolved) throw new Error('Expected not resolved');
+    expect('error' in result && result.error?.code).toBe('INVALID_REPO');
+  });
+
+  it('rejects slug with special characters', async () => {
+    const executor = mockExecutor();
+    const result = await resolveRepo({ repo: '$pecial!' }, executor);
+
+    expect(result.resolved).toBe(false);
+    if (result.resolved) throw new Error('Expected not resolved');
+    expect('error' in result && result.error?.code).toBe('INVALID_REPO');
+  });
+
+  it('accepts valid slug with dots and underscores', async () => {
+    const executor = mockExecutor();
+    const result = await resolveRepo({ repo: 'my_repo.name' }, executor);
+
+    expect(result).toEqual({ resolved: true, repoSlug: 'my_repo.name' });
+  });
+
+  it('rejects whitespace-only --repo as no explicit repo', async () => {
+    const executor = mockExecutor({ ok: false, stdout: '' });
+    const result = await resolveRepo({ repo: '   ' }, executor);
+
+    expect(result).toEqual({ resolved: false });
+  });
 });
 
 // ─── resolveInstance tests ──────────────────────────────────────────────────

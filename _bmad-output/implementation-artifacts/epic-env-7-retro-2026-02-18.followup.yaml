@@ -47,7 +47,7 @@ items:
   - id: 4
     action_item: 3
     workflow: bmad:bmm:workflows:quick-dev
-    status: pending
+    status: done
     summary: |
       Add input validation for malformed `--repo` values in `resolveRepo()`.
       Edge cases like `--repo "../../traversal"`, `--repo "a b c"`, and other malformed inputs
