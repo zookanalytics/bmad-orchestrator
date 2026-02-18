@@ -446,6 +446,7 @@ export async function resolveInstance(
         (state as Record<string, unknown>).instance === instanceName
       ) {
         matches.push(wsName);
+        if (matches.length > 1) break; // Already ambiguous, no need to scan further
       }
     } catch {
       // Skip workspaces with missing/invalid state

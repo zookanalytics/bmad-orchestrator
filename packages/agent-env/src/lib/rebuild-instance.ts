@@ -195,7 +195,7 @@ async function lookupWorkspace(
 ): Promise<WorkspaceLookupResult> {
   const lookup = await resolveInstance(instanceName, repoSlug, {
     fsDeps: deps.workspaceFsDeps,
-    readFile,
+    readFile: deps.stateFsDeps.readFile,
   });
 
   if (!lookup.found) {

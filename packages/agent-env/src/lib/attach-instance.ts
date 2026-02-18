@@ -131,7 +131,7 @@ export async function attachInstance(
   // Step 1: Resolve instance using two-phase resolution
   const lookup = await resolveInstance(instanceName, repoSlug, {
     fsDeps: deps.workspaceFsDeps,
-    readFile,
+    readFile: deps.stateFsDeps.readFile,
   });
 
   if (!lookup.found) {
