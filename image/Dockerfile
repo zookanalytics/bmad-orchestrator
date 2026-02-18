@@ -127,6 +127,12 @@ ENV SHELL=/bin/zsh
 ENV EDITOR=vim
 ENV VISUAL=vim
 
+# Rich terminal colors: container runtimes default TERM to "xterm" (8 colors).
+# Setting these at the image level ensures ALL entry paths (docker exec, SSH,
+# VS Code terminal, tmux-session.sh) see 256-color + truecolor support.
+ENV TERM=xterm-256color
+ENV COLORTERM=truecolor
+
 # Install zsh with powerlevel10k
 ARG ZSH_IN_DOCKER_VERSION=1.2.1
 RUN sh -c "$(wget -O- https://github.com/deluan/zsh-in-docker/releases/download/v${ZSH_IN_DOCKER_VERSION}/zsh-in-docker.sh)" -- \
