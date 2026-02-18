@@ -19,7 +19,7 @@ items:
   - id: 2
     action_item: 2
     workflow: bmad:bmm:workflows:quick-dev
-    status: pending
+    status: done
     summary: |
       Add CLI-level integration tests for the `--repo` flag across attach, remove, purpose, and rebuild commands.
       Currently unit tests verify `repoSlug` threading at the library level, but no CLI acceptance tests exercise

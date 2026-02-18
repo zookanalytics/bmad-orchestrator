@@ -128,6 +128,39 @@ async function createMockWorkspace(
   await mkdir(join(wsRoot, '.git'), { recursive: true });
 }
 
+/**
+ * Creates a repo-scoped mock workspace for --repo flag tests.
+ *
+ * Workspace dir: ~/.agent-env/workspaces/<repoSlug>-<instanceName>/
+ * State file records repoSlug and instance fields so resolveInstance can find it.
+ */
+async function createRepoScopedWorkspace(
+  instanceName: string,
+  repoSlug: string,
+  stateOverrides: Record<string, unknown> = {}
+) {
+  const workspaceName = `${repoSlug}-${instanceName}`;
+  const wsRoot = join(tempRoot, AGENT_ENV_DIR, WORKSPACES_DIR, workspaceName);
+  const agentEnvDir = join(wsRoot, AGENT_ENV_DIR);
+  const stateFile = join(agentEnvDir, STATE_FILE);
+
+  await mkdir(agentEnvDir, { recursive: true });
+
+  const defaultState = {
+    instance: instanceName,
+    repoSlug,
+    repoUrl: `https://github.com/test/${repoSlug}.git`,
+    createdAt: '2026-01-01T00:00:00Z',
+    lastAttached: '2026-01-01T00:00:00Z',
+    purpose: null,
+    containerName: `ae-${repoSlug}-${instanceName}`,
+    ...stateOverrides,
+  };
+
+  await writeFile(stateFile, JSON.stringify(defaultState, null, 2), 'utf8');
+  await mkdir(join(wsRoot, '.git'), { recursive: true });
+}
+
 // ─── CLI tests ───────────────────────────────────────────────────────────────
 
 describe('agent-env CLI', () => {
@@ -597,6 +630,145 @@ describe('agent-env CLI', () => {
       expect(result.exitCode).toBe(0);
       expect(result.stdout).toContain('--yes');
       expect(result.stdout).toContain('--force');
+    });
+  });
+});
+
+describe('--repo flag integration', () => {
+  describe('attach with --repo', () => {
+    it('finds instance via scoped lookup when --repo matches', async () => {
+      await createRepoScopedWorkspace('myinst', 'alpha');
+      const result = await runCli(['attach', 'myinst', '--repo', 'alpha'], {
+        MOCK_DOCKER_AVAILABLE: 'true',
+      });
+      const output = stripAnsiCodes(result.stdout + result.stderr);
+      // Pipeline progressed past workspace lookup — container name proves correct resolution
+      expect(output).not.toContain('WORKSPACE_NOT_FOUND');
+      expect(output).toContain('ae-alpha-myinst');
+    });
+
+    it('resolves --repo URL to slug for scoped lookup', async () => {
+      await createRepoScopedWorkspace('myinst', 'my-repo');
+      const result = await runCli(
+        ['attach', 'myinst', '--repo', 'https://github.com/org/my-repo.git'],
+        { MOCK_DOCKER_AVAILABLE: 'true' }
+      );
+      const output = stripAnsiCodes(result.stdout + result.stderr);
+      // URL derived to slug "my-repo" — container name proves correct resolution
+      expect(output).not.toContain('WORKSPACE_NOT_FOUND');
+      expect(output).toContain('ae-my-repo-myinst');
+    });
+  });
+
+  describe('remove with --repo', () => {
+    it('finds and removes instance when --repo matches', async () => {
+      await createRepoScopedWorkspace('rmtest', 'alpha');
+      const result = await runCli(['remove', 'rmtest', '--repo', 'alpha', '--force', '--yes'], {
+        MOCK_GIT_STATE: JSON.stringify({}),
+        MOCK_DOCKER_AVAILABLE: 'true',
+      });
+      const stdoutStripped = stripAnsiCodes(result.stdout);
+      expect(result.exitCode).toBe(0);
+      expect(stdoutStripped).toContain("Instance 'rmtest' force-removed");
+    });
+  });
+
+  describe('purpose with --repo', () => {
+    it('gets purpose when --repo matches the workspace repo slug', async () => {
+      await createRepoScopedWorkspace('purptest', 'alpha', { purpose: 'JWT auth' });
+      const result = await runCli(['purpose', 'purptest', '--repo', 'alpha']);
+      expect(result.exitCode).toBe(0);
+      expect(result.stdout.trim()).toBe('JWT auth');
+    });
+
+    it('sets purpose when --repo matches the workspace repo slug', async () => {
+      await createRepoScopedWorkspace('purptest', 'alpha');
+      const result = await runCli(['purpose', 'purptest', 'New purpose', '--repo', 'alpha']);
+      expect(result.exitCode).toBe(0);
+      expect(result.stdout.trim()).toBe('Purpose updated');
+    });
+  });
+
+  describe('rebuild with --repo', () => {
+    it('finds instance when --repo matches (proceeds past workspace lookup)', async () => {
+      await createRepoScopedWorkspace('rbtest', 'alpha', { configSource: 'baseline' });
+      const result = await runCli(['rebuild', 'rbtest', '--repo', 'alpha', '--yes'], {
+        MOCK_DOCKER_AVAILABLE: 'true',
+      });
+      const output = stripAnsiCodes(result.stdout + result.stderr);
+      // Pipeline progressed past workspace lookup into rebuild phase
+      expect(output).not.toContain('WORKSPACE_NOT_FOUND');
+      expect(output).toContain("rebuilding instance 'rbtest'");
+    });
+  });
+
+  describe('ambiguous instance resolution', () => {
+    it('returns AMBIGUOUS_INSTANCE when same name exists under multiple repos without --repo', async () => {
+      await createRepoScopedWorkspace('shared', 'alpha');
+      await createRepoScopedWorkspace('shared', 'beta');
+      const result = await runCli(['attach', 'shared']);
+      const stderrStripped = stripAnsiCodes(result.stderr);
+      expect(result.exitCode).toBe(1);
+      expect(stderrStripped).toContain('AMBIGUOUS_INSTANCE');
+      expect(stderrStripped).toContain('--repo');
+    });
+
+    it('resolves ambiguity when --repo narrows to one workspace', async () => {
+      await createRepoScopedWorkspace('shared', 'alpha');
+      await createRepoScopedWorkspace('shared', 'beta');
+      const result = await runCli(['attach', 'shared', '--repo', 'alpha'], {
+        MOCK_DOCKER_AVAILABLE: 'true',
+      });
+      const stderrStripped = stripAnsiCodes(result.stderr);
+      // Scoped lookup finds alpha-shared directly — no ambiguity
+      expect(stderrStripped).not.toContain('AMBIGUOUS_INSTANCE');
+      expect(stderrStripped).not.toContain('WORKSPACE_NOT_FOUND');
+    });
+
+    it('returns AMBIGUOUS_INSTANCE when --repo does not match but multiple global matches exist', async () => {
+      await createRepoScopedWorkspace('shared', 'alpha');
+      await createRepoScopedWorkspace('shared', 'beta');
+      // --repo gamma misses scoped lookup, global scan finds 2 matches → ambiguous
+      const result = await runCli(['attach', 'shared', '--repo', 'gamma']);
+      const stderrStripped = stripAnsiCodes(result.stderr);
+      expect(result.exitCode).toBe(1);
+      expect(stderrStripped).toContain('AMBIGUOUS_INSTANCE');
+    });
+  });
+
+  describe('--repo error paths', () => {
+    it('returns INVALID_REPO for malformed slug', async () => {
+      const result = await runCli(['attach', 'myinst', '--repo', '--flag']);
+      const stderrStripped = stripAnsiCodes(result.stderr);
+      expect(result.exitCode).toBe(1);
+      expect(stderrStripped).toContain('INVALID_REPO');
+    });
+
+    it('lowercases --repo slug for case-insensitive matching', async () => {
+      await createRepoScopedWorkspace('myinst', 'alpha');
+      const result = await runCli(['purpose', 'myinst', '--repo', 'ALPHA']);
+      // "ALPHA" lowercased to "alpha" → scoped lookup finds alpha-myinst
+      expect(result.exitCode).toBe(0);
+      expect(result.stdout.trim()).toBe('(no purpose set)');
+    });
+  });
+
+  describe('global fallback when --repo misses scoped lookup', () => {
+    it('falls through to global scan when --repo slug does not match workspace name', async () => {
+      // Only one workspace with instance "solo" — global scan finds it unambiguously
+      await createRepoScopedWorkspace('solo', 'alpha');
+      const result = await runCli(['purpose', 'solo', '--repo', 'wrong-slug']);
+      // Scoped lookup for "wrong-slug-solo" fails, global scan finds "alpha-solo"
+      expect(result.exitCode).toBe(0);
+      expect(result.stdout.trim()).toBe('(no purpose set)');
+    });
+
+    it('without --repo and no git remote, instance found by global scan', async () => {
+      // Single instance — unambiguous global match, no --repo flag needed
+      await createRepoScopedWorkspace('solo', 'alpha');
+      const result = await runCli(['purpose', 'solo']);
+      expect(result.exitCode).toBe(0);
+      expect(result.stdout.trim()).toBe('(no purpose set)');
     });
   });
 });
