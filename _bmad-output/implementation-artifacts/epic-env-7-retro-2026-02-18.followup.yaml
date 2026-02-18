@@ -134,7 +134,7 @@ items:
   - id: 10
     action_item: 10
     workflow: bmad:bmm:workflows:quick-dev
-    status: pending
+    status: done
     summary: |
       Address `MAX_CONTAINER_NAME_LENGTH` constant unused at runtime in `types.ts`.
       The constant (63) exists for documentation and constraint arithmetic but is never checked

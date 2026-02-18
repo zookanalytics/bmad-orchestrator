@@ -25,8 +25,28 @@ export const MAX_INSTANCE_NAME_LENGTH = 20;
 /** Maximum length for derived repo slugs (compressed if longer) */
 export const MAX_REPO_SLUG_LENGTH = 39;
 
-/** Maximum length for Docker container names */
+/**
+ * Maximum length for Docker container names (intentional constraint arithmetic).
+ * Not enforced at runtime — structurally guaranteed by its components:
+ *   CONTAINER_PREFIX ("ae-")    =  3 chars
+ *   MAX_REPO_SLUG_LENGTH        = 39 chars
+ *   separator ("-")             =  1 char
+ *   MAX_INSTANCE_NAME_LENGTH    = 20 chars
+ *                         Total = 63 chars
+ */
 export const MAX_CONTAINER_NAME_LENGTH = 63;
+
+// Module-load assertion: verify container name length equals the sum of its parts.
+// Catches drift if any component constant is changed independently.
+/* istanbul ignore next -- safety net for constant arithmetic, cannot fail in practice */
+if (
+  CONTAINER_PREFIX.length + MAX_REPO_SLUG_LENGTH + 1 + MAX_INSTANCE_NAME_LENGTH !==
+  MAX_CONTAINER_NAME_LENGTH
+) {
+  throw new Error(
+    'BUG: MAX_CONTAINER_NAME_LENGTH does not equal CONTAINER_PREFIX + MAX_REPO_SLUG_LENGTH + 1 + MAX_INSTANCE_NAME_LENGTH'
+  );
+}
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
