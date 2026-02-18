@@ -567,7 +567,7 @@ describe('listInstances', () => {
       });
       const wsFsDeps = mockFsDeps(['my-instance']);
       const stateFsDeps = mockStateFsDeps({
-        'my-instance': makeState({ name: 'my-instance', containerName: 'ae-my-instance' }),
+        'my-instance': makeState({ instance: 'my-instance', containerName: 'ae-my-instance' }),
       });
 
       const result = await listInstances({
@@ -593,7 +593,7 @@ describe('listInstances', () => {
       });
       const wsFsDeps = mockFsDeps(['my-instance']);
       const stateFsDeps = mockStateFsDeps({
-        'my-instance': makeState({ name: 'my-instance', containerName: 'ae-my-instance' }),
+        'my-instance': makeState({ instance: 'my-instance', containerName: 'ae-my-instance' }),
       });
 
       const result = await listInstances({
@@ -619,7 +619,7 @@ describe('listInstances', () => {
       });
       const wsFsDeps = mockFsDeps(['my-instance']);
       const stateFsDeps = mockStateFsDeps({
-        'my-instance': makeState({ name: 'my-instance', containerName: 'ae-my-instance' }),
+        'my-instance': makeState({ instance: 'my-instance', containerName: 'ae-my-instance' }),
       });
 
       const result = await listInstances({

@@ -541,7 +541,7 @@ export async function createInstance(
   // Step 6b: Discover actual container name
   const actualContainerName = await discoverContainerName(
     containerName,
-    containerResult.containerId,
+    containerResult.containerId ?? undefined,
     deps
   );
 
