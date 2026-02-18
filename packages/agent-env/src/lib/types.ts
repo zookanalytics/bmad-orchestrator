@@ -136,11 +136,11 @@ export type GitStateResult = GitStateSuccess | GitStateError;
 // ─── Fallback ────────────────────────────────────────────────────────────────
 
 /**
- * Fallback state returned when state.json is missing or corrupted.
+ * Fallback state returned when state.json is missing, corrupted, or
+ * cannot be migrated from an old format.
  *
- * Old-format workspaces (pre-Epic 7) with missing `repoSlug`/`instance` fields
- * are intentionally NOT detected by scanWorkspaces validation. This fallback
- * provides safe defaults for edge cases where state.json exists but is incomplete.
+ * Pre-Epic 7 state files are handled by migrateOldState() in state.ts.
+ * This fallback covers truly unreadable or incomplete state files.
  */
 export function createFallbackState(workspaceName: string): InstanceState {
   return {

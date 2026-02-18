@@ -54,7 +54,7 @@ export async function readState(
     const parsed: unknown = JSON.parse(content);
 
     if (!isValidState(parsed)) {
-      return createFallbackState(wsPath.name);
+      return migrateOldState(parsed, wsPath.name) ?? createFallbackState(wsPath.name);
     }
 
     return parsed;
@@ -123,14 +123,93 @@ export function createInitialState(
   };
 }
 
+// ─── Old-format migration ────────────────────────────────────────────────────
+
+/**
+ * Extract the repo name (last path segment) from a git URL.
+ *
+ * Minimal extraction for migration purposes — no compression, no throw.
+ * Handles HTTPS and SSH URLs, strips .git suffix and trailing slashes.
+ *
+ * @returns Lowercased repo name, or 'unknown' if URL is empty/unparseable
+ */
+function extractRepoName(url: string): string {
+  const cleaned = url.replace(/\/+$/, '').replace(/\.git$/, '');
+  const lastSep = Math.max(cleaned.lastIndexOf('/'), cleaned.lastIndexOf(':'));
+  const name = lastSep >= 0 ? cleaned.slice(lastSep + 1) : cleaned;
+  return name.toLowerCase() || 'unknown';
+}
+
+/**
+ * Attempt to migrate a pre-Epic 7 state object to the current schema.
+ *
+ * Pre-Epic 7 state files used `name` (workspace name, e.g. "bmad-orch-auth")
+ * and `repo` (full URL) instead of `instance`, `repoSlug`, and `repoUrl`.
+ * This function maps those old fields to the new schema, extracting the
+ * instance portion from the workspace name and preserving `containerName`,
+ * `configSource`, and other unchanged fields.
+ *
+ * Background: Epic 7 (commit a86a099) intentionally rejected old-format
+ * state files via isValidState. This migration was added to restore
+ * visibility of pre-Epic 7 workspaces that were showing as orphaned/unknown.
+ * The migrated state is persisted on the next write operation (attach,
+ * rebuild, purpose set) via the normal read→spread→write flow.
+ *
+ * @returns A valid InstanceState if migration succeeds, or null if the
+ *          parsed object doesn't look like an old-format state.
+ */
+function migrateOldState(parsed: unknown, workspaceName: string): InstanceState | null {
+  if (typeof parsed !== 'object' || parsed === null) return null;
+
+  const obj = parsed as Record<string, unknown>;
+
+  // Must have old-format fields
+  if (typeof obj.name !== 'string' || typeof obj.repo !== 'string') return null;
+
+  const repoSlug = extractRepoName(obj.repo);
+
+  // Old `name` was the workspace name (<repoName>-<instance>).
+  // Strip the repo prefix to recover just the instance portion.
+  // Case-insensitive match since deriveRepoSlug lowercases but old
+  // extractRepoName preserved case.
+  const lowerName = obj.name.toLowerCase();
+  const prefix = `${repoSlug}-`;
+  const instance =
+    lowerName.startsWith(prefix) && obj.name.length > prefix.length
+      ? obj.name.slice(prefix.length)
+      : obj.name;
+
+  const configSource =
+    obj.configSource === 'baseline' || obj.configSource === 'repo' ? obj.configSource : undefined;
+
+  const state: InstanceState = {
+    instance,
+    repoSlug,
+    repoUrl: obj.repo,
+    createdAt: typeof obj.createdAt === 'string' ? obj.createdAt : 'unknown',
+    lastAttached: typeof obj.lastAttached === 'string' ? obj.lastAttached : 'unknown',
+    purpose: typeof obj.purpose === 'string' ? obj.purpose : null,
+    containerName:
+      typeof obj.containerName === 'string'
+        ? obj.containerName
+        : `${CONTAINER_PREFIX}${workspaceName}`,
+  };
+
+  if (configSource) {
+    state.configSource = configSource;
+  }
+
+  return state;
+}
+
 // ─── Validation ──────────────────────────────────────────────────────────────
 
 /**
  * Type guard to validate parsed JSON is a valid InstanceState.
  *
- * Requires the new Epic 7 schema fields: instance, repoSlug, repoUrl.
- * Old-format state files (with `name`/`repo` instead) will fail validation,
- * which is intentional — pre-Epic 7 workspaces are not detected.
+ * Requires the Epic 7+ schema fields: instance, repoSlug, repoUrl.
+ * Old-format state files (with `name`/`repo` instead) fail this check
+ * and are migrated by migrateOldState() in readState().
  */
 export function isValidState(value: unknown): value is InstanceState {
   if (typeof value !== 'object' || value === null) return false;

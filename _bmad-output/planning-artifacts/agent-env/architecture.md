@@ -1804,7 +1804,7 @@ This section records the post-implementation validation of Epic 7 against the ar
 
 #### Validation Results
 
-**Story 7.1 (State schema + naming refactor): ✅ COMPLETE**
+**Story 7.1 (State schema + naming refactor): ✅ COMPLETE (patched)**
 - `InstanceState` interface: `name`→`instance`, `repo`→`repoUrl`, `repoSlug` added
 - `configSource` and `lastRebuilt` optional fields preserved
 - `isValidState()` validates all three new required fields
@@ -1813,6 +1813,7 @@ This section records the post-implementation validation of Epic 7 against the ar
 - ALL consumers updated: `list-instances.ts`, `attach-instance.ts`, `remove-instance.ts`, `purpose-instance.ts`, `interactive-menu.ts`, `commands/list.ts`, `rebuild-instance.ts`
 - Image scripts updated: `tmux-purpose.sh` reads `.instance`, `setup-instance-isolation.sh` uses `grep -qF` + `ESCAPED_MARKER`
 - Components updated: `InstanceList.tsx` (repo column), `InteractiveMenu.tsx` (field references)
+- **Patch (2026-02-17):** Added `migrateOldState()` in `state.ts` — see "Story 7.1 Patch" section below
 
 **Story 7.2 (Slug derivation + compression + validation): ✅ COMPLETE**
 - `deriveRepoSlug()` created in `workspace.ts` with lowercase normalization and `compressSlug()` integration
@@ -1845,6 +1846,25 @@ This section records the post-implementation validation of Epic 7 against the ar
 | Drift #15 | `extractRepoName()` dead code not removed | Low | Cleanup: delete function and its tests from `create-instance.ts` |
 | Drift #16 | Baseline prompt uses readline instead of Ink Select | None | Accepted — functionally equivalent, simpler |
 | Drift #17 | Rebuild command missing `--repo` option | Medium | Fix before multi-repo usage; rebuild will fail on ambiguous instance names |
+
+#### Story 7.1 Patch: Backward-Compatible State Migration (2026-02-17)
+
+**Problem:** After Epic 7 landed, all pre-Epic 7 workspaces appeared as `unknown` repo / `orphaned` status in `agent-env list`. The original design intentionally rejected old-format state files, but this degraded the user experience for existing installations.
+
+**Solution:** Added `migrateOldState()` in `state.ts` to map pre-Epic 7 state fields to the current schema when `isValidState()` fails.
+
+**Migration logic:**
+- `extractRepoName()` (private, inlined in `state.ts`) derives the repo slug from the old `repo` URL — simple last-segment extraction, lowercased, no throw. Avoids importing `deriveRepoSlug` from `workspace.ts` to prevent cross-module coupling.
+- Instance name is extracted from the old `name` (workspace name) by case-insensitively stripping the `<repoSlug>-` prefix. Falls back to the full `name` if the prefix doesn't match.
+- `containerName` is preserved as-is from the old state, ensuring Docker container lookup succeeds.
+- `configSource` is carried over if present (rebuild command could have set this pre-Epic 7).
+- Other fields (`createdAt`, `lastAttached`, `purpose`) are carried over with type checking and safe defaults.
+
+**Persistence strategy:** Migration is read-only — `migrateOldState()` runs in `readState()` and returns a valid `InstanceState` in memory. The migrated state is persisted to disk lazily on the next write operation. All write commands (`attach`, `rebuild`, `purpose set`) use the `readState()` → `...state` spread → `writeStateAtomic()` pattern, so the new-format state is automatically written back. `list` remains a pure read-only command.
+
+**Scope of `readContainerState`:** The container-mode path in `purpose-instance.ts` uses `readContainerState()`, which does NOT call `migrateOldState()` — it returns `STATE_CORRUPT` for old-format files. This is acceptable because the container bind-mounts the same `state.json` that the host-side `attach` would have already migrated and persisted.
+
+**Files changed:** `state.ts` (migration logic), `types.ts` (updated fallback comment), `state.test.ts` (13 migration test cases)
 
 #### Architecture Accuracy
 
