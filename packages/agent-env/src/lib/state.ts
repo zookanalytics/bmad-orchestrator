@@ -170,8 +170,9 @@ function migrateOldState(parsed: unknown, workspaceName: string): InstanceState 
 
   // Old `name` was the workspace name (<repoName>-<instance>).
   // Strip the repo prefix to recover just the instance portion.
-  // Case-insensitive match since deriveRepoSlug lowercases but old
-  // extractRepoName preserved case.
+  // Case-insensitive match: the local extractRepoName() lowercases the slug,
+  // but old workspace names were built with the original extractRepoName()
+  // (create-instance.ts, removed in Epic 7) which preserved case.
   const lowerName = obj.name.toLowerCase();
   const prefix = `${repoSlug}-`;
   const instance =

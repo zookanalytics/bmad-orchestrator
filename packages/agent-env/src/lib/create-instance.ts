@@ -49,7 +49,29 @@ import {
 
 type CreateError = { ok: false; error: { code: string; message: string; suggestion?: string } };
 
+const VALID_INSTANCE_NAME_PATTERN = /^[a-zA-Z0-9][a-zA-Z0-9._-]*$/;
+
 function validateCreateInputs(instanceName: string, purposeText: string): CreateError | null {
+  if (!instanceName) {
+    return {
+      ok: false,
+      error: {
+        code: 'INVALID_INSTANCE_NAME',
+        message: 'Instance name must not be empty.',
+      },
+    };
+  }
+
+  if (!VALID_INSTANCE_NAME_PATTERN.test(instanceName)) {
+    return {
+      ok: false,
+      error: {
+        code: 'INVALID_INSTANCE_NAME',
+        message: `Invalid instance name: "${instanceName}". Only alphanumeric, dash, dot, and underscore allowed (must start with alphanumeric).`,
+      },
+    };
+  }
+
   if (instanceName.length > MAX_INSTANCE_NAME_LENGTH) {
     return {
       ok: false,
