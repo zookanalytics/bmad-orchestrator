@@ -122,7 +122,7 @@ items:
   - id: 9
     action_item: 9
     workflow: bmad:bmm:workflows:quick-dev
-    status: pending
+    status: done
     summary: |
       Remove dead `extractRepoName()` export from `create-instance.ts`.
       `deriveRepoSlug()` in `workspace.ts` replaced it in Story 7-2. The function was preserved
