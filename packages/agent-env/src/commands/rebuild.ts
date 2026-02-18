@@ -1,12 +1,12 @@
-import { formatError, createError, createExecutor } from '@zookanalytics/shared';
+import { formatError, createError } from '@zookanalytics/shared';
 import chalk from 'chalk';
 import { Command } from 'commander';
 import { createInterface } from 'node:readline';
 
 import type { RebuildOptions } from '../lib/rebuild-instance.js';
 
+import { resolveRepoOrExit } from '../lib/command-helpers.js';
 import { createRebuildDefaultDeps, rebuildInstance } from '../lib/rebuild-instance.js';
-import { resolveRepo } from '../lib/workspace.js';
 
 /**
  * Prompt the user to confirm rebuilding a running instance.
@@ -49,25 +49,7 @@ export const rebuildCommand = new Command('rebuild')
       const deps = createRebuildDefaultDeps();
 
       // Phase 1: Resolve repo context
-      const executor = createExecutor();
-      const repoResult = await resolveRepo({ repo: options.repo, cwd: process.cwd() }, executor);
-
-      let repoSlug: string | undefined;
-      if (repoResult.resolved) {
-        repoSlug = repoResult.repoSlug;
-      } else if ('error' in repoResult && repoResult.error) {
-        console.error(
-          formatError(
-            createError(
-              repoResult.error.code,
-              repoResult.error.message,
-              repoResult.error.suggestion
-            )
-          )
-        );
-        process.exit(1);
-        return;
-      }
+      const repoSlug = await resolveRepoOrExit({ repo: options.repo, cwd: process.cwd() });
 
       // --yes implies --force and skips prompt; --force also skips prompt
       let confirmed = false;

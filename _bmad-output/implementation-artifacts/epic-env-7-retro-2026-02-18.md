@@ -229,7 +229,7 @@ Sprint status tracking failures correlate with status updates not being part of 
 ## Epic env-8 Preparation
 
 **Critical (must complete before epic starts):**
-- [ ] Extract `resolveRepoOrExit()` shared helper (Action Item #1)
+- [x] Extract `resolveRepoOrExit()` shared helper (Action Item #1)
 - [ ] Add CLI integration tests for `--repo` (Action Item #2)
 - [ ] Fix sprint status for Story 7-3 (Action Item #5)
 

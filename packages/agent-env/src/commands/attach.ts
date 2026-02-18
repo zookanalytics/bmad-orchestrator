@@ -1,8 +1,8 @@
-import { formatError, createError, createExecutor } from '@zookanalytics/shared';
+import { formatError, createError } from '@zookanalytics/shared';
 import { Command } from 'commander';
 
 import { attachInstance, createAttachDefaultDeps } from '../lib/attach-instance.js';
-import { resolveRepo } from '../lib/workspace.js';
+import { resolveRepoOrExit } from '../lib/command-helpers.js';
 
 export const attachCommand = new Command('attach')
   .description("Attach to an instance's tmux session")
@@ -12,21 +12,7 @@ export const attachCommand = new Command('attach')
     const deps = createAttachDefaultDeps();
 
     // Phase 1: Resolve repo context
-    const executor = createExecutor();
-    const repoResult = await resolveRepo({ repo: options.repo, cwd: process.cwd() }, executor);
-
-    let repoSlug: string | undefined;
-    if (repoResult.resolved) {
-      repoSlug = repoResult.repoSlug;
-    } else if ('error' in repoResult && repoResult.error) {
-      console.error(
-        formatError(
-          createError(repoResult.error.code, repoResult.error.message, repoResult.error.suggestion)
-        )
-      );
-      process.exit(1);
-      return;
-    }
+    const repoSlug = await resolveRepoOrExit({ repo: options.repo, cwd: process.cwd() });
 
     const result = await attachInstance(
       name,

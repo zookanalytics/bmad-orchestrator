@@ -7,7 +7,7 @@ items:
   - id: 1
     action_item: 1
     workflow: bmad:bmm:workflows:quick-dev
-    status: pending
+    status: done
     summary: |
       Extract `resolveRepoOrExit()` shared helper from duplicated command boilerplate.
       The same 12-line `resolveRepo` → error check → `process.exit` block is copy-pasted
@@ -61,7 +61,7 @@ items:
   - id: 5
     action_item: 4
     workflow: bmad:bmm:workflows:quick-dev
-    status: pending
+    status: done
     summary: |
       Reconstruct Story 7-1 artifact file from commit history and epic description.
       Story 7-1 (refactor workspace naming and state schema) is the only story across 7 agent-env epics

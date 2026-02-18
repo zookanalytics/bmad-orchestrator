@@ -1,4 +1,4 @@
-import { formatError, createError, createExecutor } from '@zookanalytics/shared';
+import { formatError, createError } from '@zookanalytics/shared';
 import chalk from 'chalk';
 import { Command } from 'commander';
 import { createInterface } from 'node:readline';
@@ -11,9 +11,9 @@ import {
   createAuditLogDefaultDeps,
   writeAuditLogEntry,
 } from '../lib/audit-log.js';
+import { resolveRepoOrExit } from '../lib/command-helpers.js';
 import { createRemoveDefaultDeps, removeInstance } from '../lib/remove-instance.js';
 import { formatSafetyReport } from '../lib/safety-report.js';
-import { resolveRepo } from '../lib/workspace.js';
 
 /**
  * Prompt the user to type the instance name to confirm force removal.
@@ -124,21 +124,7 @@ export const removeCommand = new Command('remove')
     }
 
     // Phase 1: Resolve repo context
-    const executor = createExecutor();
-    const repoResult = await resolveRepo({ repo: options.repo, cwd: process.cwd() }, executor);
-
-    let repoSlug: string | undefined;
-    if (repoResult.resolved) {
-      repoSlug = repoResult.repoSlug;
-    } else if ('error' in repoResult && repoResult.error) {
-      console.error(
-        formatError(
-          createError(repoResult.error.code, repoResult.error.message, repoResult.error.suggestion)
-        )
-      );
-      process.exit(1);
-      return;
-    }
+    const repoSlug = await resolveRepoOrExit({ repo: options.repo, cwd: process.cwd() });
 
     const deps = createRemoveDefaultDeps();
     const checkResult = await removeInstance(name, deps, false, repoSlug);

@@ -1,9 +1,10 @@
-import { formatError, createError, createExecutor } from '@zookanalytics/shared';
+import { formatError, createError } from '@zookanalytics/shared';
 import { Command } from 'commander';
 
 import type { ContainerEnvDeps } from '../lib/container-env.js';
 import type { PurposeGetResult, PurposeSetResult } from '../lib/purpose-instance.js';
 
+import { resolveRepoOrExit } from '../lib/command-helpers.js';
 import { isInsideContainer } from '../lib/container-env.js';
 import {
   createContainerPurposeDefaultDeps,
@@ -13,7 +14,6 @@ import {
   setContainerPurpose,
   setPurpose,
 } from '../lib/purpose-instance.js';
-import { resolveRepo } from '../lib/workspace.js';
 
 export interface PurposeCommandDeps {
   isInsideContainer: (deps?: ContainerEnvDeps) => boolean;
@@ -77,21 +77,7 @@ async function handleHostMode(name?: string, value?: string, repo?: string): Pro
   }
 
   // Phase 1: Resolve repo context
-  const executor = createExecutor();
-  const repoResult = await resolveRepo({ repo, cwd: process.cwd() }, executor);
-
-  let repoSlug: string | undefined;
-  if (repoResult.resolved) {
-    repoSlug = repoResult.repoSlug;
-  } else if ('error' in repoResult && repoResult.error) {
-    console.error(
-      formatError(
-        createError(repoResult.error.code, repoResult.error.message, repoResult.error.suggestion)
-      )
-    );
-    process.exit(1);
-    return;
-  }
+  const repoSlug = await resolveRepoOrExit({ repo, cwd: process.cwd() });
 
   const deps = createPurposeDefaultDeps();
 
