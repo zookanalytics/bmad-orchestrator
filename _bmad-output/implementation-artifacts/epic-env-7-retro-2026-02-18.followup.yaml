@@ -1,0 +1,160 @@
+source: _bmad-output/implementation-artifacts/epic-env-7-retro-2026-02-18.md
+generated: 2026-02-18
+
+items:
+  # ─── Critical Path (must complete before Epic 8 starts) ───
+
+  - id: 1
+    action_item: 1
+    workflow: bmad:bmm:workflows:quick-dev
+    status: pending
+    summary: |
+      Extract `resolveRepoOrExit()` shared helper from duplicated command boilerplate.
+      The same 12-line `resolveRepo` → error check → `process.exit` block is copy-pasted
+      in `commands/attach.ts`, `commands/remove.ts`, `commands/purpose.ts`, and `commands/rebuild.ts`.
+      Extract into a shared helper (e.g., in `lib/workspace.ts` or a new `lib/command-helpers.ts`).
+      Why: Epic 8 will add more `--repo` consumers (repos command, create-from-slug). Duplication will grow worse.
+      Success criteria: All 4 commands use the shared helper; zero copy-pasted resolveRepo blocks remain; all existing tests pass.
+
+  - id: 2
+    action_item: 2
+    workflow: bmad:bmm:workflows:quick-dev
+    status: pending
+    summary: |
+      Add CLI-level integration tests for the `--repo` flag across attach, remove, purpose, and rebuild commands.
+      Currently unit tests verify `repoSlug` threading at the library level, but no CLI acceptance tests exercise
+      `--repo <slug>` through the full command pipeline. Story 8.2 will change `--repo` semantics (slug resolution
+      from registry) — existing behavior must be tested before modifying it.
+      Why: Test architecture gap identified in Story 7-3 code review. DI leak was caught by review, not tests.
+      Success criteria: CLI-level tests exercise `--repo <slug>` through full pipeline for attach, remove, purpose,
+      rebuild; tests verify error paths (ambiguous instance, not found, no git remote).
+
+  - id: 3
+    action_item: 5
+    workflow: bash
+    status: pending
+    summary: |
+      Fix sprint status for Story env-7-3 from `review` to `done` in sprint-status.yaml.
+      Story 7-3 had 2 code reviews completed, fixes applied, and a feat commit landed (`3dc1891`).
+      All subsequent stories (7-4, 7-5) built on top of it. Status was never updated after review completion.
+      Also update `env-epic-7` from `in-progress` to `done` since all 5 stories are complete.
+      Why: Sprint status reporting issue identified during retrospective. New team agreement:
+      sprint status must be updated to `done` as part of code review completion step.
+      Success criteria: env-7-3 status is `done`; env-epic-7 status is `done` in sprint-status.yaml.
+
+  # ─── Will Complete Before Epic 8 (not blocking) ───
+
+  - id: 4
+    action_item: 3
+    workflow: bmad:bmm:workflows:quick-dev
+    status: pending
+    summary: |
+      Add input validation for malformed `--repo` values in `resolveRepo()`.
+      Edge cases like `--repo "../../traversal"`, `--repo "a b c"`, and other malformed inputs
+      are currently accepted silently. Slug derivation handles URLs properly but plain string slugs
+      pass through with only lowercasing and trimming.
+      Why: Story 7-3 code review recommendation #8. Defensive validation before Epic 8 adds slug
+      resolution from registry (Story 8.2).
+      Success criteria: Path traversal attempts, whitespace strings, and malformed inputs rejected
+      with clear error messages; unit tests cover edge cases.
+
+  - id: 5
+    action_item: 4
+    workflow: bmad:bmm:workflows:quick-dev
+    status: pending
+    summary: |
+      Reconstruct Story 7-1 artifact file from commit history and epic description.
+      Story 7-1 (refactor workspace naming and state schema) is the only story across 7 agent-env epics
+      without a story artifact file. Commit `a86a099 refactor(agent-env)!: rename state schema fields
+      for repo-scoped instances` and the Epic 7 section of epics.md provide the source material.
+      Why: New team agreement — story artifact files are mandatory for all stories.
+      Retrospective cannot properly analyze stories without dev notes, file lists, and review records.
+      Success criteria: `env-7-1-refactor-workspace-naming-and-state-schema-for-repo-scoped-instances.md`
+      exists in implementation-artifacts with dev notes, file list, and change log reconstructed
+      from commit `a86a099`, git diff, and epic definition.
+
+  - id: 6
+    action_item: 6
+    workflow: manual
+    status: pending
+    summary: |
+      Evaluate TEA (Test Architect) agent integration into the development workflow.
+      Currently the workflow relies on dev agent for test writing and code review for gap detection.
+      No agent reviews test *architecture* — coverage strategy, missing integration test layers,
+      DI contract verification, risk-based test prioritization. TEA was originally focused on Playwright
+      testing but its core competency (risk-based testing, test architecture) applies broadly.
+      Owner: Node (Project Lead) — strategic decision about workflow composition.
+      Why: Test completeness gaps in Epic 7 (phantom task completion, missing CLI integration tests,
+      DI leak caught downstream) indicate a systematic gap in test architecture review.
+      Success criteria: Decision documented on where TEA plugs in — per-story test plan review,
+      epic-level test architecture audit, or both. TEA agent configuration updated if needed.
+
+  - id: 7
+    action_item: 7
+    workflow: manual
+    status: pending
+    summary: |
+      Create epic-level audit guidance document in a known location.
+      Document lists structural patterns to check at epic completion: command boilerplate duplication,
+      DI contract consistency, test coverage by layer, sprint status accuracy, dead code exports.
+      Initial patterns seeded from Epic 7 findings. Document evolves — each retro feeds back new patterns.
+      Why: Per-story duplication is acceptable during development, but accumulation across an epic
+      needs systematic detection. Currently relies on retro facilitator noticing patterns ad hoc.
+      Success criteria: Document exists in known location; initial patterns from Epic 7 findings included;
+      referenced in workflow documentation so future epics use it.
+
+  - id: 8
+    action_item: 8
+    workflow: manual
+    status: pending
+    summary: |
+      Add pre-retro extraction workflow step that scans story files for unresolved items.
+      New workflow step (separate from retro workflow) runs before retrospective. Scans all story
+      files in the completed epic for: unresolved review recommendations marked "future work",
+      dev note ideas, debug log observations, and any TODO/FIXME items. Triages extracted items
+      into sprint-status.yaml `FUTURE WORK / BACKLOG IDEAS` section.
+      Why: Review recommendations and dev note ideas living only in story files have no follow-up
+      system. The retro's deep story scan surfaces them, but items not material enough for retro
+      action items fall through. This step bridges the gap.
+      Success criteria: Workflow step exists and can be run independently; scans story files for
+      unresolved items; outputs to sprint-status backlog section; runs before retrospective.
+
+  - id: 9
+    action_item: 9
+    workflow: bmad:bmm:workflows:quick-dev
+    status: pending
+    summary: |
+      Remove dead `extractRepoName()` export from `create-instance.ts`.
+      `deriveRepoSlug()` in `workspace.ts` replaced it in Story 7-2. The function was preserved
+      per Story 7-2 Task 4.2 decision, but is now dead code with no consumers.
+      Can be combined with Action Item #1 (boilerplate consolidation) if convenient.
+      Why: Dead code export identified in Story 7-2 code review (L1).
+      Success criteria: Function removed from create-instance.ts; all tests pass.
+
+  - id: 10
+    action_item: 10
+    workflow: bmad:bmm:workflows:quick-dev
+    status: pending
+    summary: |
+      Address `MAX_CONTAINER_NAME_LENGTH` constant unused at runtime in `types.ts`.
+      The constant (63) exists for documentation and constraint arithmetic but is never checked
+      at runtime. Container name length is enforced structurally by `MAX_REPO_SLUG_LENGTH` (39) +
+      `MAX_INSTANCE_NAME_LENGTH` (20) + prefix/separator (4) = 63.
+      Why: Story 7-2 code review observation (L2). Either add a runtime assertion or add a code
+      comment documenting it as intentional constraint arithmetic.
+      Success criteria: Constant either has a runtime assertion or is documented as intentional.
+
+  # ─── Backlog Addition ───
+
+  - id: 11
+    action_item: backlog
+    workflow: manual
+    status: pending
+    summary: |
+      Add to sprint-status.yaml FUTURE WORK / BACKLOG IDEAS section:
+      "Remove backwards compat scaffolding in state.json scanner after Epic 8."
+      During Epic 7 development, backwards compatibility was added to the workspace scanner
+      so pre-Epic-7 workspaces could still be listed. This is development-time scaffolding,
+      not a product decision. Remove after Epic 8 when all workspaces will be repo-scoped format.
+      Why: Node confirmed backwards compat stays through Epic 8, then gets removed.
+      Success criteria: Item added to sprint-status backlog; removed after Epic 8 completion.
