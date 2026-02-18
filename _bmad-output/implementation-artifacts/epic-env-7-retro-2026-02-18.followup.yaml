@@ -92,7 +92,7 @@ items:
   - id: 7
     action_item: 7
     workflow: manual
-    status: pending
+    status: done
     summary: |
       Create epic-level audit guidance document in a known location.
       Document lists structural patterns to check at epic completion: command boilerplate duplication,
