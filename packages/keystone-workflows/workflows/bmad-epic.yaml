@@ -126,7 +126,7 @@ steps:
   # promptImplementationReadiness - Implementation readiness check (optional)
   - id: promptImplementationReadiness
     type: human
-    needs: [promptArchitectureValidation]
+    needs: [architectureValidation]
     if: ${{ steps.confirmStart.output == true }}
     message: |
       Run implementation readiness check?
@@ -150,7 +150,7 @@ steps:
   # promptCourseCorrection - Course correction (optional)
   - id: promptCourseCorrection
     type: human
-    needs: [promptImplementationReadiness]
+    needs: [implementationReadiness]
     if: ${{ steps.confirmStart.output == true }}
     message: |
       Run course correction before proceeding to stories?
@@ -173,7 +173,7 @@ steps:
   # processStory - Process each story using native foreach
   - id: processStory
     type: workflow
-    needs: [promptCourseCorrection]
+    needs: [courseCorrection]
     if: ${{ steps.confirmStart.output == true }}
     foreach: ${{ steps.loadStories.output }}
     concurrency: 1
@@ -209,7 +209,7 @@ steps:
   # prepareSummaryData - Prepare summary data
   - id: prepareSummaryData
     type: shell
-    needs: [promptArchitectureRefresh]
+    needs: [architectureRefresh]
     if: ${{ steps.confirmStart.output == true }}
     allowInsecure: true
     run: |
