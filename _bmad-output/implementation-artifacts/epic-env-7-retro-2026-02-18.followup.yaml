@@ -32,7 +32,7 @@ items:
   - id: 3
     action_item: 5
     workflow: bash
-    status: pending
+    status: done
     summary: |
       Fix sprint status for Story env-7-3 from `review` to `done` in sprint-status.yaml.
       Story 7-3 had 2 code reviews completed, fixes applied, and a feat commit landed (`3dc1891`).
