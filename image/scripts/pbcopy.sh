@@ -1,4 +1,5 @@
-#!/bin/sh
+#!/bin/bash
+set -euo pipefail
 # pbcopy — copy stdin to the system clipboard via OSC 52
 #
 # Works through SSH, tmux (including nested sessions), and Docker containers
