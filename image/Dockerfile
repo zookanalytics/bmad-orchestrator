@@ -45,7 +45,7 @@ ENV LANG=en_US.UTF-8
 ENV LC_ALL=en_US.UTF-8
 
 # Setup pnpm via corepack (pin version to avoid mismatch with project packageManager)
-ARG PNPM_VERSION=10.29.3
+ARG PNPM_VERSION=10.30.1
 ENV PNPM_HOME="/pnpm"
 RUN mkdir -p "$PNPM_HOME"
 ENV PATH="$PNPM_HOME:$PATH"

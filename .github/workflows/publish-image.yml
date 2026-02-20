@@ -69,4 +69,4 @@ jobs:
             TZ=Etc/UTC
             GIT_DELTA_VERSION=0.18.2
             ZSH_IN_DOCKER_VERSION=1.2.1
-            PNPM_VERSION=10.29.3
+            PNPM_VERSION=10.30.1
