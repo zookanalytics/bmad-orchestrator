@@ -1,5 +1,13 @@
 # @zookanalytics/agent-env
 
+## 0.5.0
+
+### Minor Changes
+
+- [#32](https://github.com/zookanalytics/bmad-orchestrator/pull/32) [`a0249da`](https://github.com/zookanalytics/bmad-orchestrator/commit/a0249daa142e4a62adca6822b42f46bd17889e96) Thanks [@johnzook](https://github.com/johnzook)! - Add pbcopy clipboard script using OSC 52
+  - Add pbcopy shim that copies stdin to system clipboard via OSC 52 escape sequences
+  - Enable tmux set-clipboard on for reliable OSC 52 relay through nested tmux/SSH/Docker pty chains
+
 ## 0.4.0
 
 ### Minor Changes
