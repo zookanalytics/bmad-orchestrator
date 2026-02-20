@@ -91,9 +91,15 @@ function createTestState(
   workspaceName: string,
   overrides: Partial<InstanceState> = {}
 ): InstanceState {
+  const repoSlug = overrides.repoSlug ?? 'repo';
+  // Derive instance name by stripping the repoSlug prefix (matches production behavior)
+  const instance = workspaceName.startsWith(`${repoSlug}-`)
+    ? workspaceName.slice(repoSlug.length + 1)
+    : workspaceName;
   return {
-    name: workspaceName,
-    repo: 'https://github.com/user/repo.git',
+    instance,
+    repoSlug,
+    repoUrl: 'https://github.com/user/repo.git',
     createdAt: '2026-01-15T10:00:00.000Z',
     lastAttached: '2026-01-20T14:00:00.000Z',
     purpose: null,
@@ -284,8 +290,11 @@ describe('rebuildInstance', () => {
     expect(result.ok).toBe(true);
   });
 
-  it('finds workspace by suffix match', async () => {
-    const state = createTestState('bmad-orch-auth', { configSource: 'baseline' });
+  it('finds workspace by instance field in state.json', async () => {
+    const state = createTestState('bmad-orch-auth', {
+      repoSlug: 'bmad-orch',
+      configSource: 'baseline',
+    });
     await createTestWorkspace('bmad-orch-auth', state, {
       devcontainerFiles: ['devcontainer.json', 'init-host.sh'],
     });
@@ -807,15 +816,15 @@ describe('rebuildInstance', () => {
     expect(result.error.message).toContain("Instance 'nonexistent' not found");
   });
 
-  it('returns AMBIGUOUS_MATCH when multiple workspaces match', async () => {
+  it('returns AMBIGUOUS_INSTANCE when multiple workspaces match', async () => {
     await createTestWorkspace(
       'repo1-auth',
-      createTestState('repo1-auth', { configSource: 'baseline' }),
+      createTestState('repo1-auth', { repoSlug: 'repo1', configSource: 'baseline' }),
       { devcontainerFiles: ['devcontainer.json', 'Dockerfile', 'init-host.sh', 'post-create.sh'] }
     );
     await createTestWorkspace(
       'repo2-auth',
-      createTestState('repo2-auth', { configSource: 'baseline' }),
+      createTestState('repo2-auth', { repoSlug: 'repo2', configSource: 'baseline' }),
       { devcontainerFiles: ['devcontainer.json', 'Dockerfile', 'init-host.sh', 'post-create.sh'] }
     );
     const deps = createTestDeps();
@@ -824,9 +833,9 @@ describe('rebuildInstance', () => {
 
     expect(result.ok).toBe(false);
     if (result.ok) throw new Error('Expected failure');
-    expect(result.error.code).toBe('AMBIGUOUS_MATCH');
-    expect(result.error.message).toContain('repo1-auth');
-    expect(result.error.message).toContain('repo2-auth');
+    expect(result.error.code).toBe('AMBIGUOUS_INSTANCE');
+    expect(result.error.message).toContain('repo1');
+    expect(result.error.message).toContain('repo2');
   });
 
   it('returns ORBSTACK_REQUIRED when Docker is not available', async () => {

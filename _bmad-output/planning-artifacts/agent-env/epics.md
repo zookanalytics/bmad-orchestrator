@@ -1513,7 +1513,7 @@ So that I can change context without leaving my working environment.
 ### Epic 7: Naming Model, Multi-Instance & Baseline Prompt
 **User Value:** Users can create multiple instances from the same repo with clean, user-friendly names, see which repo each instance belongs to, and choose their container configuration preference.
 
-Focused on the naming/workspace refactor plus baseline config prompt. No migration code — negligible existing instances.
+Focused on the naming/workspace refactor plus baseline config prompt. Backward-compatible migration added post-implementation (see Story 7.1 patch note).
 
 **What it delivers:**
 - Multiple instances from same repo with user-chosen names
@@ -1527,7 +1527,7 @@ Focused on the naming/workspace refactor plus baseline config prompt. No migrati
 **FRs covered:** FR43, FR45, FR27 (revision)
 
 **Architecture Decisions (from ADR review):**
-- **No migration code.** Negligible existing instances. Old flat-layout workspaces are NOT detected by the new code. This is intentional — documented as such in code comments and epic description. Users recreate instances if needed.
+- **~~No migration code.~~** _(Revised)_ Backward-compatible migration added in Story 7.1 patch. Old-format state files (`name`/`repo` fields) are migrated in-memory by `migrateOldState()` in `readState()`, restoring visibility of pre-Epic 7 workspaces. Migrated state is persisted lazily on the next write operation (attach, rebuild, purpose set) via the existing read→spread→write flow. See architecture.md post-implementation validation for details.
 - **Two-phase resolution edge case matrix in ACs:** no remote, multiple remotes, fork remote, subdirectory of git repo, no .git directory, bare repo, remote URL mismatch.
 - **AGENT_ENV_INSTANCE updates:** When Epic 7 lands, the env var value changes from old ad-hoc compound name to new explicit `<repo-slug>-<instance>`. Non-breaking — consumers treat it as opaque per ADR-E6-2. Confirmed: zero runtime consumers in image scripts.
 - **Baseline prompt stories:** (1) prompt logic when repo has `.devcontainer/`, (2) `--baseline`/`--no-baseline` flag handling. Three states: force-baseline, force-repo-config, ask-user (default when repo has `.devcontainer/`).
@@ -1558,8 +1558,12 @@ So that instances are scoped to repositories with globally unique workspace iden
 
 **Given** old-format workspaces exist (pre-Epic 7 compound names like `bmad-orch-auth`)
 **When** `scanWorkspaces()` is called
-**Then** old workspaces with missing `repoSlug`/`instance` fields in state.json are NOT detected
-**And** this is documented in code comments as intentional
+**Then** old workspaces are detected via `migrateOldState()` which maps `name`/`repo` to `instance`/`repoSlug`/`repoUrl`
+**And** the instance name is extracted by stripping the repo slug prefix from the old workspace name
+**And** `containerName` and `configSource` are preserved from the old state
+**And** the migrated state is persisted on the next write operation (attach, rebuild, purpose set)
+
+_(Revised from original AC which specified old workspaces are NOT detected. Changed because pre-Epic 7 workspaces were showing as orphaned/unknown in list output, degrading the user experience.)_
 
 **Given** I run `agent-env list`
 **When** instances exist across multiple repos
@@ -1580,8 +1584,8 @@ So that instances are scoped to repositories with globally unique workspace iden
 **Technical Requirements:**
 - Update `lib/workspace.ts`: `createWorkspace()` uses `<repo-slug>-<instance>` naming; scanning glob unchanged (`workspaces/*/`)
 - Update `lib/state.ts`: schema change (`name` → `instance`, add `repoSlug`, `repoUrl`)
-- Update `lib/types.ts`: `InstanceState` interface reflects new fields
-- Update ALL consumers: `list-instances.ts`, `attach-instance.ts`, `remove-instance.ts`, `purpose-instance.ts`, `interactive-menu.ts`, `commands/list.ts`
+- Update `lib/types.ts`: `InstanceState` interface reflects new fields; preserve existing `configSource?: 'baseline' | 'repo'` and `lastRebuilt?: string` fields
+- Update ALL consumers: `list-instances.ts`, `attach-instance.ts`, `remove-instance.ts`, `purpose-instance.ts`, `interactive-menu.ts`, `commands/list.ts`, `rebuild-instance.ts`, `commands/rebuild.ts`
 - Update ALL state.json consumers added in Epic 6:
   - `image/scripts/tmux-purpose.sh`: reads `.name` from state.json via jq; update field reference `.name` to `.instance`
   - `packages/agent-env/src/lib/purpose-instance.ts`: `getContainerPurpose()` and `setContainerPurpose()` read/write state.json; update for new schema (`name` → `instance`, new `repoSlug`/`repoUrl`). `setContainerPurpose()` constructs a `WorkspacePath` with `name: read.state.name` — must change to match new field.
@@ -1716,7 +1720,7 @@ So that I can distinguish instances from different repos at a glance.
 **Technical Requirements:**
 - Update `components/InstanceList.tsx`: add Repo column
 - Update `commands/list.ts`: add `--repo` filter option
-- Update JSON output to include `repoSlug` and `repoUrl`
+- Update JSON output to include `repoSlug` and `repoUrl`; preserve existing `sshConnection` field in JSON mapping
 - FR45 covered.
 
 ---
@@ -1753,9 +1757,10 @@ So that I get the right environment for each use case.
 **Technical Requirements:**
 - Add `--baseline` and `--no-baseline` mutually exclusive flags to create command
 - Detect `.devcontainer/` in cloned repo before applying config
-- Interactive prompt using Ink Select component
+- Interactive prompt using Node.js readline (intentional simplification over Ink Select)
 - Default selection: "Use repo config" (first option, selected on Enter)
 - Three states: force-baseline, force-repo-config, ask-user
+- Non-TTY fallback: when stdin is not a TTY (piped, CI, scripted), default to "use repo config" without prompting
 - FR27 (revision) covered.
 
 ---

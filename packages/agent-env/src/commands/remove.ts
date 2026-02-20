@@ -11,6 +11,7 @@ import {
   createAuditLogDefaultDeps,
   writeAuditLogEntry,
 } from '../lib/audit-log.js';
+import { resolveRepoOrExit } from '../lib/command-helpers.js';
 import { createRemoveDefaultDeps, removeInstance } from '../lib/remove-instance.js';
 import { formatSafetyReport } from '../lib/safety-report.js';
 
@@ -101,12 +102,13 @@ async function resolveConfirmation(
 export const removeCommand = new Command('remove')
   .description('Remove an instance with safety checks')
   .argument('<name>', 'Instance name to remove')
+  .option('--repo <slug>', 'Repo slug or URL to scope instance lookup')
   .option('--force', 'Force removal, bypassing safety checks')
   .option(
     '--yes',
     'Skip confirmation prompt for --force (DANGEROUS: skips all safety prompts, for scripts only)'
   )
-  .action(async (name: string, options: { force?: boolean; yes?: boolean }) => {
+  .action(async (name: string, options: { repo?: string; force?: boolean; yes?: boolean }) => {
     if (options.yes && !options.force) {
       console.error(
         formatError(
@@ -121,8 +123,11 @@ export const removeCommand = new Command('remove')
       return;
     }
 
+    // Phase 1: Resolve repo context
+    const repoSlug = await resolveRepoOrExit({ repo: options.repo, cwd: process.cwd() });
+
     const deps = createRemoveDefaultDeps();
-    const checkResult = await removeInstance(name, deps, false);
+    const checkResult = await removeInstance(name, deps, false, repoSlug);
 
     if (checkResult.ok) {
       if (options.force) {
@@ -160,7 +165,7 @@ export const removeCommand = new Command('remove')
       return;
     }
 
-    const forceResult = await removeInstance(name, deps, true);
+    const forceResult = await removeInstance(name, deps, true, repoSlug);
     if (!forceResult.ok) {
       const { code, message, suggestion } = forceResult.error;
       console.error(formatError(createError(code, message, suggestion)));

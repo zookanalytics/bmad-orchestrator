@@ -26,6 +26,10 @@ export type InstanceDisplayStatus = ContainerStatus | 'orphaned' | 'unknown';
 export interface Instance {
   /** Workspace name (e.g., "bmad-orch-auth") */
   name: string;
+  /** Repo slug derived from git remote URL (e.g., "bmad-orchestrator") */
+  repoSlug: string;
+  /** Full git remote URL */
+  repoUrl: string;
   /** Display status: running, stopped, orphaned, unknown, not-found */
   status: InstanceDisplayStatus;
   /** ISO 8601 last-attached timestamp, or null if unknown */
@@ -66,6 +70,12 @@ export interface ListInstancesDeps {
 
 // ─── Factory ─────────────────────────────────────────────────────────────────
 
+/** Options for filtering the instance list */
+export interface ListInstancesOpts {
+  /** Filter instances by repo slug (exact match, case-insensitive) */
+  repoFilter?: string;
+}
+
 /**
  * List all instances with their current status.
  *
@@ -73,9 +83,13 @@ export interface ListInstancesDeps {
  * Handles Docker being unavailable gracefully.
  *
  * @param deps - Injectable dependencies for testing
+ * @param opts - Optional filtering options
  * @returns ListResult with instance info array
  */
-export async function listInstances(deps?: Partial<ListInstancesDeps>): Promise<ListResult> {
+export async function listInstances(
+  deps?: Partial<ListInstancesDeps>,
+  opts?: ListInstancesOpts
+): Promise<ListResult> {
   try {
     const container = deps?.container ?? createContainerLifecycle();
     const gitDetector = deps?.gitDetector ?? createGitStateDetector();
@@ -92,62 +106,82 @@ export async function listInstances(deps?: Partial<ListInstancesDeps>): Promise<
     // Step 2: Check Docker availability once
     const dockerAvailable = await container.isDockerAvailable();
 
-    // Step 3: For each workspace, read state, check container status, and detect git state in parallel
-    const instancePromises = workspaceNames.map(async (wsName): Promise<Instance> => {
+    // Step 3: Read state for each workspace (cheap I/O) and apply repo filter early
+    const repoFilter = opts?.repoFilter?.toLowerCase();
+    const filteredWorkspaces: Array<{
+      wsName: string;
+      wsPath: WorkspacePath;
+      state: InstanceState;
+    }> = [];
+
+    for (const wsName of workspaceNames) {
       const wsPath: WorkspacePath = getWorkspacePathByName(wsName, wsFsDeps);
       const state: InstanceState = await readState(wsPath, stateFsDeps);
 
-      // Run container status check and git state detection in parallel
-      const containerPromise = dockerAvailable
-        ? container.containerStatus(state.containerName)
-        : Promise.resolve(null);
-      const gitPromise = gitDetector.getGitState(wsPath.root);
-
-      const [containerResult, gitState] = await Promise.all([containerPromise, gitPromise]);
-
-      // Determine display status
-      let status: InstanceDisplayStatus;
-
-      if (!dockerAvailable || containerResult === null) {
-        status = 'unknown';
-      } else if (!containerResult.ok) {
-        // Error checking container — treat as unknown
-        status = 'unknown';
-      } else if (containerResult.status === 'not-found') {
-        // Workspace exists but no container — orphaned
-        status = 'orphaned';
-      } else {
-        status = containerResult.status;
+      // Filter by repo slug before expensive container/git checks
+      if (repoFilter && state.repoSlug.toLowerCase() !== repoFilter) {
+        continue;
       }
+      filteredWorkspaces.push({ wsName, wsPath, state });
+    }
 
-      // Calculate SSH connection string
-      let sshConnection: string | null = null;
-      if (status === 'running' && containerResult && containerResult.ok) {
-        // Port 22 may be exposed but not published (OrbStack direct networking)
-        // — the key exists in ports with an empty string value
-        if ('22/tcp' in containerResult.ports) {
-          // Use OrbStack domain label override if present, otherwise default .orb.local DNS
-          // Label may contain comma-separated domains; use the first one
-          const orbDomains = containerResult.labels['dev.orbstack.domains'];
-          const hostname = orbDomains?.split(',')[0]?.trim() || `${state.containerName}.orb.local`;
-          sshConnection = `node@${hostname}`;
-          // Append localhost port fallback when port is published to non-standard port
-          const hostPort = containerResult.ports['22/tcp'];
-          if (hostPort && hostPort !== '22') {
-            sshConnection += ` (localhost:${hostPort})`;
+    // Step 4: For each matching workspace, check container status and detect git state in parallel
+    const instancePromises = filteredWorkspaces.map(
+      async ({ wsName, wsPath, state }): Promise<Instance> => {
+        // Run container status check and git state detection in parallel
+        const containerPromise = dockerAvailable
+          ? container.containerStatus(state.containerName)
+          : Promise.resolve(null);
+        const gitPromise = gitDetector.getGitState(wsPath.root);
+
+        const [containerResult, gitState] = await Promise.all([containerPromise, gitPromise]);
+
+        // Determine display status
+        let status: InstanceDisplayStatus;
+
+        if (!dockerAvailable || containerResult === null) {
+          status = 'unknown';
+        } else if (!containerResult.ok) {
+          // Error checking container — treat as unknown
+          status = 'unknown';
+        } else if (containerResult.status === 'not-found') {
+          // Workspace exists but no container — orphaned
+          status = 'orphaned';
+        } else {
+          status = containerResult.status;
+        }
+
+        // Calculate SSH connection string
+        let sshConnection: string | null = null;
+        if (status === 'running' && containerResult && containerResult.ok) {
+          // Port 22 may be exposed but not published (OrbStack direct networking)
+          // — the key exists in ports with an empty string value
+          if ('22/tcp' in containerResult.ports) {
+            // Use OrbStack domain label override if present, otherwise default .orb.local DNS
+            // Label may contain comma-separated domains; use the first one
+            const orbDomains = containerResult.labels['dev.orbstack.domains'];
+            const hostname = orbDomains?.split(',')[0]?.trim() || `${state.containerName}.orb.local`;
+            sshConnection = `node@${hostname}`;
+            // Append localhost port fallback when port is published to non-standard port
+            const hostPort = containerResult.ports['22/tcp'];
+            if (hostPort && hostPort !== '22') {
+              sshConnection += ` (localhost:${hostPort})`;
+            }
           }
         }
-      }
 
-      return {
-        name: wsName,
-        status,
-        lastAttached: state.lastAttached !== 'unknown' ? state.lastAttached : null,
-        purpose: state.purpose,
-        gitState,
-        sshConnection,
-      };
-    });
+        return {
+          name: wsName,
+          repoSlug: state.repoSlug,
+          repoUrl: state.repoUrl,
+          status,
+          lastAttached: state.lastAttached !== 'unknown' ? state.lastAttached : null,
+          purpose: state.purpose,
+          gitState,
+          sshConnection,
+        };
+      }
+    );
 
     const instances = await Promise.all(instancePromises);
 

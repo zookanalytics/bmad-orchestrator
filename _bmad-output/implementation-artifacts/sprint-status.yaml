@@ -158,13 +158,13 @@ development_status:
   # Flat workspace layout with repo-scoped naming, multi-instance per repo, user-chosen names, baseline config prompt.
   # Dependencies: Requires Epics 1-5 (complete). Independent of Epics 6 and 8.
   # PRD revision 2026-02-14: FR43, FR45, FR27 (revision)
-  env-epic-7: backlog
-  env-7-1-refactor-workspace-naming-and-state-schema-for-repo-scoped-instances: backlog
-  env-7-2-repo-slug-derivation-compression-and-instance-name-validation: backlog
-  env-7-3-two-phase-repo-resolution-for-commands: backlog
-  env-7-4-source-repo-in-list-output: backlog
-  env-7-5-baseline-config-prompt-with-flag-overrides: backlog
-  env-epic-7-retrospective: optional
+  env-epic-7: done
+  env-7-1-refactor-workspace-naming-and-state-schema-for-repo-scoped-instances: done
+  env-7-2-repo-slug-derivation-compression-and-instance-name-validation: done
+  env-7-3-two-phase-repo-resolution-for-commands: done
+  env-7-4-source-repo-in-list-output: done
+  env-7-5-baseline-config-prompt-with-flag-overrides: done
+  env-epic-7-retrospective: done
 
   # ─── agent-env Epic 8: Growth — Repo Registry & VS Code Purpose ───
   # Convenience features: repo registry, create from slug, VS Code purpose display.
@@ -290,3 +290,10 @@ cross_dependencies:
 #   or templating system would replace ad-hoc JSON manipulation. Could be a story in
 #   a future epic or folded into env-epic-2 retro follow-up.
 #   Scope: story or small epic depending on how many customizations emerge.
+#
+# [env] Remove backwards compat scaffolding in state.json scanner after Epic 8
+#   Context: During Epic 7 development, backwards compatibility was added to the
+#   workspace scanner so pre-Epic-7 workspaces could still be listed. This is
+#   development-time scaffolding, not a product decision. Remove after Epic 8 when
+#   all workspaces will be repo-scoped format.
+#   Trigger: After Epic 8 completion.

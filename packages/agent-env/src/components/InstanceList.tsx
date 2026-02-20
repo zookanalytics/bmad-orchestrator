@@ -99,6 +99,7 @@ export function InstanceList({
 
   // Calculate column widths
   const nameWidth = Math.max(4, ...augmentedInstances.map((i) => i.name.length)) + 2;
+  const repoWidth = Math.max(4, ...augmentedInstances.map((i) => i.repoSlug.length)) + 2;
   const statusWidth =
     Math.max(6, ...augmentedInstances.map((i) => statusLabel(i.status, dockerAvailable).length)) +
     2;
@@ -113,6 +114,7 @@ export function InstanceList({
       {/* Header */}
       <Box>
         <Text bold>{pad('NAME', nameWidth)}</Text>
+        <Text bold>{pad('REPO', repoWidth)}</Text>
         <Text bold>{pad('STATUS', statusWidth)}</Text>
         <Text bold>{pad('GIT', gitWidth)}</Text>
         <Text bold>{pad('LAST ATTACHED', lastAttachedWidth)}</Text>
@@ -124,6 +126,7 @@ export function InstanceList({
       {augmentedInstances.map((instance) => (
         <Box key={instance.name}>
           <Text>{pad(instance.name, nameWidth)}</Text>
+          <Text color="blue">{pad(instance.repoSlug, repoWidth)}</Text>
           <Text color={statusColor(instance.status)}>
             {pad(statusLabel(instance.status, dockerAvailable), statusWidth)}
           </Text>

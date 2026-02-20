@@ -5,6 +5,7 @@ import { createInterface } from 'node:readline';
 
 import type { RebuildOptions } from '../lib/rebuild-instance.js';
 
+import { resolveRepoOrExit } from '../lib/command-helpers.js';
 import { createRebuildDefaultDeps, rebuildInstance } from '../lib/rebuild-instance.js';
 
 /**
@@ -39,12 +40,16 @@ export const rebuildCommand = new Command('rebuild')
   .option('--yes', 'Skip confirmation prompt')
   .option('--no-pull', 'Skip pulling fresh base images')
   .option('--use-cache', 'Allow Docker build layer cache reuse')
+  .option('--repo <slug>', 'Repo slug or URL to scope instance lookup')
   .action(
     async (
       name: string,
-      options: { force?: boolean; yes?: boolean; pull?: boolean; useCache?: boolean }
+      options: { force?: boolean; yes?: boolean; pull?: boolean; useCache?: boolean; repo?: string }
     ) => {
       const deps = createRebuildDefaultDeps();
+
+      // Phase 1: Resolve repo context
+      const repoSlug = await resolveRepoOrExit({ repo: options.repo, cwd: process.cwd() });
 
       // --yes implies --force and skips prompt; --force also skips prompt
       let confirmed = false;
@@ -70,7 +75,7 @@ export const rebuildCommand = new Command('rebuild')
         console.log(`Rebuilding instance '${name}'...`);
       }
 
-      const result = await rebuildInstance(name, deps, rebuildOptions);
+      const result = await rebuildInstance(name, deps, rebuildOptions, repoSlug);
 
       if (!result.ok) {
         if (result.error.code === 'CONTAINER_RUNNING') {

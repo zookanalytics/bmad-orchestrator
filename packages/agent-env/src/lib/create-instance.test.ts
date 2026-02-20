@@ -8,64 +8,9 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import type { ContainerLifecycle } from './container.js';
 import type { CreateInstanceDeps } from './create-instance.js';
 
-import {
-  extractRepoName,
-  createInstance,
-  resolveRepoUrl,
-  attachToInstance,
-} from './create-instance.js';
+import { createInstance, resolveRepoUrl, attachToInstance } from './create-instance.js';
 import { getBaselineConfigPath } from './devcontainer.js';
 import { AGENT_ENV_DIR, WORKSPACES_DIR } from './types.js';
-
-// ─── extractRepoName tests ──────────────────────────────────────────────────
-
-describe('extractRepoName', () => {
-  it('extracts name from HTTPS URL with .git suffix', () => {
-    expect(extractRepoName('https://github.com/user/bmad-orch.git')).toBe('bmad-orch');
-  });
-
-  it('extracts name from HTTPS URL without .git suffix', () => {
-    expect(extractRepoName('https://github.com/user/bmad-orch')).toBe('bmad-orch');
-  });
-
-  it('extracts name from SSH URL with .git suffix', () => {
-    expect(extractRepoName('git@github.com:user/repo.git')).toBe('repo');
-  });
-
-  it('extracts name from SSH URL without .git suffix', () => {
-    expect(extractRepoName('git@github.com:user/repo')).toBe('repo');
-  });
-
-  it('handles trailing slashes in HTTPS URLs', () => {
-    expect(extractRepoName('https://github.com/user/bmad-orch/')).toBe('bmad-orch');
-  });
-
-  it('handles nested paths in HTTPS URLs', () => {
-    expect(extractRepoName('https://gitlab.com/org/sub/repo-name.git')).toBe('repo-name');
-  });
-
-  it('handles repos with dots in the name', () => {
-    expect(extractRepoName('https://github.com/user/my.repo.name.git')).toBe('my.repo.name');
-  });
-
-  it('handles repos with hyphens and underscores', () => {
-    expect(extractRepoName('https://github.com/user/my-repo_name.git')).toBe('my-repo_name');
-  });
-
-  it('extracts name from SSH URL with protocol', () => {
-    expect(extractRepoName('ssh://git@github.com/user/repo.git')).toBe('repo');
-  });
-
-  it('throws for empty URL', () => {
-    expect(() => extractRepoName('')).toThrow('Cannot extract repository name');
-  });
-
-  it('throws for URL that resolves to empty name', () => {
-    expect(() => extractRepoName('https://github.com/.git')).toThrow(
-      'Cannot extract repository name'
-    );
-  });
-});
 
 // ─── createInstance tests ───────────────────────────────────────────────────
 
@@ -272,8 +217,9 @@ describe('createInstance', () => {
 
     const stateContent = await readFile(result.workspacePath.stateFile, 'utf-8');
     const state = JSON.parse(stateContent);
-    expect(state.name).toBe('bmad-orch-auth');
-    expect(state.repo).toBe('https://github.com/user/bmad-orch.git');
+    expect(state.instance).toBe('auth');
+    expect(state.repoSlug).toBe('bmad-orch');
+    expect(state.repoUrl).toBe('https://github.com/user/bmad-orch.git');
     expect(state.containerName).toBe('ae-bmad-orch-auth');
     expect(state.createdAt).toBeDefined();
   });
@@ -293,6 +239,7 @@ describe('createInstance', () => {
     expect(result.error).not.toBeNull();
     expect(result.error.code).toBe('INSTANCE_EXISTS');
     expect(result.error.message).toContain("Instance 'auth' already exists");
+    expect(result.error.message).toContain('bmad-orch');
   });
 
   it('returns GIT_ERROR when clone fails', async () => {
@@ -751,6 +698,38 @@ describe('createInstance', () => {
     expect(writtenContent.containerEnv.AGENT_ENV_PURPOSE).toBe('JWT authentication');
   });
 
+  it('returns INSTANCE_NAME_TOO_LONG when instance name exceeds 20 characters', async () => {
+    const deps = createTestDeps(gitCloneSuccess);
+    const tooLongName = 'this-name-is-way-too-long';
+
+    const result = await createInstance(tooLongName, 'https://github.com/user/bmad-orch.git', deps);
+
+    expect(result.ok).toBe(false);
+    if (result.ok) throw new Error('Expected failure');
+    expect(result.error.code).toBe('INSTANCE_NAME_TOO_LONG');
+    expect(result.error.message).toContain('20');
+    expect(result.error.message).toContain(`${tooLongName.length}`);
+    // Should not have attempted clone
+    expect(deps.executor).not.toHaveBeenCalled();
+  });
+
+  it('accepts instance name of exactly 20 characters', async () => {
+    const deps = createTestDeps(gitCloneSuccess);
+    const exactName = 'a'.repeat(20);
+
+    const result = await createInstance(exactName, 'https://github.com/user/bmad-orch.git', deps);
+
+    expect(result.ok).toBe(true);
+  });
+
+  it('accepts short instance name', async () => {
+    const deps = createTestDeps(gitCloneSuccess);
+
+    const result = await createInstance('auth', 'https://github.com/user/bmad-orch.git', deps);
+
+    expect(result.ok).toBe(true);
+  });
+
   it('returns PURPOSE_TOO_LONG when purpose exceeds MAX_PURPOSE_LENGTH', async () => {
     const deps = createTestDeps(gitCloneSuccess);
     const tooLongPurpose = 'x'.repeat(201);
@@ -782,6 +761,181 @@ describe('createInstance', () => {
     expect(envPatchCall).toBeDefined();
     const writtenContent = JSON.parse((envPatchCall as unknown[])[1] as string);
     expect(writtenContent.containerEnv.AGENT_ENV_PURPOSE).toBe('');
+  });
+});
+
+// ─── baseline choice tests ──────────────────────────────────────────────────
+
+describe('createInstance baseline choice', () => {
+  it('uses baseline when repo has no devcontainer config (no flags needed)', async () => {
+    const deps = createTestDeps(gitCloneSuccess, {}, false);
+
+    const result = await createInstance('auth', 'https://github.com/user/bmad-orch.git', deps);
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) throw new Error('Expected success');
+
+    const stateContent = await readFile(result.workspacePath.stateFile, 'utf-8');
+    const state = JSON.parse(stateContent);
+    expect(state.configSource).toBe('baseline');
+    // askUser should not have been called
+  });
+
+  it('calls askUser when repo has devcontainer config and no baseline flag', async () => {
+    const askUser = vi.fn().mockResolvedValue('repo');
+    const deps = createTestDeps(gitCloneSuccess, {}, true);
+
+    const result = await createInstance('auth', 'https://github.com/user/bmad-orch.git', deps, {
+      askUser,
+    });
+
+    expect(result.ok).toBe(true);
+    expect(askUser).toHaveBeenCalled();
+    if (!result.ok) throw new Error('Expected success');
+
+    const stateContent = await readFile(result.workspacePath.stateFile, 'utf-8');
+    const state = JSON.parse(stateContent);
+    expect(state.configSource).toBe('repo');
+  });
+
+  it('uses baseline when askUser returns baseline', async () => {
+    const askUser = vi.fn().mockResolvedValue('baseline');
+    const deps = createTestDeps(gitCloneSuccess, {}, true);
+
+    const result = await createInstance('auth', 'https://github.com/user/bmad-orch.git', deps, {
+      askUser,
+    });
+
+    expect(result.ok).toBe(true);
+    expect(askUser).toHaveBeenCalled();
+    // When user chose baseline, baseline config should have been copied
+    expect(deps.devcontainerFsDeps.cp).toHaveBeenCalled();
+    if (!result.ok) throw new Error('Expected success');
+
+    const stateContent = await readFile(result.workspacePath.stateFile, 'utf-8');
+    const state = JSON.parse(stateContent);
+    expect(state.configSource).toBe('baseline');
+  });
+
+  it('forces baseline when --baseline flag is set, even when repo has config', async () => {
+    const askUser = vi.fn();
+    const deps = createTestDeps(gitCloneSuccess, {}, true);
+
+    const result = await createInstance('auth', 'https://github.com/user/bmad-orch.git', deps, {
+      baseline: true,
+      askUser,
+    });
+
+    expect(result.ok).toBe(true);
+    // askUser should NOT have been called (flag overrides prompt)
+    expect(askUser).not.toHaveBeenCalled();
+    // Baseline config should have been copied
+    expect(deps.devcontainerFsDeps.cp).toHaveBeenCalled();
+    if (!result.ok) throw new Error('Expected success');
+
+    const stateContent = await readFile(result.workspacePath.stateFile, 'utf-8');
+    const state = JSON.parse(stateContent);
+    expect(state.configSource).toBe('baseline');
+  });
+
+  it('forces repo config when --no-baseline flag is set (baseline: false)', async () => {
+    const askUser = vi.fn();
+    const deps = createTestDeps(gitCloneSuccess, {}, true);
+
+    const result = await createInstance('auth', 'https://github.com/user/bmad-orch.git', deps, {
+      baseline: false,
+      askUser,
+    });
+
+    expect(result.ok).toBe(true);
+    // askUser should NOT have been called (flag overrides prompt)
+    expect(askUser).not.toHaveBeenCalled();
+    // Baseline config should NOT have been copied
+    expect(deps.devcontainerFsDeps.cp).not.toHaveBeenCalled();
+    if (!result.ok) throw new Error('Expected success');
+
+    const stateContent = await readFile(result.workspacePath.stateFile, 'utf-8');
+    const state = JSON.parse(stateContent);
+    expect(state.configSource).toBe('repo');
+  });
+
+  it('defaults to repo config when no askUser callback and repo has config', async () => {
+    // No askUser provided — non-interactive fallback
+    const deps = createTestDeps(gitCloneSuccess, {}, true);
+
+    const result = await createInstance('auth', 'https://github.com/user/bmad-orch.git', deps);
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) throw new Error('Expected success');
+
+    const stateContent = await readFile(result.workspacePath.stateFile, 'utf-8');
+    const state = JSON.parse(stateContent);
+    expect(state.configSource).toBe('repo');
+  });
+
+  it('uses baseline when --baseline flag set and repo has NO config', async () => {
+    const deps = createTestDeps(gitCloneSuccess, {}, false);
+
+    const result = await createInstance('auth', 'https://github.com/user/bmad-orch.git', deps, {
+      baseline: true,
+    });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) throw new Error('Expected success');
+
+    const stateContent = await readFile(result.workspacePath.stateFile, 'utf-8');
+    const state = JSON.parse(stateContent);
+    expect(state.configSource).toBe('baseline');
+  });
+
+  it('uses baseline when --no-baseline flag set but repo has NO config', async () => {
+    // --no-baseline but no repo config → baseline is the only option
+    const deps = createTestDeps(gitCloneSuccess, {}, false);
+
+    const result = await createInstance('auth', 'https://github.com/user/bmad-orch.git', deps, {
+      baseline: false,
+    });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) throw new Error('Expected success');
+
+    const stateContent = await readFile(result.workspacePath.stateFile, 'utf-8');
+    const state = JSON.parse(stateContent);
+    expect(state.configSource).toBe('baseline');
+  });
+
+  it('passes configPath for baseline when user chose baseline via prompt', async () => {
+    const askUser = vi.fn().mockResolvedValue('baseline');
+    const deps = createTestDeps(gitCloneSuccess, {}, true);
+
+    await createInstance('auth', 'https://github.com/user/bmad-orch.git', deps, {
+      askUser,
+    });
+
+    expect(deps.container.devcontainerUp).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.any(String),
+      expect.objectContaining({
+        configPath: expect.stringContaining(join('.agent-env', 'devcontainer.json')),
+      })
+    );
+  });
+
+  it('does not pass configPath when using repo config', async () => {
+    const askUser = vi.fn().mockResolvedValue('repo');
+    const deps = createTestDeps(gitCloneSuccess, {}, true);
+
+    await createInstance('auth', 'https://github.com/user/bmad-orch.git', deps, {
+      askUser,
+    });
+
+    expect(deps.container.devcontainerUp).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.any(String),
+      expect.objectContaining({
+        configPath: undefined,
+      })
+    );
   });
 });
 

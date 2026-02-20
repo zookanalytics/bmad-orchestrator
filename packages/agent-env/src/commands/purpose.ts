@@ -4,6 +4,7 @@ import { Command } from 'commander';
 import type { ContainerEnvDeps } from '../lib/container-env.js';
 import type { PurposeGetResult, PurposeSetResult } from '../lib/purpose-instance.js';
 
+import { resolveRepoOrExit } from '../lib/command-helpers.js';
 import { isInsideContainer } from '../lib/container-env.js';
 import {
   createContainerPurposeDefaultDeps,
@@ -32,13 +33,14 @@ export function createPurposeCommand(
     )
     .argument('[nameOrValue]', 'Instance name (host) or purpose value (container)')
     .argument('[value]', 'New purpose value (omit to get current, empty string to clear)')
-    .action(async (nameOrValue?: string, value?: string) => {
+    .option('--repo <slug>', 'Repo slug or URL to scope instance lookup (host mode only)')
+    .action(async (nameOrValue?: string, value?: string, options?: { repo?: string }) => {
       if (deps.isInsideContainer()) {
         // Container mode: nameOrValue is actually the purpose value (if provided)
         await handleContainerMode(nameOrValue);
       } else {
         // Host mode: nameOrValue is the instance name (required)
-        await handleHostMode(nameOrValue, value);
+        await handleHostMode(nameOrValue, value, options?.repo);
       }
     });
 }
@@ -59,7 +61,7 @@ async function handleContainerMode(purposeValue?: string): Promise<void> {
   }
 }
 
-async function handleHostMode(name?: string, value?: string): Promise<void> {
+async function handleHostMode(name?: string, value?: string, repo?: string): Promise<void> {
   if (!name) {
     console.error(
       formatError(
@@ -71,17 +73,21 @@ async function handleHostMode(name?: string, value?: string): Promise<void> {
       )
     );
     process.exit(1);
+    return;
   }
+
+  // Phase 1: Resolve repo context
+  const repoSlug = await resolveRepoOrExit({ repo, cwd: process.cwd() });
 
   const deps = createPurposeDefaultDeps();
 
   if (value === undefined) {
     // Get mode
-    const result = await getPurpose(name, deps);
+    const result = await getPurpose(name, deps, repoSlug);
     handleGetResult(result);
   } else {
     // Set mode
-    const result = await setPurpose(name, value, deps);
+    const result = await setPurpose(name, value, deps, repoSlug);
     handleSetResult(result);
   }
 }

@@ -5,13 +5,22 @@
  * stored at ~/.agent-env/workspaces/<repo>-<instance>/
  */
 
-import { mkdir, readdir, rm, stat } from 'node:fs/promises';
+import type { ExecuteResult } from '@zookanalytics/shared';
+
+import { createHash } from 'node:crypto';
+import { mkdir, readdir, readFile, rm, stat } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 
 import type { WorkspacePath } from './types.js';
 
-import { AGENT_ENV_DIR, CONTAINER_PREFIX, STATE_FILE, WORKSPACES_DIR } from './types.js';
+import {
+  AGENT_ENV_DIR,
+  CONTAINER_PREFIX,
+  MAX_REPO_SLUG_LENGTH,
+  STATE_FILE,
+  WORKSPACES_DIR,
+} from './types.js';
 
 // ─── Types for dependency injection ──────────────────────────────────────────
 
@@ -37,6 +46,82 @@ function validateNameSegment(value: string, label: string): void {
       `${label} contains invalid characters: "${value}". Only alphanumeric, dash, dot, and underscore are allowed (must start with alphanumeric).`
     );
   }
+}
+
+// ─── Repo slug derivation ───────────────────────────────────────────────────
+
+/**
+ * Derive a repo slug from a git URL.
+ *
+ * Extracts the last path segment, strips `.git` suffix, and lowercases.
+ * If the result exceeds MAX_REPO_SLUG_LENGTH (39 chars), compresses it
+ * using {@link compressSlug}.
+ *
+ * Supports:
+ * - HTTPS: https://github.com/user/repo-name.git → "repo-name"
+ * - HTTPS without .git: https://github.com/user/repo-name → "repo-name"
+ * - SSH: git@github.com:user/repo-name.git → "repo-name"
+ * - SSH without .git: git@github.com:user/repo-name → "repo-name"
+ * - Trailing slashes are stripped
+ *
+ * @param url - Git repository URL (HTTPS or SSH)
+ * @returns Repo slug (max 39 chars, lowercase)
+ * @throws If URL cannot be parsed to extract a repo name
+ */
+export function deriveRepoSlug(url: string): string {
+  // Remove trailing slashes and the .git suffix to normalize the URL
+  const cleaned = url.replace(/\/+$/, '').replace(/\.git$/, '');
+
+  // The repository name is the last segment after the final '/' or ':'
+  const lastSlash = cleaned.lastIndexOf('/');
+  const lastColon = cleaned.lastIndexOf(':');
+  const lastSeparator = Math.max(lastSlash, lastColon);
+
+  if (lastSeparator === -1) {
+    if (!cleaned) {
+      throw new Error(`Cannot derive repo slug from URL: ${url}`);
+    }
+    return compressSlug(cleaned.toLowerCase());
+  }
+
+  const repoName = cleaned.slice(lastSeparator + 1);
+
+  if (!repoName) {
+    throw new Error(`Cannot derive repo slug from URL: ${url}`);
+  }
+
+  return compressSlug(repoName.toLowerCase());
+}
+
+/**
+ * Compress a slug to fit within maxLength using deterministic SHA-256 hashing.
+ *
+ * If the slug is already within maxLength, returns it unchanged.
+ * Otherwise, produces: `<prefix>_<6-char SHA-256 hex>_<suffix>`
+ * where prefix and suffix are chosen to fill the remaining space evenly.
+ *
+ * @param slug - The slug to compress
+ * @param maxLength - Maximum allowed length (default: MAX_REPO_SLUG_LENGTH = 39)
+ * @returns Compressed slug (deterministic: same input → same output)
+ */
+export function compressSlug(slug: string, maxLength: number = MAX_REPO_SLUG_LENGTH): string {
+  if (slug.length <= maxLength) {
+    return slug;
+  }
+
+  const hash = createHash('sha256').update(slug).digest('hex').slice(0, 6);
+  // Format: <prefix>_<hash>_<suffix>
+  // Overhead: 1 (underscore) + 6 (hash) + 1 (underscore) = 8 chars
+  const overhead = 8;
+  const available = Math.max(0, maxLength - overhead);
+  // Split remaining space roughly evenly between prefix and suffix
+  const prefixLen = Math.ceil(available / 2);
+  const suffixLen = available - prefixLen;
+
+  const prefix = slug.slice(0, prefixLen);
+  const suffix = slug.slice(slug.length - suffixLen);
+
+  return `${prefix}_${hash}_${suffix}`;
 }
 
 // ─── Path utilities ──────────────────────────────────────────────────────────
@@ -192,6 +277,210 @@ export async function scanWorkspaces(
     }
     throw err;
   }
+}
+
+// ─── Two-phase instance resolution ──────────────────────────────────────────
+
+type Execute = (
+  command: string,
+  args?: string[],
+  options?: Record<string, unknown>
+) => Promise<ExecuteResult>;
+
+// ── Phase 1: Repo context resolution ──
+
+export interface ResolveRepoOpts {
+  /** Explicit repo slug or URL from --repo flag */
+  repo?: string;
+  /** Current working directory for git remote inference */
+  cwd?: string;
+}
+
+export type ResolveRepoResult =
+  | { resolved: true; repoSlug: string }
+  | { resolved: false }
+  | { resolved: false; error: { code: string; message: string; suggestion?: string } };
+
+/**
+ * Detect whether a string looks like a git URL (contains / or : separators)
+ * vs a plain repo slug.
+ */
+function looksLikeUrl(value: string): boolean {
+  return value.includes('/') || value.includes(':');
+}
+
+/**
+ * Phase 1: Resolve repo context from explicit flag or cwd git remote.
+ *
+ * Resolution priority:
+ * 1. Explicit `--repo` flag (URL → derive slug; plain string → use as slug)
+ * 2. Current working directory's git `origin` remote
+ * 3. No repo context (returns { resolved: false })
+ *
+ * @param opts - Resolution options (repo flag, cwd)
+ * @param executor - Subprocess executor for git commands
+ * @returns Resolved repo slug, or { resolved: false } if no context available
+ */
+export async function resolveRepo(
+  opts: ResolveRepoOpts,
+  executor: Execute
+): Promise<ResolveRepoResult> {
+  // Priority 1: Explicit --repo flag
+  const repoFlag = opts.repo?.trim();
+  if (repoFlag !== undefined && repoFlag !== '') {
+    if (looksLikeUrl(repoFlag)) {
+      try {
+        const slug = deriveRepoSlug(repoFlag);
+        return { resolved: true, repoSlug: slug };
+      } catch {
+        return {
+          resolved: false,
+          error: {
+            code: 'INVALID_REPO',
+            message: `Cannot derive repo slug from: ${repoFlag}`,
+            suggestion: 'Provide a valid git URL or repo slug.',
+          },
+        };
+      }
+    }
+    // Plain slug — validate, then use as-is (lowercased)
+    const slug = repoFlag.toLowerCase();
+    if (!VALID_NAME_PATTERN.test(slug)) {
+      return {
+        resolved: false,
+        error: {
+          code: 'INVALID_REPO',
+          message: `Invalid repo slug: "${repoFlag}". Only alphanumeric, dash, dot, and underscore allowed (must start with alphanumeric).`,
+          suggestion: 'Provide a valid repo slug or git URL.',
+        },
+      };
+    }
+    return { resolved: true, repoSlug: slug };
+  }
+
+  // Priority 2: Infer from cwd git remote
+  if (opts.cwd) {
+    const result = await executor('git', ['remote', 'get-url', 'origin'], {
+      cwd: opts.cwd,
+    });
+
+    if (result.ok && result.stdout.trim()) {
+      try {
+        const slug = deriveRepoSlug(result.stdout.trim());
+        return { resolved: true, repoSlug: slug };
+      } catch {
+        // URL exists but can't be parsed — fall through to no context
+      }
+    }
+    // No origin remote or not a git directory — not an error, just no context
+  }
+
+  // Priority 3: No repo context
+  return { resolved: false };
+}
+
+// ── Phase 2: Instance resolution ──
+
+export interface ResolveInstanceDeps {
+  fsDeps: Pick<FsDeps, 'readdir' | 'stat' | 'homedir'>;
+  readFile: typeof readFile;
+}
+
+const defaultResolveInstanceDeps: ResolveInstanceDeps = {
+  fsDeps: defaultFsDeps,
+  readFile,
+};
+
+export type ResolveInstanceResult =
+  | { found: true; workspaceName: string }
+  | { found: false; error: { code: string; message: string; suggestion?: string } };
+
+/**
+ * Phase 2: Resolve an instance name to a workspace, optionally scoped by repo.
+ *
+ * Resolution strategy:
+ * 1. If repoSlug provided: look for exact workspace `<repoSlug>-<instanceName>`
+ * 2. If no repoSlug or scoped lookup fails: scan all workspaces, read state.json,
+ *    match by `instance` field
+ * 3. If exactly one global match: return it (unambiguous)
+ * 4. If multiple global matches: return AMBIGUOUS_INSTANCE error
+ * 5. If no match: return WORKSPACE_NOT_FOUND error
+ *
+ * @param instanceName - User-provided instance name (e.g., "auth")
+ * @param repoSlug - Optional repo slug from Phase 1 (e.g., "bmad-orchestrator")
+ * @param deps - Injectable dependencies
+ * @returns Resolved workspace name, or error
+ */
+export async function resolveInstance(
+  instanceName: string,
+  repoSlug: string | undefined,
+  deps: ResolveInstanceDeps = defaultResolveInstanceDeps
+): Promise<ResolveInstanceResult> {
+  const workspaces = await scanWorkspaces(deps.fsDeps);
+
+  // Strategy 0: Exact workspace name match (user typed full name like "bmad-orch-auth")
+  if (workspaces.includes(instanceName)) {
+    return { found: true, workspaceName: instanceName };
+  }
+
+  // Strategy 1: Scoped lookup by repo slug
+  if (repoSlug) {
+    const expectedName = `${repoSlug}-${instanceName}`;
+    if (workspaces.includes(expectedName)) {
+      return { found: true, workspaceName: expectedName };
+    }
+    // Scoped lookup failed — fall through to global search
+  }
+
+  // Strategy 2: Global search by reading state.json and matching instance field
+  const matches: string[] = [];
+
+  for (const wsName of workspaces) {
+    const wsPath = getWorkspacePathByName(wsName, deps.fsDeps);
+    try {
+      const content = await deps.readFile(wsPath.stateFile, 'utf-8');
+      const state: unknown = JSON.parse(content);
+      if (
+        typeof state === 'object' &&
+        state !== null &&
+        (state as Record<string, unknown>).instance === instanceName
+      ) {
+        matches.push(wsName);
+        if (matches.length > 1) break; // Already ambiguous, no need to scan further
+      }
+    } catch {
+      // Skip workspaces with missing/invalid state
+    }
+  }
+
+  if (matches.length === 1) {
+    return { found: true, workspaceName: matches[0] };
+  }
+
+  if (matches.length > 1) {
+    // Extract repo slugs from workspace names for the error message
+    const repoSlugs = matches.map((ws) => {
+      const idx = ws.lastIndexOf(`-${instanceName}`);
+      return idx > 0 ? ws.slice(0, idx) : ws;
+    });
+    return {
+      found: false,
+      error: {
+        code: 'AMBIGUOUS_INSTANCE',
+        message: `Multiple instances named '${instanceName}' exist across repos: ${repoSlugs.join(', ')}`,
+        suggestion: 'Use --repo <slug> to specify which repo.',
+      },
+    };
+  }
+
+  return {
+    found: false,
+    error: {
+      code: 'WORKSPACE_NOT_FOUND',
+      message: `Instance '${instanceName}' not found`,
+      suggestion: 'Use `agent-env list` to see available instances.',
+    },
+  };
 }
 
 // ─── Workspace deletion ──────────────────────────────────────────────────────
