@@ -77,6 +77,10 @@ items:
     action_item: 6
     workflow: manual
     status: done
+    note: |
+      coverage_levels workflow change reverted — _bmad/tea/workflows/ is installer-managed.
+      config.yaml (test_framework: vitest) and keystone testReview step retained.
+      Revisit coverage_levels customization if it comes up again.
     summary: |
       Evaluate TEA (Test Architect) agent integration into the development workflow.
       Currently the workflow relies on dev agent for test writing and code review for gap detection.

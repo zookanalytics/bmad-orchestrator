@@ -25,7 +25,7 @@ variables:
   source_dir: "{project-root}" # Source code directory (customize if needed, e.g., {project-root}/src or {project-root}/lib)
 
   # Workflow behavior
-  coverage_levels: "cli-integration,integration,unit" # Which test levels to trace (adapted for CLI tool)
+  coverage_levels: "e2e,api,component,unit" # Which test levels to trace
   gate_type: "story" # story | epic | release | hotfix - determines gate scope
   decision_mode: "deterministic" # deterministic (rule-based) | manual (team decision)
 

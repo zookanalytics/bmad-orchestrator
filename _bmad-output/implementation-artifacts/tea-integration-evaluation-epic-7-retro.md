@@ -138,8 +138,7 @@ gate_type: "story"
 1. Update `_bmad/tea/config.yaml`:
    - Change `test_framework: other` to `test_framework: vitest`
 
-2. Update `_bmad/tea/workflows/testarch/trace/workflow.yaml`:
-   - Change `coverage_levels: "e2e,api,component,unit"` to `coverage_levels: "cli-integration,integration,unit"`
+2. ~~Update `_bmad/tea/workflows/testarch/trace/workflow.yaml`~~ **Reverted** — workflow files under `_bmad/*/workflows/` are installer-managed. Revisit coverage_levels customization if needed.
 
 3. Add `testReview` step to `packages/keystone-workflows/workflows/bmad-story.yaml` (see above)
 
