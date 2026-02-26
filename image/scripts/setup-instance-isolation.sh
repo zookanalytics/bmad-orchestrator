@@ -467,9 +467,10 @@ fi
 HISTFILE_MARKER="[setup-instance-isolation:HISTFILE]"
 HISTFILE_LINE="export HISTFILE=\"$HISTFILE_PATH\" # $HISTFILE_MARKER"
 
-if grep -q "$HISTFILE_MARKER" "$HOME/.zshrc" 2>/dev/null; then
-  # Update existing line
-  sed -i "s|.*$HISTFILE_MARKER.*|$HISTFILE_LINE|" "$HOME/.zshrc"
+if grep -qF "$HISTFILE_MARKER" "$HOME/.zshrc" 2>/dev/null; then
+  # Update existing line — escape brackets for sed regex
+  ESCAPED_HISTFILE_MARKER=$(printf '%s' "$HISTFILE_MARKER" | sed 's/[][\\.^$*]/\\&/g')
+  sed -i "s|.*$ESCAPED_HISTFILE_MARKER.*|$HISTFILE_LINE|" "$HOME/.zshrc"
   echo "  Updated HISTFILE in .zshrc"
 else
   # Append new line
@@ -538,9 +539,10 @@ echo "[11] Exporting instance ID..."
 INSTANCE_MARKER="[setup-instance-isolation:AGENT_INSTANCE]"
 INSTANCE_LINE="export AGENT_INSTANCE=\"$INSTANCE_ID\" # $INSTANCE_MARKER"
 
-if grep -q "$INSTANCE_MARKER" "$HOME/.zshrc" 2>/dev/null; then
-  # Update existing line
-  sed -i "s|.*$INSTANCE_MARKER.*|$INSTANCE_LINE|" "$HOME/.zshrc"
+if grep -qF "$INSTANCE_MARKER" "$HOME/.zshrc" 2>/dev/null; then
+  # Update existing line — escape brackets for sed regex
+  ESCAPED_INSTANCE_MARKER=$(printf '%s' "$INSTANCE_MARKER" | sed 's/[][\\.^$*]/\\&/g')
+  sed -i "s|.*$ESCAPED_INSTANCE_MARKER.*|$INSTANCE_LINE|" "$HOME/.zshrc"
 else
   # Append new line
   echo "$INSTANCE_LINE" >> "$HOME/.zshrc"

@@ -29,16 +29,16 @@ if [ ! -f "$STATE_FILE" ]; then
 fi
 
 # Single jq invocation: format the display string directly
-# - If name is missing/null → "?"
-# - If purpose is null/empty → just the name
-# - If purpose exists → "name | purpose" (truncated at MAX_PURPOSE_LEN)
+# - If instance is missing/null → "?"
+# - If purpose is null/empty → just the instance
+# - If purpose exists → "instance | purpose" (truncated at MAX_PURPOSE_LEN)
 result=$(jq -r --argjson maxlen "$MAX_PURPOSE_LEN" '
-  (.name // "") as $name |
+  (.instance // "") as $inst |
   (.purpose // "") as $purpose |
-  if ($name | length) == 0 then "?"
-  elif ($purpose | length) == 0 then $name
-  elif ($purpose | length) > $maxlen then "\($name) | \($purpose[0:$maxlen])…"
-  else "\($name) | \($purpose)"
+  if ($inst | length) == 0 then "?"
+  elif ($purpose | length) == 0 then $inst
+  elif ($purpose | length) > $maxlen then "\($inst) | \($purpose[0:$maxlen])…"
+  else "\($inst) | \($purpose)"
   end
 ' "$STATE_FILE" 2>/dev/null)
 

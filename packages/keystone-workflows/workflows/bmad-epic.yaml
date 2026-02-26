@@ -287,10 +287,57 @@ steps:
       Continue to retrospective?
     inputType: confirm
 
+  # structuralAudit - Scan for structural patterns accumulated across the epic
+  - id: structuralAudit
+    type: shell
+    needs: [summary]
+    if: ${{ steps.summary.output == true }}
+    allowInsecure: true
+    run: |
+      claude -p "Perform an epic-level structural audit of the codebase for epic ${{ inputs.epic_id }}. Scan for these patterns that tend to accumulate unnoticed across an epic:
+
+      1. CODE DUPLICATION: Scan for repeated multi-line blocks across similar modules (e.g., sibling files sharing the same pattern). Flag any block duplicated across 3+ locations as a consolidation candidate. Single-line shared calls are fine; multi-line copy-paste blocks are the target.
+
+      2. INTERFACE CONTRACT CONSISTENCY: Verify that wiring between modules matches declared contracts. Check that factory functions and constructors pass all required dependencies. Look for parameters threaded through but never used, or required but never passed.
+
+      3. TEST COVERAGE GAPS: Compare unit test coverage vs integration test coverage. Flag features tested at only one level with no cross-layer verification. Note behavioral paths exercised only by code review, not tests.
+
+      4. TRACKING ARTIFACT ACCURACY: Cross-reference story completion evidence (commits, reviews) against ${{ inputs.sprint_status_path }}. Flag stories with completed work but status not updated to done. Verify epic-level status reflects actual story completion.
+
+      5. DEAD CODE / UNUSED EXPORTS: Scan for exported functions with zero consumers, constants defined but never referenced, and replaced/superseded functions still present.
+
+      For each finding, note: location, severity (low/medium/high), and whether it was already caught by story-level reviews. Output a brief audit summary." --dangerously-skip-permissions
+
+  # preRetroExtraction - Scan story files for unresolved items before retrospective
+  - id: preRetroExtraction
+    type: shell
+    needs: [structuralAudit]
+    if: ${{ steps.summary.output == true }}
+    allowInsecure: true
+    run: |
+      claude -p "Scan all story files for epic ${{ inputs.epic_id }} in _bmad-output/implementation-artifacts/ (files matching pattern ${{ inputs.epic_id }}-*.md, excluding retro and followup files). Extract unresolved items from these categories:
+
+      1. UNRESOLVED REVIEW RECOMMENDATIONS: Look in Code Review sections for recommendations marked 'Not Fixed', 'future work', 'follow-up', or 'out of scope'. Extract each deferred recommendation.
+
+      2. DEV NOTE IDEAS: Look in Dev Notes / Implementation Notes sections for ideas or suggestions not implemented — phrases like 'could also', 'might want to', 'future improvement', 'consider'.
+
+      3. DEBUG LOG OBSERVATIONS: Look in Debug Log sections for workarounds that should be revisited, unexpected behaviors not fully resolved, or notes about flaky tests.
+
+      4. TODO/FIXME ITEMS: Scan entire story files for TODO, FIXME, HACK, WORKAROUND, or unchecked task items (- [ ]) in completed stories.
+
+      After scanning, check the existing FUTURE WORK / BACKLOG IDEAS section in ${{ inputs.sprint_status_path }} and skip any items already tracked there.
+
+      For each NEW item found, append it to the FUTURE WORK / BACKLOG IDEAS comment section at the end of ${{ inputs.sprint_status_path }} using this format:
+      # [component] Brief description
+      #   Context: Source story and section. One-sentence explanation.
+      #   Trigger: When this should be addressed.
+
+      Preserve ALL existing content and comments in sprint-status.yaml. Report what was found and added. Do not ask questions." --dangerously-skip-permissions
+
   # retrospective - Retrospective (user runs interactively)
   - id: retrospective
     type: human
-    needs: [summary]
+    needs: [preRetroExtraction]
     if: ${{ steps.summary.output == true }}
     message: |
       Time for Epic ${{ inputs.epic_id }} retrospective.

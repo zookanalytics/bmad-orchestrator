@@ -7,7 +7,7 @@ import type { StateFsDeps } from './state.js';
 import type { InstanceState, WorkspacePath } from './types.js';
 
 import { createInitialState, ensureGitExclude, readState, writeStateAtomic } from './state.js';
-import { AGENT_ENV_DIR, STATE_FILE, createFallbackState } from './types.js';
+import { AGENT_ENV_DIR, CONTAINER_PREFIX, STATE_FILE, createFallbackState } from './types.js';
 
 // ─── Test helpers ────────────────────────────────────────────────────────────
 
@@ -21,8 +21,9 @@ function createWorkspacePath(base: string, name: string): WorkspacePath {
 }
 
 const validState: InstanceState = {
-  name: 'bmad-orch-auth',
-  repo: 'https://github.com/user/bmad-orch.git',
+  instance: 'auth',
+  repoSlug: 'bmad-orch',
+  repoUrl: 'https://github.com/user/bmad-orch.git',
   createdAt: '2026-01-28T10:00:00.000Z',
   lastAttached: '2026-01-28T12:00:00.000Z',
   purpose: 'Authentication feature',
@@ -51,8 +52,9 @@ describe('readState', () => {
 
     const state = await readState(wsPath);
 
-    expect(state.name).toBe('bmad-orch-auth');
-    expect(state.repo).toBe('https://github.com/user/bmad-orch.git');
+    expect(state.instance).toBe('auth');
+    expect(state.repoSlug).toBe('bmad-orch');
+    expect(state.repoUrl).toBe('https://github.com/user/bmad-orch.git');
     expect(state.createdAt).toBe('2026-01-28T10:00:00.000Z');
     expect(state.lastAttached).toBe('2026-01-28T12:00:00.000Z');
     expect(state.purpose).toBe('Authentication feature');
@@ -75,8 +77,9 @@ describe('readState', () => {
 
     const state = await readState(wsPath);
 
-    expect(state.name).toBe('missing-state');
-    expect(state.repo).toBe('unknown');
+    expect(state.instance).toBe('missing-state');
+    expect(state.repoSlug).toBe('unknown');
+    expect(state.repoUrl).toBe('unknown');
     expect(state.createdAt).toBe('unknown');
     expect(state.lastAttached).toBe('unknown');
     expect(state.purpose).toBeNull();
@@ -90,19 +93,19 @@ describe('readState', () => {
 
     const state = await readState(wsPath);
 
-    expect(state.name).toBe('corrupted');
-    expect(state.repo).toBe('unknown');
+    expect(state.instance).toBe('corrupted');
+    expect(state.repoUrl).toBe('unknown');
   });
 
   it('returns fallback state for invalid schema (missing fields)', async () => {
     const wsPath = createWorkspacePath(tempDir, 'invalid-schema');
     await mkdir(wsPath.agentEnvDir, { recursive: true });
-    await writeFile(wsPath.stateFile, JSON.stringify({ name: 'test', missing_fields: true }));
+    await writeFile(wsPath.stateFile, JSON.stringify({ instance: 'test', missing_fields: true }));
 
     const state = await readState(wsPath);
 
-    expect(state.name).toBe('invalid-schema');
-    expect(state.repo).toBe('unknown');
+    expect(state.instance).toBe('invalid-schema');
+    expect(state.repoUrl).toBe('unknown');
   });
 
   it('returns fallback state for non-object JSON', async () => {
@@ -111,8 +114,8 @@ describe('readState', () => {
     await writeFile(wsPath.stateFile, '"just a string"');
 
     const state = await readState(wsPath);
-    expect(state.name).toBe('not-object');
-    expect(state.repo).toBe('unknown');
+    expect(state.instance).toBe('not-object');
+    expect(state.repoUrl).toBe('unknown');
   });
 
   it('returns fallback state for null JSON', async () => {
@@ -121,8 +124,8 @@ describe('readState', () => {
     await writeFile(wsPath.stateFile, 'null');
 
     const state = await readState(wsPath);
-    expect(state.name).toBe('null-json');
-    expect(state.repo).toBe('unknown');
+    expect(state.instance).toBe('null-json');
+    expect(state.repoUrl).toBe('unknown');
   });
 
   it('does not throw on any error condition', async () => {
@@ -130,7 +133,7 @@ describe('readState', () => {
     // No directory, no file - should still not throw
     const state = await readState(wsPath);
     expect(state).toBeDefined();
-    expect(state.name).toBe('no-throw');
+    expect(state.instance).toBe('no-throw');
   });
 
   it('uses injected deps for reading', async () => {
@@ -141,7 +144,7 @@ describe('readState', () => {
     const state = await readState(wsPath, deps);
 
     expect(mockReadFile).toHaveBeenCalledWith(wsPath.stateFile, 'utf-8');
-    expect(state.name).toBe('bmad-orch-auth');
+    expect(state.instance).toBe('auth');
   });
 
   it('re-throws errors that are not ENOENT or SyntaxError', async () => {
@@ -168,8 +171,9 @@ describe('writeStateAtomic', () => {
     // Read back and verify
     const content = await readFile(wsPath.stateFile, 'utf-8');
     const parsed = JSON.parse(content);
-    expect(parsed.name).toBe('bmad-orch-auth');
-    expect(parsed.repo).toBe('https://github.com/user/bmad-orch.git');
+    expect(parsed.instance).toBe('auth');
+    expect(parsed.repoSlug).toBe('bmad-orch');
+    expect(parsed.repoUrl).toBe('https://github.com/user/bmad-orch.git');
     expect(parsed.purpose).toBe('Authentication feature');
   });
 
@@ -215,7 +219,7 @@ describe('writeStateAtomic', () => {
     // Verify file was written successfully
     const content = await readFile(wsPath.stateFile, 'utf-8');
     const parsed = JSON.parse(content);
-    expect(parsed.name).toBe('bmad-orch-auth');
+    expect(parsed.instance).toBe('auth');
   });
 
   it('writes formatted JSON with trailing newline', async () => {
@@ -226,7 +230,7 @@ describe('writeStateAtomic', () => {
 
     const content = await readFile(wsPath.stateFile, 'utf-8');
     // Should be indented JSON
-    expect(content).toContain('  "name"');
+    expect(content).toContain('  "instance"');
     // Should end with newline
     expect(content.endsWith('\n')).toBe(true);
   });
@@ -290,16 +294,17 @@ describe('writeStateAtomic', () => {
 // ─── createInitialState tests ────────────────────────────────────────────────
 
 describe('createInitialState', () => {
-  it('creates state with provided name and repo', () => {
-    const state = createInitialState('bmad-orch-auth', 'https://github.com/user/repo.git');
+  it('creates state with provided instance, repoSlug, and repoUrl', () => {
+    const state = createInitialState('auth', 'bmad-orch', 'https://github.com/user/repo.git');
 
-    expect(state.name).toBe('bmad-orch-auth');
-    expect(state.repo).toBe('https://github.com/user/repo.git');
+    expect(state.instance).toBe('auth');
+    expect(state.repoSlug).toBe('bmad-orch');
+    expect(state.repoUrl).toBe('https://github.com/user/repo.git');
   });
 
   it('sets createdAt and lastAttached to current time', () => {
     const before = new Date().toISOString();
-    const state = createInitialState('test', 'repo-url');
+    const state = createInitialState('test', 'repo', 'repo-url');
     const after = new Date().toISOString();
 
     expect(state.createdAt >= before).toBe(true);
@@ -308,32 +313,34 @@ describe('createInitialState', () => {
   });
 
   it('sets purpose to null', () => {
-    const state = createInitialState('test', 'repo-url');
+    const state = createInitialState('test', 'repo', 'repo-url');
     expect(state.purpose).toBeNull();
   });
 
-  it('derives container name from workspace name', () => {
-    const state = createInitialState('bmad-orch-auth', 'repo-url');
+  it('derives container name from repoSlug and instance', () => {
+    const state = createInitialState('auth', 'bmad-orch', 'repo-url');
     expect(state.containerName).toBe('ae-bmad-orch-auth');
   });
 
   it('accepts custom container name', () => {
-    const state = createInitialState('test', 'repo-url', { containerName: 'custom-container' });
+    const state = createInitialState('test', 'repo', 'repo-url', {
+      containerName: 'custom-container',
+    });
     expect(state.containerName).toBe('custom-container');
   });
 
   it('sets configSource when provided', () => {
-    const state = createInitialState('test', 'repo-url', { configSource: 'repo' });
+    const state = createInitialState('test', 'repo', 'repo-url', { configSource: 'repo' });
     expect(state.configSource).toBe('repo');
   });
 
   it('defaults configSource to baseline when not provided', () => {
-    const state = createInitialState('test', 'repo-url');
+    const state = createInitialState('test', 'repo', 'repo-url');
     expect(state.configSource).toBe('baseline');
   });
 
   it('sets both containerName and configSource via options', () => {
-    const state = createInitialState('test', 'repo-url', {
+    const state = createInitialState('test', 'repo', 'repo-url', {
       containerName: 'custom',
       configSource: 'repo',
     });
@@ -342,22 +349,24 @@ describe('createInitialState', () => {
   });
 
   it('sets purpose when provided as string', () => {
-    const state = createInitialState('test', 'repo-url', { purpose: 'JWT authentication' });
+    const state = createInitialState('test', 'repo', 'repo-url', {
+      purpose: 'JWT authentication',
+    });
     expect(state.purpose).toBe('JWT authentication');
   });
 
   it('sets purpose to null when provided as null', () => {
-    const state = createInitialState('test', 'repo-url', { purpose: null });
+    const state = createInitialState('test', 'repo', 'repo-url', { purpose: null });
     expect(state.purpose).toBeNull();
   });
 
   it('defaults purpose to null when not provided', () => {
-    const state = createInitialState('test', 'repo-url', { containerName: 'custom' });
+    const state = createInitialState('test', 'repo', 'repo-url', { containerName: 'custom' });
     expect(state.purpose).toBeNull();
   });
 
   it('sets purpose alongside containerName and configSource', () => {
-    const state = createInitialState('test', 'repo-url', {
+    const state = createInitialState('test', 'repo', 'repo-url', {
       containerName: 'custom',
       configSource: 'repo',
       purpose: 'OAuth integration',
@@ -368,28 +377,237 @@ describe('createInitialState', () => {
   });
 });
 
-// ─── isValidState backwards compatibility ───────────────────────────────────
+// ─── Old-format state migration ──────────────────────────────────────────────
 
-describe('isValidState backwards compatibility', () => {
-  it('accepts state without configSource field', async () => {
-    const wsPath = createWorkspacePath(tempDir, 'no-config-source');
+describe('old-format state migration', () => {
+  it('extracts instance name by stripping repo prefix from old workspace name', async () => {
+    const wsPath = createWorkspacePath(tempDir, 'bmad-orch-auth');
     await mkdir(wsPath.agentEnvDir, { recursive: true });
-    // Write state WITHOUT configSource — mimics pre-existing state files
-    const legacyState = {
-      name: 'test',
+    const oldState = {
+      name: 'bmad-orch-auth',
+      repo: 'https://github.com/user/bmad-orch.git',
+      createdAt: '2026-01-01T00:00:00.000Z',
+      lastAttached: '2026-01-01T00:00:00.000Z',
+      purpose: null,
+      containerName: 'ae-bmad-orch-auth',
+    };
+    await writeFile(wsPath.stateFile, JSON.stringify(oldState, null, 2));
+
+    const state = await readState(wsPath);
+
+    expect(state.instance).toBe('auth');
+    expect(state.repoSlug).toBe('bmad-orch');
+    expect(state.repoUrl).toBe('https://github.com/user/bmad-orch.git');
+    expect(state.createdAt).toBe('2026-01-01T00:00:00.000Z');
+    expect(state.lastAttached).toBe('2026-01-01T00:00:00.000Z');
+    expect(state.purpose).toBeNull();
+    expect(state.containerName).toBe('ae-bmad-orch-auth');
+  });
+
+  it('handles case-insensitive prefix stripping', async () => {
+    const wsPath = createWorkspacePath(tempDir, 'MyRepo-feature');
+    await mkdir(wsPath.agentEnvDir, { recursive: true });
+    const oldState = {
+      name: 'MyRepo-feature',
+      repo: 'https://github.com/user/MyRepo.git',
+      createdAt: '2026-01-01T00:00:00.000Z',
+      lastAttached: '2026-01-01T00:00:00.000Z',
+      purpose: null,
+      containerName: 'ae-myrepo-feature',
+    };
+    await writeFile(wsPath.stateFile, JSON.stringify(oldState));
+
+    const state = await readState(wsPath);
+
+    expect(state.instance).toBe('feature');
+    expect(state.repoSlug).toBe('myrepo');
+  });
+
+  it('uses full name as instance when repo prefix does not match', async () => {
+    const wsPath = createWorkspacePath(tempDir, 'weird-name');
+    await mkdir(wsPath.agentEnvDir, { recursive: true });
+    const oldState = {
+      name: 'weird-name',
+      repo: 'https://github.com/user/totally-different.git',
+      createdAt: '2026-01-01T00:00:00.000Z',
+      lastAttached: '2026-01-01T00:00:00.000Z',
+      purpose: null,
+      containerName: 'ae-weird-name',
+    };
+    await writeFile(wsPath.stateFile, JSON.stringify(oldState));
+
+    const state = await readState(wsPath);
+
+    expect(state.instance).toBe('weird-name');
+    expect(state.repoSlug).toBe('totally-different');
+  });
+
+  it('preserves containerName from old state', async () => {
+    const wsPath = createWorkspacePath(tempDir, 'old-container');
+    await mkdir(wsPath.agentEnvDir, { recursive: true });
+    const oldState = {
+      name: 'my-project-myinstance',
+      repo: 'git@github.com:org/my-project.git',
+      createdAt: '2026-01-15T08:00:00.000Z',
+      lastAttached: '2026-01-20T12:00:00.000Z',
+      purpose: 'custom work',
+      containerName: 'ae-custom-container-name',
+    };
+    await writeFile(wsPath.stateFile, JSON.stringify(oldState));
+
+    const state = await readState(wsPath);
+
+    expect(state.containerName).toBe('ae-custom-container-name');
+    expect(state.repoSlug).toBe('my-project');
+    expect(state.instance).toBe('myinstance');
+    expect(state.purpose).toBe('custom work');
+  });
+
+  it('falls back to generated containerName when old state lacks it', async () => {
+    const wsPath = createWorkspacePath(tempDir, 'no-container');
+    await mkdir(wsPath.agentEnvDir, { recursive: true });
+    const oldState = {
+      name: 'repo-myinstance',
       repo: 'https://github.com/user/repo.git',
+      createdAt: '2026-01-01T00:00:00.000Z',
+      lastAttached: '2026-01-01T00:00:00.000Z',
+      purpose: null,
+    };
+    await writeFile(wsPath.stateFile, JSON.stringify(oldState));
+
+    const state = await readState(wsPath);
+
+    expect(state.containerName).toBe(`${CONTAINER_PREFIX}no-container`);
+  });
+
+  it('preserves configSource from old state', async () => {
+    const wsPath = createWorkspacePath(tempDir, 'with-config');
+    await mkdir(wsPath.agentEnvDir, { recursive: true });
+    const oldState = {
+      name: 'repo-test',
+      repo: 'https://github.com/user/repo.git',
+      createdAt: '2026-01-01T00:00:00.000Z',
+      lastAttached: '2026-01-01T00:00:00.000Z',
+      purpose: null,
+      containerName: 'ae-repo-test',
+      configSource: 'repo',
+    };
+    await writeFile(wsPath.stateFile, JSON.stringify(oldState));
+
+    const state = await readState(wsPath);
+
+    expect(state.configSource).toBe('repo');
+  });
+
+  it('handles empty repo URL gracefully', async () => {
+    const wsPath = createWorkspacePath(tempDir, 'empty-url');
+    await mkdir(wsPath.agentEnvDir, { recursive: true });
+    const oldState = {
+      name: 'test',
+      repo: '',
       createdAt: '2026-01-01T00:00:00.000Z',
       lastAttached: '2026-01-01T00:00:00.000Z',
       purpose: null,
       containerName: 'ae-test',
     };
-    await writeFile(wsPath.stateFile, JSON.stringify(legacyState, null, 2));
+    await writeFile(wsPath.stateFile, JSON.stringify(oldState));
 
     const state = await readState(wsPath);
 
-    expect(state.name).toBe('test');
+    expect(state.repoSlug).toBe('unknown');
     expect(state.containerName).toBe('ae-test');
-    // configSource should be undefined (not present in old state files)
+  });
+
+  it('handles SSH URL without .git suffix', async () => {
+    const wsPath = createWorkspacePath(tempDir, 'my-repo-dev');
+    await mkdir(wsPath.agentEnvDir, { recursive: true });
+    const oldState = {
+      name: 'my-repo-dev',
+      repo: 'git@github.com:org/my-repo',
+      createdAt: '2026-01-01T00:00:00.000Z',
+      lastAttached: '2026-01-01T00:00:00.000Z',
+      purpose: null,
+      containerName: 'ae-my-repo-dev',
+    };
+    await writeFile(wsPath.stateFile, JSON.stringify(oldState));
+
+    const state = await readState(wsPath);
+
+    expect(state.repoSlug).toBe('my-repo');
+    expect(state.instance).toBe('dev');
+  });
+
+  it('handles URL with trailing slashes', async () => {
+    const wsPath = createWorkspacePath(tempDir, 'repo-test');
+    await mkdir(wsPath.agentEnvDir, { recursive: true });
+    const oldState = {
+      name: 'repo-test',
+      repo: 'https://github.com/user/repo.git///',
+      createdAt: '2026-01-01T00:00:00.000Z',
+      lastAttached: '2026-01-01T00:00:00.000Z',
+      purpose: null,
+      containerName: 'ae-repo-test',
+    };
+    await writeFile(wsPath.stateFile, JSON.stringify(oldState));
+
+    const state = await readState(wsPath);
+
+    expect(state.repoSlug).toBe('repo');
+    expect(state.instance).toBe('test');
+  });
+
+  it('falls back to fallback state for non-object JSON', async () => {
+    const wsPath = createWorkspacePath(tempDir, 'not-object');
+    await mkdir(wsPath.agentEnvDir, { recursive: true });
+    await writeFile(wsPath.stateFile, '"just a string"');
+
+    const state = await readState(wsPath);
+
+    expect(state.instance).toBe('not-object');
+    expect(state.repoSlug).toBe('unknown');
+  });
+
+  it('falls back for JSON missing old-format fields', async () => {
+    const wsPath = createWorkspacePath(tempDir, 'missing-fields');
+    await mkdir(wsPath.agentEnvDir, { recursive: true });
+    await writeFile(wsPath.stateFile, JSON.stringify({ name: 'test', notRepo: true }));
+
+    const state = await readState(wsPath);
+
+    expect(state.instance).toBe('missing-fields');
+    expect(state.repoSlug).toBe('unknown');
+  });
+
+  it('still falls back for truly invalid JSON (not old or new format)', async () => {
+    const wsPath = createWorkspacePath(tempDir, 'garbage');
+    await mkdir(wsPath.agentEnvDir, { recursive: true });
+    await writeFile(wsPath.stateFile, JSON.stringify({ random: 'garbage', x: 123 }));
+
+    const state = await readState(wsPath);
+
+    expect(state.instance).toBe('garbage');
+    expect(state.repoSlug).toBe('unknown');
+  });
+
+  it('accepts new-format state without configSource field', async () => {
+    const wsPath = createWorkspacePath(tempDir, 'no-config-source');
+    await mkdir(wsPath.agentEnvDir, { recursive: true });
+    const newState = {
+      instance: 'auth',
+      repoSlug: 'bmad-orch',
+      repoUrl: 'https://github.com/user/repo.git',
+      createdAt: '2026-01-01T00:00:00.000Z',
+      lastAttached: '2026-01-01T00:00:00.000Z',
+      purpose: null,
+      containerName: 'ae-bmad-orch-auth',
+    };
+    await writeFile(wsPath.stateFile, JSON.stringify(newState, null, 2));
+
+    const state = await readState(wsPath);
+
+    expect(state.instance).toBe('auth');
+    expect(state.repoSlug).toBe('bmad-orch');
+    expect(state.containerName).toBe('ae-bmad-orch-auth');
     expect(state.configSource).toBeUndefined();
   });
 });
@@ -400,8 +618,9 @@ describe('createFallbackState', () => {
   it('creates state with "unknown" values', () => {
     const fallback = createFallbackState('test-workspace');
 
-    expect(fallback.name).toBe('test-workspace');
-    expect(fallback.repo).toBe('unknown');
+    expect(fallback.instance).toBe('test-workspace');
+    expect(fallback.repoSlug).toBe('unknown');
+    expect(fallback.repoUrl).toBe('unknown');
     expect(fallback.createdAt).toBe('unknown');
     expect(fallback.lastAttached).toBe('unknown');
     expect(fallback.purpose).toBeNull();

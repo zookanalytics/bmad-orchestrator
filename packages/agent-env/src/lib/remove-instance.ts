@@ -17,11 +17,10 @@ import type { StateFsDeps } from './state.js';
 import type { GitState } from './types.js';
 import type { DeleteFsDeps, FsDeps } from './workspace.js';
 
-import { findWorkspaceByName } from './attach-instance.js';
 import { createContainerLifecycle } from './container.js';
 import { createGitStateDetector } from './git.js';
 import { readState } from './state.js';
-import { deleteWorkspace, getWorkspacePathByName } from './workspace.js';
+import { deleteWorkspace, getWorkspacePathByName, resolveInstance } from './workspace.js';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -130,7 +129,7 @@ export function evaluateSafetyChecks(gitState: GitState): string[] {
  * Remove an instance after passing safety checks.
  *
  * Orchestration flow:
- * 1. Find workspace by instance name
+ * 1. Resolve instance using two-phase resolution (repo-scoped → global)
  * 2. Read state to get container name
  * 3. Check Docker availability
  * 4. Run git safety checks inside the workspace
@@ -141,35 +140,24 @@ export function evaluateSafetyChecks(gitState: GitState): string[] {
  *
  * @param instanceName - User-provided instance name (e.g., "auth")
  * @param deps - Injectable dependencies
+ * @param force - Bypass safety checks
+ * @param repoSlug - Optional repo slug from --repo flag or cwd inference
  * @returns RemoveResult with success/failure info
  */
 export async function removeInstance(
   instanceName: string,
   deps: RemoveInstanceDeps,
-  force: boolean = false
+  force: boolean = false,
+  repoSlug?: string
 ): Promise<RemoveResult> {
-  // Step 1: Find workspace
-  const lookup = await findWorkspaceByName(instanceName, deps.workspaceFsDeps);
+  // Step 1: Resolve instance using two-phase resolution
+  const lookup = await resolveInstance(instanceName, repoSlug, {
+    fsDeps: deps.workspaceFsDeps,
+    readFile: deps.stateFsDeps.readFile,
+  });
 
   if (!lookup.found) {
-    if (lookup.reason === 'ambiguous') {
-      return {
-        ok: false,
-        error: {
-          code: 'AMBIGUOUS_MATCH',
-          message: `Multiple instances match '${instanceName}': ${lookup.matches.join(', ')}`,
-          suggestion: 'Use the full workspace name to specify which instance.',
-        },
-      };
-    }
-    return {
-      ok: false,
-      error: {
-        code: 'WORKSPACE_NOT_FOUND',
-        message: `Instance '${instanceName}' not found`,
-        suggestion: 'Use `agent-env list` to see available instances.',
-      },
-    };
+    return { ok: false, error: lookup.error };
   }
 
   const wsPath = getWorkspacePathByName(lookup.workspaceName, deps.workspaceFsDeps);

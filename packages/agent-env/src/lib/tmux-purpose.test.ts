@@ -58,46 +58,43 @@ function runPurposeScript(stateFilePath: string): string {
 describe('tmux-purpose.sh', () => {
   describe('purpose display formatting', () => {
     it('shows "instance | purpose" when purpose is set', () => {
-      writeFileSync(
-        stateFile,
-        JSON.stringify({ name: 'bmad-orch-auth', purpose: 'JWT authentication' })
-      );
-      expect(runPurposeScript(stateFile)).toBe('bmad-orch-auth | JWT authentication');
+      writeFileSync(stateFile, JSON.stringify({ instance: 'auth', purpose: 'JWT authentication' }));
+      expect(runPurposeScript(stateFile)).toBe('auth | JWT authentication');
     });
 
     it('shows instance name only when purpose is null', () => {
-      writeFileSync(stateFile, JSON.stringify({ name: 'bmad-orch-auth', purpose: null }));
-      expect(runPurposeScript(stateFile)).toBe('bmad-orch-auth');
+      writeFileSync(stateFile, JSON.stringify({ instance: 'auth', purpose: null }));
+      expect(runPurposeScript(stateFile)).toBe('auth');
     });
 
     it('shows instance name only when purpose is empty string', () => {
-      writeFileSync(stateFile, JSON.stringify({ name: 'bmad-orch-auth', purpose: '' }));
-      expect(runPurposeScript(stateFile)).toBe('bmad-orch-auth');
+      writeFileSync(stateFile, JSON.stringify({ instance: 'auth', purpose: '' }));
+      expect(runPurposeScript(stateFile)).toBe('auth');
     });
 
     it('shows instance name only when purpose key is absent', () => {
-      writeFileSync(stateFile, JSON.stringify({ name: 'bmad-orch-auth' }));
-      expect(runPurposeScript(stateFile)).toBe('bmad-orch-auth');
+      writeFileSync(stateFile, JSON.stringify({ instance: 'auth' }));
+      expect(runPurposeScript(stateFile)).toBe('auth');
     });
   });
 
   describe('purpose truncation', () => {
     it('does not truncate purpose at exactly 40 characters', () => {
       const purpose40 = '1234567890123456789012345678901234567890'; // exactly 40
-      writeFileSync(stateFile, JSON.stringify({ name: 'test', purpose: purpose40 }));
+      writeFileSync(stateFile, JSON.stringify({ instance: 'test', purpose: purpose40 }));
       expect(runPurposeScript(stateFile)).toBe(`test | ${purpose40}`);
     });
 
     it('truncates purpose longer than 40 characters with ellipsis', () => {
       const purpose41 = '12345678901234567890123456789012345678901'; // 41 chars
-      writeFileSync(stateFile, JSON.stringify({ name: 'test', purpose: purpose41 }));
+      writeFileSync(stateFile, JSON.stringify({ instance: 'test', purpose: purpose41 }));
       expect(runPurposeScript(stateFile)).toBe('test | 1234567890123456789012345678901234567890…');
     });
 
     it('truncates long real-world purpose', () => {
       const longPurpose =
         'This is a very long purpose that definitely exceeds forty characters in length';
-      writeFileSync(stateFile, JSON.stringify({ name: 'my-instance', purpose: longPurpose }));
+      writeFileSync(stateFile, JSON.stringify({ instance: 'my-instance', purpose: longPurpose }));
       const result = runPurposeScript(stateFile);
       expect(result).toContain('my-instance | ');
       expect(result).toContain('…');
@@ -123,13 +120,13 @@ describe('tmux-purpose.sh', () => {
       expect(runPurposeScript(stateFile)).toBe('?');
     });
 
-    it('shows "?" when name is null', () => {
-      writeFileSync(stateFile, JSON.stringify({ name: null, purpose: 'some purpose' }));
+    it('shows "?" when instance is null', () => {
+      writeFileSync(stateFile, JSON.stringify({ instance: null, purpose: 'some purpose' }));
       expect(runPurposeScript(stateFile)).toBe('?');
     });
 
-    it('shows "?" when name is empty string', () => {
-      writeFileSync(stateFile, JSON.stringify({ name: '', purpose: 'some purpose' }));
+    it('shows "?" when instance is empty string', () => {
+      writeFileSync(stateFile, JSON.stringify({ instance: '', purpose: 'some purpose' }));
       expect(runPurposeScript(stateFile)).toBe('?');
     });
 
@@ -144,31 +141,33 @@ describe('tmux-purpose.sh', () => {
       writeFileSync(
         stateFile,
         JSON.stringify({
-          name: 'bmad-orchestrator-epics',
-          repo: 'git@github.com:zookanalytics/bmad-orchestrator.git',
+          instance: 'epics',
+          repoSlug: 'bmad-orchestrator',
+          repoUrl: 'git@github.com:zookanalytics/bmad-orchestrator.git',
           createdAt: '2026-02-15T09:13:56.366Z',
           lastAttached: '2026-02-15T09:13:56.366Z',
           purpose: 'Epic 6 implementation',
-          containerName: 'agenttools-bmad-orchestrator-epics',
+          containerName: 'ae-bmad-orchestrator-epics',
           configSource: 'repo',
         })
       );
-      expect(runPurposeScript(stateFile)).toBe('bmad-orchestrator-epics | Epic 6 implementation');
+      expect(runPurposeScript(stateFile)).toBe('epics | Epic 6 implementation');
     });
 
     it('handles state.json with purpose null and extra fields', () => {
       writeFileSync(
         stateFile,
         JSON.stringify({
-          name: 'my-project-dev',
-          repo: 'https://github.com/user/project.git',
+          instance: 'dev',
+          repoSlug: 'my-project',
+          repoUrl: 'https://github.com/user/project.git',
           createdAt: '2026-02-16T00:00:00.000Z',
           lastAttached: '2026-02-16T00:00:00.000Z',
           purpose: null,
           containerName: 'ae-my-project-dev',
         })
       );
-      expect(runPurposeScript(stateFile)).toBe('my-project-dev');
+      expect(runPurposeScript(stateFile)).toBe('dev');
     });
   });
 });

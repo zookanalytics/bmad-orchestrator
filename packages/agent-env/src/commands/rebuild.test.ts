@@ -4,10 +4,15 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
 const mockRebuildInstance = vi.fn();
 const mockCreateRebuildDefaultDeps = vi.fn().mockReturnValue({});
+const mockResolveRepo = vi.fn().mockResolvedValue({ resolved: false });
 
 vi.mock('../lib/rebuild-instance.js', () => ({
   rebuildInstance: (...args: unknown[]) => mockRebuildInstance(...args),
   createRebuildDefaultDeps: () => mockCreateRebuildDefaultDeps(),
+}));
+
+vi.mock('../lib/workspace.js', () => ({
+  resolveRepo: (...args: unknown[]) => mockResolveRepo(...args),
 }));
 
 // Import after mocks are set up
@@ -82,7 +87,8 @@ describe('rebuild command option parsing', () => {
     expect(mockRebuildInstance).toHaveBeenCalledWith(
       'test-instance',
       expect.any(Object),
-      expect.objectContaining({ pull: false, noCache: true })
+      expect.objectContaining({ pull: false, noCache: true }),
+      undefined
     );
   });
 
@@ -92,7 +98,8 @@ describe('rebuild command option parsing', () => {
     expect(mockRebuildInstance).toHaveBeenCalledWith(
       'test-instance',
       expect.any(Object),
-      expect.objectContaining({ noCache: false })
+      expect.objectContaining({ noCache: false }),
+      undefined
     );
   });
 
@@ -102,7 +109,8 @@ describe('rebuild command option parsing', () => {
     expect(mockRebuildInstance).toHaveBeenCalledWith(
       'test-instance',
       expect.any(Object),
-      expect.objectContaining({ pull: true, noCache: true })
+      expect.objectContaining({ pull: true, noCache: true }),
+      undefined
     );
   });
 });

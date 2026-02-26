@@ -34,6 +34,8 @@ function makeCleanGitState(): GitStateResult {
 function makeInstance(overrides: Partial<Instance> = {}): Instance {
   return {
     name: 'test-instance',
+    repoSlug: 'repo',
+    repoUrl: 'https://github.com/user/repo.git',
     status: 'running',
     lastAttached: '2026-02-03T10:00:00.000Z',
     purpose: null,

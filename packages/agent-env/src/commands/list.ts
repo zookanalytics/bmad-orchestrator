@@ -14,8 +14,11 @@ export const listCommand = new Command('list')
   .alias('ps')
   .description('List all instances with status')
   .option('--json', 'Output in JSON format')
-  .action(async (options: { json?: boolean }) => {
-    const result = await listInstances();
+  .option('--repo <slug>', 'Filter instances by repo slug')
+  .action(async (options: { json?: boolean; repo?: string }) => {
+    const result = await listInstances(undefined, {
+      repoFilter: options.repo,
+    });
 
     if (!result.ok) {
       const error = createError(
@@ -42,6 +45,8 @@ export const listCommand = new Command('list')
         ok: true,
         data: result.instances.map((i) => ({
           name: i.name,
+          repoSlug: i.repoSlug,
+          repoUrl: i.repoUrl,
           status: i.status,
           lastAttached: i.lastAttached,
           purpose: i.purpose,
