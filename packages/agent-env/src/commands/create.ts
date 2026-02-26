@@ -10,6 +10,7 @@ import {
   resolveRepoUrl,
   attachToInstance,
 } from '../lib/create-instance.js';
+import { resolveRepoArg } from '../lib/resolve-repo-arg.js';
 
 /**
  * Prompt the user to choose between repo config and agent-env baseline.
@@ -46,7 +47,7 @@ interface CreateOptions {
 export const createCommand = new Command('create')
   .description('Create a new isolated development environment')
   .argument('<name>', 'Name for the new instance')
-  .option('--repo <url>', 'Git repository URL to clone (use "." for current directory)')
+  .option('--repo <url|slug>', 'Git repo URL, registered slug, or "." for current directory')
   .option('--purpose <text>', 'Set the instance purpose/label at creation time')
   .option('--attach', 'Attach immediately after creation')
   .option('--baseline', 'Force agent-env baseline config (ignore repo .devcontainer/)')
@@ -58,7 +59,7 @@ export const createCommand = new Command('create')
           createError(
             'MISSING_OPTION',
             'The --repo flag is required.',
-            'Usage: agent-env create <name> --repo <url>'
+            'Usage: agent-env create <name> --repo <url|slug>'
           )
         )
       );
@@ -85,9 +86,23 @@ export const createCommand = new Command('create')
       process.exit(1);
     }
 
-    // Resolve --repo . to actual git remote URL
+    // Step 1: Resolve slug → URL if the --repo value is a registered slug
     const deps = createDefaultDeps();
-    const resolved = await resolveRepoUrl(options.repo, deps.executor);
+    const slugResult = await resolveRepoArg(options.repo);
+
+    if (!slugResult.ok) {
+      const { code, message, suggestion } = slugResult.error;
+      console.error(formatError(createError(code, message, suggestion)));
+      process.exit(1);
+    }
+
+    const repoInput = slugResult.url;
+    if (slugResult.resolvedFromSlug) {
+      console.log(`Resolved repo '${options.repo}' → ${repoInput}`);
+    }
+
+    // Step 2: Resolve --repo . to actual git remote URL
+    const resolved = await resolveRepoUrl(repoInput, deps.executor);
 
     if (!resolved.ok) {
       const { code, message, suggestion } = resolved.error;

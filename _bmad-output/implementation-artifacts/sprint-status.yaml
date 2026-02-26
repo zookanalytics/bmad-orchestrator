@@ -172,7 +172,7 @@ development_status:
   # PRD revision 2026-02-14: FR51-FR54
   env-epic-8: in-progress
   env-8-1-repo-registry-command: done
-  env-8-2-create-from-registered-repo: backlog
+  env-8-2-create-from-registered-repo: done
   env-8-3-vs-code-purpose-visibility-via-better-status-bar: backlog
   env-epic-8-retrospective: optional
 
