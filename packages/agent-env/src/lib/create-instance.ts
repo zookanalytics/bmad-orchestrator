@@ -31,6 +31,7 @@ import type { FsDeps } from './workspace.js';
 import { createContainerLifecycle } from './container.js';
 import {
   copyBaselineConfig,
+  copyStatusBarTemplate,
   hasDevcontainerConfig,
   patchContainerEnv,
   patchContainerName,
@@ -313,6 +314,7 @@ async function setupDevcontainerConfig(
   // Use baseline config
   try {
     await copyBaselineConfig(wsPath.root, deps.devcontainerFsDeps);
+    await copyStatusBarTemplate(wsPath.root, deps.devcontainerFsDeps);
   } catch (err) {
     await safeRollback(wsPath.root, deps.rm, deps.logger);
     return {

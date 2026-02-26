@@ -14,11 +14,13 @@ import { homedir } from 'node:os';
 
 import type { ContainerEnvDeps } from './container-env.js';
 import type { StateFsDeps } from './state.js';
+import type { StatusBarDeps } from './status-bar.js';
 import type { InstanceState, WorkspacePath } from './types.js';
 import type { FsDeps } from './workspace.js';
 
 import { CONTAINER_AGENT_ENV_DIR, CONTAINER_STATE_PATH } from './container-env.js';
 import { readState, writeStateAtomic, isValidState } from './state.js';
+import { regenerateStatusBar } from './status-bar.js';
 import { getWorkspacePathByName, resolveInstance } from './workspace.js';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
@@ -39,6 +41,7 @@ export type PurposeSetResult =
 export interface PurposeInstanceDeps {
   workspaceFsDeps: FsDeps;
   stateFsDeps: StateFsDeps;
+  statusBarDeps: StatusBarDeps;
 }
 
 // ─── Factory ─────────────────────────────────────────────────────────────────
@@ -51,6 +54,7 @@ export function createPurposeDefaultDeps(): PurposeInstanceDeps {
   return {
     workspaceFsDeps: { mkdir, readdir, stat, homedir },
     stateFsDeps: { readFile, writeFile, rename, mkdir, appendFile },
+    statusBarDeps: { readFile, writeFile },
   };
 }
 
@@ -130,12 +134,16 @@ export async function setPurpose(
   const state = await readState(wsPath, deps.stateFsDeps);
 
   const cleared = value === '';
+  const newPurpose = cleared ? null : value;
   const updatedState = {
     ...state,
-    purpose: cleared ? null : value,
+    purpose: newPurpose,
   };
 
   await writeStateAtomic(wsPath, updatedState, deps.stateFsDeps);
+
+  // Regenerate .vscode/statusBar.json from template (if template exists)
+  await regenerateStatusBar(wsPath.root, newPurpose, deps.statusBarDeps);
 
   return { ok: true, cleared };
 }
@@ -145,8 +153,11 @@ export async function setPurpose(
 export interface ContainerPurposeDeps {
   stateFsDeps: StateFsDeps;
   containerEnvDeps: ContainerEnvDeps;
+  statusBarDeps: StatusBarDeps;
   statePath: string;
   agentEnvDir: string;
+  /** Workspace root inside the container (where .vscode/ lives). Defaults to cwd. */
+  workspaceRoot: string;
 }
 
 /**
@@ -156,8 +167,10 @@ export function createContainerPurposeDefaultDeps(): ContainerPurposeDeps {
   return {
     stateFsDeps: { readFile, writeFile, rename, mkdir, appendFile },
     containerEnvDeps: { getEnv: (key: string) => process.env[key] },
+    statusBarDeps: { readFile, writeFile },
     statePath: CONTAINER_STATE_PATH,
     agentEnvDir: CONTAINER_AGENT_ENV_DIR,
+    workspaceRoot: process.cwd(),
   };
 }
 
@@ -242,9 +255,10 @@ export async function setContainerPurpose(
   if (!read.ok) return read;
 
   const cleared = value === '';
+  const newPurpose = cleared ? null : value;
   const updatedState: InstanceState = {
     ...read.state,
-    purpose: cleared ? null : value,
+    purpose: newPurpose,
   };
 
   // Use writeStateAtomic for consistency, mocking WorkspacePath for the container
@@ -256,6 +270,9 @@ export async function setContainerPurpose(
   };
 
   await writeStateAtomic(wsPath, updatedState, deps.stateFsDeps);
+
+  // Regenerate .vscode/statusBar.json from template (if template exists)
+  await regenerateStatusBar(deps.workspaceRoot, newPurpose, deps.statusBarDeps);
 
   return { ok: true, cleared };
 }

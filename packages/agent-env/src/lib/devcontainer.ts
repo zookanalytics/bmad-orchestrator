@@ -49,6 +49,21 @@ export function getBaselineConfigPath(): string {
   return join(packageRoot, 'config', 'baseline');
 }
 
+/**
+ * Get the absolute path to the bundled templates directory.
+ *
+ * Templates are workspace-level files (e.g., `.vscode/statusBar.template.json`)
+ * that are copied to the workspace root during instance creation. They are separate
+ * from baseline config (which goes into `.agent-env/`).
+ *
+ * @returns Absolute path to config/templates/ directory
+ */
+export function getTemplatesPath(): string {
+  const currentFile = fileURLToPath(import.meta.url);
+  const packageRoot = dirname(dirname(dirname(currentFile)));
+  return join(packageRoot, 'config', 'templates');
+}
+
 // ─── Detection ───────────────────────────────────────────────────────────────
 
 /**
@@ -131,6 +146,42 @@ export async function copyBaselineConfig(
 
   // Copy all baseline files (merges into existing .agent-env/, preserving state.json)
   await deps.cp(baselinePath, targetDir, { recursive: true });
+}
+
+/**
+ * Copy the status bar template to the workspace root.
+ *
+ * Copies `.vscode/statusBar.template.json` from the bundled templates directory
+ * to the workspace root's `.vscode/` directory. This template is used by the
+ * `better-status-bar` VS Code extension to display the instance purpose.
+ *
+ * Only called when using baseline config. Repos with their own devcontainer
+ * config can add the template manually if they want VS Code purpose display.
+ *
+ * @param workspacePath - Absolute path to the workspace root
+ */
+export async function copyStatusBarTemplate(
+  workspacePath: string,
+  deps: Pick<DevcontainerFsDeps, 'cp' | 'mkdir' | 'stat'> = defaultFsDeps
+): Promise<void> {
+  const templatesPath = getTemplatesPath();
+  const srcVscode = join(templatesPath, '.vscode');
+
+  // Verify templates directory exists
+  try {
+    await deps.stat(srcVscode);
+  } catch {
+    // Templates directory doesn't exist — skip silently
+    return;
+  }
+
+  const targetVscode = join(workspacePath, '.vscode');
+
+  // Create .vscode/ directory if it doesn't exist
+  await deps.mkdir(targetVscode, { recursive: true });
+
+  // Copy template files (merges into existing .vscode/)
+  await deps.cp(srcVscode, targetVscode, { recursive: true });
 }
 
 // ─── Container name patching ─────────────────────────────────────────────────

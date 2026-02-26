@@ -79,6 +79,7 @@ function createTestDeps(): PurposeInstanceDeps {
       homedir: () => tempDir,
     },
     stateFsDeps: { readFile, writeFile, rename, mkdir, appendFile },
+    statusBarDeps: { readFile, writeFile },
   };
 }
 
@@ -296,8 +297,10 @@ function createContainerDeps(stateDir: string, statePath: string): ContainerPurp
     containerEnvDeps: {
       getEnv: (key: string) => (key === 'AGENT_ENV_CONTAINER' ? 'true' : undefined),
     },
+    statusBarDeps: { readFile, writeFile },
     statePath,
     agentEnvDir: stateDir,
+    workspaceRoot: tempDir,
   };
 }
 
@@ -458,8 +461,10 @@ describe('setContainerPurpose', () => {
         appendFile,
       },
       containerEnvDeps: { getEnv: () => 'true' },
+      statusBarDeps: { readFile, writeFile },
       statePath,
       agentEnvDir: stateDir,
+      workspaceRoot: tempDir,
     };
 
     await setContainerPurpose('Test purpose', trackingDeps);

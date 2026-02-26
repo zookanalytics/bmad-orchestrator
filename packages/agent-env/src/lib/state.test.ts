@@ -667,8 +667,8 @@ describe('ensureGitExclude', () => {
     await ensureGitExclude(tempDir);
 
     const content = await readFile(excludePath, 'utf-8');
-    // Should have newline before .agent-env/
-    expect(content).toBe('# no trailing newline\n.agent-env/\n');
+    // Should have newline before patterns
+    expect(content).toBe('# no trailing newline\n.agent-env/\n.vscode/statusBar.json\n');
   });
 
   it('silently skips if .git/info/exclude does not exist', async () => {
@@ -697,7 +697,7 @@ describe('ensureGitExclude', () => {
     expect(mockReadFile).toHaveBeenCalledWith('/test/workspace/.git/info/exclude', 'utf-8');
     expect(mockAppendFile).toHaveBeenCalledWith(
       '/test/workspace/.git/info/exclude',
-      '.agent-env/\n',
+      '.agent-env/\n.vscode/statusBar.json\n',
       'utf-8'
     );
   });

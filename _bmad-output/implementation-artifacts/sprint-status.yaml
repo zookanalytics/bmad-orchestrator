@@ -173,7 +173,7 @@ development_status:
   env-epic-8: in-progress
   env-8-1-repo-registry-command: done
   env-8-2-create-from-registered-repo: done
-  env-8-3-vs-code-purpose-visibility-via-better-status-bar: backlog
+  env-8-3-vs-code-purpose-visibility-via-better-status-bar: done
   env-epic-8-retrospective: optional
 
 # ══════════════════════════════════════════════════════════════════════════════
