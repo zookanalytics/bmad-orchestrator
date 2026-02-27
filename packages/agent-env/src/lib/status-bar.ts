@@ -1,8 +1,14 @@
 /**
  * Status bar template regeneration for VS Code better-status-bar extension
  *
- * Reads `.vscode/statusBar.template.json`, replaces `{{PURPOSE}}` placeholders
- * with the current purpose value, and writes `.vscode/statusBar.json`.
+ * Reads a `statusBar.template.json` from the workspace, replaces `{{PURPOSE}}`
+ * placeholders with the current purpose value, and writes `statusBar.json`
+ * to the agent-env directory.
+ *
+ * Template resolution order:
+ * 1. `.vscode/statusBar.template.json` (repo-provided override)
+ * 2. `<agentEnvDir>/statusBar.template.json` (agent-env default)
+ * 3. Neither found → throws TEMPLATE_NOT_FOUND error
  *
  * The generated file is read by the `RobertOstermann.better-status-bar`
  * VS Code extension to display custom status bar items.
@@ -13,10 +19,10 @@ import { join } from 'node:path';
 
 // ─── Constants ───────────────────────────────────────────────────────────────
 
-/** Template file name (checked into repos) */
+/** Template file name (checked into repos or deployed to .agent-env/) */
 export const STATUS_BAR_TEMPLATE_JSON = 'statusBar.template.json';
 
-/** Generated file name (gitignored) */
+/** Generated file name (in .agent-env/, gitignored) */
 export const STATUS_BAR_JSON = 'statusBar.json';
 
 /** Placeholder token in the template */
@@ -37,44 +43,67 @@ const defaultDeps: StatusBarDeps = { readFile, writeFile };
 // ─── Core ───────────────────────────────────────────────────────────────────
 
 /**
- * Regenerate `.vscode/statusBar.json` from the template file.
+ * Regenerate `statusBar.json` from the template file.
  *
- * Reads `.vscode/statusBar.template.json` from the workspace root,
- * replaces all `{{PURPOSE}}` occurrences with the given purpose value,
- * and writes the result to `.vscode/statusBar.json`.
+ * Resolution chain:
+ * 1. `.vscode/statusBar.template.json` from `workspaceRoot` (repo-provided override)
+ * 2. `statusBar.template.json` from `agentEnvDir` (agent-env default)
+ * 3. Neither found → throws error with code `TEMPLATE_NOT_FOUND`
  *
- * If the template file does not exist, this function skips silently.
- * This allows repos to opt out of VS Code purpose display by simply
- * not including the template file.
+ * Replaces all `{{PURPOSE}}` occurrences with the given purpose value
+ * and writes the result to `<agentEnvDir>/statusBar.json`.
  *
  * @param workspaceRoot - Absolute path to the workspace root directory
+ * @param agentEnvDir - Absolute path to the agent-env directory (.agent-env on host, /etc/agent-env in container)
  * @param purpose - Current purpose value, or null if no purpose is set
  * @param deps - Injectable dependencies for testing
  */
 export async function regenerateStatusBar(
   workspaceRoot: string,
+  agentEnvDir: string,
   purpose: string | null,
   deps: StatusBarDeps = defaultDeps
 ): Promise<void> {
-  const vscodeDir = join(workspaceRoot, '.vscode');
-  const templatePath = join(vscodeDir, STATUS_BAR_TEMPLATE_JSON);
+  // 1. Try repo-provided template in .vscode/
+  const vscodeTemplatePath = join(workspaceRoot, '.vscode', STATUS_BAR_TEMPLATE_JSON);
+  let templateContent: string | null = null;
 
-  // Read the template — skip silently if it doesn't exist
-  let templateContent: string;
   try {
-    templateContent = await deps.readFile(templatePath, 'utf-8');
+    templateContent = await deps.readFile(vscodeTemplatePath, 'utf-8');
   } catch (err) {
-    if ((err as NodeJS.ErrnoException).code === 'ENOENT') {
-      return; // No template — skip silently
+    if ((err as NodeJS.ErrnoException).code !== 'ENOENT') {
+      throw err;
     }
-    throw err;
+  }
+
+  // 2. Fallback to agent-env default template
+  if (templateContent === null) {
+    const agentEnvTemplatePath = join(agentEnvDir, STATUS_BAR_TEMPLATE_JSON);
+    try {
+      templateContent = await deps.readFile(agentEnvTemplatePath, 'utf-8');
+    } catch (err) {
+      if ((err as NodeJS.ErrnoException).code !== 'ENOENT') {
+        throw err;
+      }
+    }
+  }
+
+  // 3. Neither found → error
+  if (templateContent === null) {
+    throw Object.assign(
+      new Error(
+        'No status bar template found. Expected .vscode/statusBar.template.json or .agent-env/statusBar.template.json. ' +
+          'Create a template manually or use `agent-env init-template` when available.'
+      ),
+      { code: 'TEMPLATE_NOT_FOUND' }
+    );
   }
 
   // Replace all {{PURPOSE}} occurrences
   const replacementText = purpose ?? NO_PURPOSE_TEXT;
   const output = templateContent.replaceAll(PURPOSE_PLACEHOLDER, replacementText);
 
-  // Write the generated file
-  const outputPath = join(vscodeDir, STATUS_BAR_JSON);
+  // Write the generated file to agent-env directory
+  const outputPath = join(agentEnvDir, STATUS_BAR_JSON);
   await deps.writeFile(outputPath, output, 'utf-8');
 }

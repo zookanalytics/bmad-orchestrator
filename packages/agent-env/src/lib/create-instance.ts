@@ -30,11 +30,10 @@ import type { FsDeps } from './workspace.js';
 
 import { createContainerLifecycle } from './container.js';
 import {
+  applyBaselinePatches,
   copyBaselineConfig,
   copyStatusBarTemplate,
   hasDevcontainerConfig,
-  patchContainerEnv,
-  patchContainerName,
 } from './devcontainer.js';
 import { MAX_PURPOSE_LENGTH } from './purpose-instance.js';
 import { createInitialState, ensureGitExclude, writeStateAtomic } from './state.js';
@@ -327,9 +326,9 @@ async function setupDevcontainerConfig(
   }
 
   try {
-    await patchContainerName(wsPath.root, containerName, deps.devcontainerFsDeps, AGENT_ENV_DIR);
-    await patchContainerEnv(
+    await applyBaselinePatches(
       wsPath.root,
+      containerName,
       {
         AGENT_ENV_INSTANCE: wsPath.name,
         AGENT_ENV_REPO: repoName,

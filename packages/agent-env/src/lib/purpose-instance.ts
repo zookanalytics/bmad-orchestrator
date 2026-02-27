@@ -140,10 +140,26 @@ export async function setPurpose(
     purpose: newPurpose,
   };
 
+  // State is persisted first — regenerateStatusBar failure is non-fatal for purpose storage
   await writeStateAtomic(wsPath, updatedState, deps.stateFsDeps);
 
-  // Regenerate .vscode/statusBar.json from template (if template exists)
-  await regenerateStatusBar(wsPath.root, newPurpose, deps.statusBarDeps);
+  // Regenerate statusBar.json from template (fallback chain: .vscode/ → .agent-env/)
+  try {
+    await regenerateStatusBar(wsPath.root, wsPath.agentEnvDir, newPurpose, deps.statusBarDeps);
+  } catch (err) {
+    if ((err as { code?: string }).code === 'TEMPLATE_NOT_FOUND') {
+      return {
+        ok: false,
+        error: {
+          code: 'TEMPLATE_NOT_FOUND',
+          message: (err as Error).message,
+          suggestion:
+            'Create a status bar template at .vscode/statusBar.template.json or .agent-env/statusBar.template.json.',
+        },
+      };
+    }
+    throw err;
+  }
 
   return { ok: true, cleared };
 }
@@ -269,10 +285,26 @@ export async function setContainerPurpose(
     stateFile: deps.statePath,
   };
 
+  // State is persisted first — regenerateStatusBar failure is non-fatal for purpose storage
   await writeStateAtomic(wsPath, updatedState, deps.stateFsDeps);
 
-  // Regenerate .vscode/statusBar.json from template (if template exists)
-  await regenerateStatusBar(deps.workspaceRoot, newPurpose, deps.statusBarDeps);
+  // Regenerate statusBar.json from template (fallback chain: workspace root → .agent-env/)
+  try {
+    await regenerateStatusBar(deps.workspaceRoot, deps.agentEnvDir, newPurpose, deps.statusBarDeps);
+  } catch (err) {
+    if ((err as { code?: string }).code === 'TEMPLATE_NOT_FOUND') {
+      return {
+        ok: false,
+        error: {
+          code: 'TEMPLATE_NOT_FOUND',
+          message: (err as Error).message,
+          suggestion:
+            'Create a status bar template at .vscode/statusBar.template.json or .agent-env/statusBar.template.json.',
+        },
+      };
+    }
+    throw err;
+  }
 
   return { ok: true, cleared };
 }

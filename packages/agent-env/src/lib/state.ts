@@ -231,7 +231,7 @@ export function isValidState(value: unknown): value is InstanceState {
 // ─── Git Exclude ─────────────────────────────────────────────────────────────
 
 /** Patterns to add to .git/info/exclude */
-const GIT_EXCLUDE_PATTERNS = [`${AGENT_ENV_DIR}/`, '.vscode/statusBar.json'];
+const GIT_EXCLUDE_PATTERNS = [`${AGENT_ENV_DIR}/`];
 
 /**
  * Ensure agent-env generated files are in .git/info/exclude so they don't show as untracked.

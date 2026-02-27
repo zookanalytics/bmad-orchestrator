@@ -10,6 +10,7 @@ import { access, cp, mkdir, readdir, readFile, stat, writeFile } from 'node:fs/p
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+import { CONTAINER_AGENT_ENV_DIR } from './container-env.js';
 import { AGENT_ENV_DIR } from './types.js';
 
 // ─── Types for dependency injection ──────────────────────────────────────────
@@ -149,14 +150,15 @@ export async function copyBaselineConfig(
 }
 
 /**
- * Copy the status bar template to the workspace root.
+ * Copy the status bar template to the workspace's `.agent-env/` directory.
  *
- * Copies `.vscode/statusBar.template.json` from the bundled templates directory
- * to the workspace root's `.vscode/` directory. This template is used by the
- * `better-status-bar` VS Code extension to display the instance purpose.
+ * Copies `statusBar.template.json` from the bundled templates directory
+ * to `<workspace>/.agent-env/statusBar.template.json`. This template is used
+ * by `regenerateStatusBar()` as the default fallback when no repo-provided
+ * template exists at `.vscode/statusBar.template.json`.
  *
  * Only called when using baseline config. Repos with their own devcontainer
- * config can add the template manually if they want VS Code purpose display.
+ * config can add a `.vscode/statusBar.template.json` for customization.
  *
  * @param workspacePath - Absolute path to the workspace root
  */
@@ -165,23 +167,23 @@ export async function copyStatusBarTemplate(
   deps: Pick<DevcontainerFsDeps, 'cp' | 'mkdir' | 'stat'> = defaultFsDeps
 ): Promise<void> {
   const templatesPath = getTemplatesPath();
-  const srcVscode = join(templatesPath, '.vscode');
+  const srcFile = join(templatesPath, 'statusBar.template.json');
 
-  // Verify templates directory exists
+  // Verify template file exists (only skip on ENOENT — surface permission errors)
   try {
-    await deps.stat(srcVscode);
-  } catch {
-    // Templates directory doesn't exist — skip silently
-    return;
+    await deps.stat(srcFile);
+  } catch (err: unknown) {
+    if ((err as NodeJS.ErrnoException).code === 'ENOENT') return;
+    throw err;
   }
 
-  const targetVscode = join(workspacePath, '.vscode');
+  const targetDir = join(workspacePath, AGENT_ENV_DIR);
 
-  // Create .vscode/ directory if it doesn't exist
-  await deps.mkdir(targetVscode, { recursive: true });
+  // Create .agent-env/ directory if it doesn't exist
+  await deps.mkdir(targetDir, { recursive: true });
 
-  // Copy template files (merges into existing .vscode/)
-  await deps.cp(srcVscode, targetVscode, { recursive: true });
+  // Copy template file
+  await deps.cp(srcFile, join(targetDir, 'statusBar.template.json'));
 }
 
 // ─── Container name patching ─────────────────────────────────────────────────
@@ -243,6 +245,110 @@ export async function patchContainerEnv(
       ? config.containerEnv
       : {};
   config.containerEnv = { ...existing, ...envVars };
+
+  await deps.writeFile(configPath, JSON.stringify(config, null, 2) + '\n');
+}
+
+// ─── Consolidated baseline patching ───────────────────────────────────────────
+
+/** STATUS_BAR_JSON filename constant for extension config path */
+const STATUS_BAR_JSON_FILENAME = 'statusBar.json';
+
+/**
+ * Pure helper: apply container name patch to a parsed config object.
+ * Returns the modified config.
+ */
+function applyContainerNamePatch(
+  config: Record<string, unknown>,
+  containerName: string
+): Record<string, unknown> {
+  const existing: string[] = Array.isArray(config.runArgs) ? (config.runArgs as string[]) : [];
+  const filtered = existing.filter((arg: string) => !arg.startsWith('--name='));
+  config.runArgs = [...filtered, `--name=${containerName}`];
+  return config;
+}
+
+/**
+ * Pure helper: apply container env patch to a parsed config object.
+ * Returns the modified config.
+ */
+function applyContainerEnvPatch(
+  config: Record<string, unknown>,
+  envVars: Record<string, string>
+): Record<string, unknown> {
+  const existing: Record<string, string> =
+    typeof config.containerEnv === 'object' && config.containerEnv !== null
+      ? (config.containerEnv as Record<string, string>)
+      : {};
+  config.containerEnv = { ...existing, ...envVars };
+  return config;
+}
+
+/**
+ * Pure helper: apply VS Code settings patch to a parsed config object.
+ * Injects `betterStatusBar.configurationFile` into `customizations.vscode.settings`.
+ * Uses defensive checks for non-object intermediate paths.
+ * Returns the modified config.
+ */
+function applyVscodeSettingsPatch(config: Record<string, unknown>): Record<string, unknown> {
+  // Ensure customizations is a plain object
+  if (typeof config.customizations !== 'object' || config.customizations === null) {
+    config.customizations = {};
+  }
+  const customizations = config.customizations as Record<string, unknown>;
+
+  // Ensure customizations.vscode is a plain object
+  if (typeof customizations.vscode !== 'object' || customizations.vscode === null) {
+    customizations.vscode = {};
+  }
+  const vscode = customizations.vscode as Record<string, unknown>;
+
+  // Ensure customizations.vscode.settings is a plain object
+  if (typeof vscode.settings !== 'object' || vscode.settings === null) {
+    vscode.settings = {};
+  }
+  const settings = vscode.settings as Record<string, string>;
+
+  // Merge: preserve existing settings, overlay betterStatusBar config
+  vscode.settings = {
+    ...settings,
+    'betterStatusBar.configurationFile': `${CONTAINER_AGENT_ENV_DIR}/${STATUS_BAR_JSON_FILENAME}`,
+  };
+
+  return config;
+}
+
+/**
+ * Apply all baseline devcontainer.json patches in a single read-modify-write cycle.
+ *
+ * Consolidates container name, container env vars, and VS Code settings patches
+ * into one operation. Both `create-instance.ts` and `rebuild-instance.ts` call
+ * this function, preventing future patches from being accidentally omitted.
+ *
+ * Note: Uses JSON.parse (not JSONC). Safe for baseline configs which are strict JSON.
+ * Do not extend to repo-provided configs without switching to JSONC.
+ *
+ * @param workspacePath - Absolute path to the workspace root
+ * @param containerName - Desired container name (e.g., "ae-bmad-orch-auth")
+ * @param envVars - Environment variables to set in containerEnv
+ * @param deps - Injectable filesystem deps (readFile + writeFile only)
+ * @param configDir - Config directory within workspace (e.g., ".agent-env")
+ */
+export async function applyBaselinePatches(
+  workspacePath: string,
+  containerName: string,
+  envVars: Record<string, string>,
+  deps: Pick<DevcontainerFsDeps, 'readFile' | 'writeFile'>,
+  configDir: string
+): Promise<void> {
+  const configPath = join(workspacePath, configDir, 'devcontainer.json');
+  const content = await deps.readFile(configPath, 'utf-8');
+  let config = JSON.parse(content) as Record<string, unknown>;
+
+  // Apply all patches to in-memory config object
+  config = applyContainerNamePatch(config, containerName);
+  config = applyContainerEnvPatch(config, envVars);
+  config = applyVscodeSettingsPatch(config);
 
   await deps.writeFile(configPath, JSON.stringify(config, null, 2) + '\n');
 }

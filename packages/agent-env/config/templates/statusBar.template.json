@@ -1,0 +1,12 @@
+{
+  "betterStatusBar.commands": [
+    {
+      "id": "agent-env-purpose",
+      "label": "$(bookmark) {{PURPOSE}}",
+      "tooltip": "agent-env instance purpose",
+      "alignment": 2,
+      "priority": 100,
+      "color": "statusBar.foreground"
+    }
+  ]
+}

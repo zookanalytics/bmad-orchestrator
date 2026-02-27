@@ -492,7 +492,7 @@ describe('createInstance', () => {
     expect(deps.devcontainerFsDeps.cp).toHaveBeenCalled();
   });
 
-  it('skips baseline config copy and name patch when devcontainer already exists', async () => {
+  it('skips baseline config copy and baseline patching when devcontainer already exists', async () => {
     const deps = createTestDeps(gitCloneSuccess, {}, true);
 
     await createInstance('auth', 'https://github.com/user/bmad-orch.git', deps);
@@ -503,7 +503,7 @@ describe('createInstance', () => {
     expect(deps.devcontainerFsDeps.writeFile).not.toHaveBeenCalled();
   });
 
-  it('patches devcontainer.json with container name runArgs', async () => {
+  it('applies baseline patches (name, env, settings) to devcontainer.json', async () => {
     const deps = createTestDeps(gitCloneSuccess);
 
     await createInstance('auth', 'https://github.com/user/bmad-orch.git', deps);
@@ -514,10 +514,14 @@ describe('createInstance', () => {
       'utf-8'
     );
 
-    // Should have written back with --name runArg
+    // Should have written back with --name runArg, env vars, and vscode settings
     expect(deps.devcontainerFsDeps.writeFile).toHaveBeenCalledWith(
       expect.stringContaining('.agent-env/devcontainer.json'),
       expect.stringContaining('"--name=ae-bmad-orch-auth"')
+    );
+    expect(deps.devcontainerFsDeps.writeFile).toHaveBeenCalledWith(
+      expect.stringContaining('.agent-env/devcontainer.json'),
+      expect.stringContaining('betterStatusBar.configurationFile')
     );
   });
 
@@ -677,15 +681,14 @@ describe('createInstance', () => {
     expect(state.purpose).toBeNull();
   });
 
-  it('includes AGENT_ENV_PURPOSE in patchContainerEnv call for baseline config', async () => {
+  it('includes AGENT_ENV_PURPOSE in baseline patches for baseline config', async () => {
     const deps = createTestDeps(gitCloneSuccess, {}, false);
 
     await createInstance('auth', 'https://github.com/user/bmad-orch.git', deps, {
       purpose: 'JWT authentication',
     });
 
-    // patchContainerEnv is called via devcontainerFsDeps.writeFile
-    // The second writeFile call (after patchContainerName) should contain AGENT_ENV_PURPOSE
+    // Baseline patches are applied via devcontainerFsDeps.writeFile
     const writeFileCalls = (deps.devcontainerFsDeps.writeFile as ReturnType<typeof vi.fn>).mock
       .calls;
     // Find the call that contains AGENT_ENV_PURPOSE

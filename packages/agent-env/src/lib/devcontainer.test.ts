@@ -4,9 +4,11 @@ import { join } from 'node:path';
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 
 import {
+  applyBaselinePatches,
+  copyBaselineConfig,
+  copyStatusBarTemplate,
   getBaselineConfigPath,
   hasDevcontainerConfig,
-  copyBaselineConfig,
   listBaselineFiles,
   patchContainerName,
   patchContainerEnv,
@@ -508,5 +510,143 @@ FROM builder`;
   it('returns empty array for empty/no-FROM content', () => {
     expect(parseDockerfileImages('')).toEqual([]);
     expect(parseDockerfileImages('RUN echo hello')).toEqual([]);
+  });
+});
+
+// ─── applyBaselinePatches ────────────────────────────────────────────────────
+
+describe('applyBaselinePatches', () => {
+  it('applies container name, env vars, and vscode settings in a single write', async () => {
+    await copyBaselineConfig(tempDir);
+
+    await applyBaselinePatches(
+      tempDir,
+      'ae-bmad-orch-auth',
+      { AGENT_ENV_INSTANCE: 'bmad-orch-auth', AGENT_ENV_PURPOSE: 'OAuth' },
+      { readFile, writeFile },
+      '.agent-env'
+    );
+
+    const content = await readFile(join(tempDir, '.agent-env', 'devcontainer.json'), 'utf-8');
+    const config = JSON.parse(content);
+
+    // Container name
+    expect(config.runArgs).toContain('--name=ae-bmad-orch-auth');
+    // Env vars (merged with existing)
+    expect(config.containerEnv.AGENT_ENV_CONTAINER).toBe('true');
+    expect(config.containerEnv.AGENT_ENV_INSTANCE).toBe('bmad-orch-auth');
+    expect(config.containerEnv.AGENT_ENV_PURPOSE).toBe('OAuth');
+    // VS Code settings
+    expect(config.customizations.vscode.settings['betterStatusBar.configurationFile']).toBe(
+      '/etc/agent-env/statusBar.json'
+    );
+  });
+
+  it('preserves existing runArgs while patching --name', async () => {
+    const configDir = join(tempDir, '.agent-env');
+    await mkdir(configDir, { recursive: true });
+    await writeFile(
+      join(configDir, 'devcontainer.json'),
+      JSON.stringify({ runArgs: ['--hostname=test', '--name=old-name'] })
+    );
+
+    await applyBaselinePatches(tempDir, 'ae-new', {}, { readFile, writeFile }, '.agent-env');
+
+    const content = await readFile(join(configDir, 'devcontainer.json'), 'utf-8');
+    const config = JSON.parse(content);
+    expect(config.runArgs).toEqual(['--hostname=test', '--name=ae-new']);
+  });
+
+  it('creates customizations.vscode.settings when absent', async () => {
+    const configDir = join(tempDir, '.agent-env');
+    await mkdir(configDir, { recursive: true });
+    await writeFile(join(configDir, 'devcontainer.json'), JSON.stringify({ image: 'node:22' }));
+
+    await applyBaselinePatches(tempDir, 'ae-test', {}, { readFile, writeFile }, '.agent-env');
+
+    const content = await readFile(join(configDir, 'devcontainer.json'), 'utf-8');
+    const config = JSON.parse(content);
+    expect(config.customizations.vscode.settings['betterStatusBar.configurationFile']).toBe(
+      '/etc/agent-env/statusBar.json'
+    );
+  });
+
+  it('preserves existing vscode settings while adding betterStatusBar', async () => {
+    const configDir = join(tempDir, '.agent-env');
+    await mkdir(configDir, { recursive: true });
+    await writeFile(
+      join(configDir, 'devcontainer.json'),
+      JSON.stringify({
+        customizations: {
+          vscode: {
+            settings: { 'editor.fontSize': 14 },
+          },
+        },
+      })
+    );
+
+    await applyBaselinePatches(tempDir, 'ae-test', {}, { readFile, writeFile }, '.agent-env');
+
+    const content = await readFile(join(configDir, 'devcontainer.json'), 'utf-8');
+    const config = JSON.parse(content);
+    expect(config.customizations.vscode.settings['editor.fontSize']).toBe(14);
+    expect(config.customizations.vscode.settings['betterStatusBar.configurationFile']).toBe(
+      '/etc/agent-env/statusBar.json'
+    );
+  });
+});
+
+// ─── copyStatusBarTemplate ──────────────────────────────────────────────────
+
+describe('copyStatusBarTemplate', () => {
+  it('copies template to .agent-env/statusBar.template.json', async () => {
+    await mkdir(join(tempDir, '.agent-env'), { recursive: true });
+    await copyStatusBarTemplate(tempDir);
+
+    const templatePath = join(tempDir, '.agent-env', 'statusBar.template.json');
+    const content = await readFile(templatePath, 'utf-8');
+    expect(content).toContain('{{PURPOSE}}');
+  });
+
+  it('creates .agent-env directory if missing', async () => {
+    await copyStatusBarTemplate(tempDir);
+
+    const templatePath = join(tempDir, '.agent-env', 'statusBar.template.json');
+    const stats = await stat(templatePath);
+    expect(stats.isFile()).toBe(true);
+  });
+
+  it('silently skips if bundled template file does not exist', async () => {
+    const mockDeps = {
+      cp: vi.fn(),
+      mkdir: vi.fn(),
+      stat: vi.fn().mockRejectedValue(Object.assign(new Error('ENOENT'), { code: 'ENOENT' })),
+    };
+
+    await expect(
+      copyStatusBarTemplate(
+        tempDir,
+        mockDeps as unknown as Parameters<typeof copyStatusBarTemplate>[1]
+      )
+    ).resolves.not.toThrow();
+    expect(mockDeps.cp).not.toHaveBeenCalled();
+  });
+
+  it('re-throws non-ENOENT errors from stat', async () => {
+    const mockDeps = {
+      cp: vi.fn(),
+      mkdir: vi.fn(),
+      stat: vi
+        .fn()
+        .mockRejectedValue(Object.assign(new Error('Permission denied'), { code: 'EACCES' })),
+    };
+
+    await expect(
+      copyStatusBarTemplate(
+        tempDir,
+        mockDeps as unknown as Parameters<typeof copyStatusBarTemplate>[1]
+      )
+    ).rejects.toThrow('Permission denied');
+    expect(mockDeps.cp).not.toHaveBeenCalled();
   });
 });
