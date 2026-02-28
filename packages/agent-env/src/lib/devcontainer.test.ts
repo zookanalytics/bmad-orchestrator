@@ -540,6 +540,14 @@ describe('applyBaselinePatches', () => {
     expect(config.customizations.vscode.settings['betterStatusBar.configurationFile']).toBe(
       '/etc/agent-env/statusBar.json'
     );
+    // Filewatcher triggers status bar refresh on external changes
+    expect(config.customizations.vscode.settings['filewatcher.commands']).toEqual([
+      {
+        match: 'statusBar.json$',
+        event: 'onFolderChange',
+        vscodeTask: 'betterStatusBar.refreshButtons',
+      },
+    ]);
   });
 
   it('preserves existing runArgs while patching --name', async () => {
@@ -569,6 +577,13 @@ describe('applyBaselinePatches', () => {
     expect(config.customizations.vscode.settings['betterStatusBar.configurationFile']).toBe(
       '/etc/agent-env/statusBar.json'
     );
+    expect(config.customizations.vscode.settings['filewatcher.commands']).toEqual([
+      {
+        match: 'statusBar.json$',
+        event: 'onFolderChange',
+        vscodeTask: 'betterStatusBar.refreshButtons',
+      },
+    ]);
   });
 
   it('preserves existing vscode settings while adding betterStatusBar', async () => {

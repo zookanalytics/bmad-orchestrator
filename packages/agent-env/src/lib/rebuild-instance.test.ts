@@ -442,6 +442,14 @@ describe('rebuildInstance', () => {
     expect(config.customizations.vscode.settings['betterStatusBar.configurationFile']).toBe(
       '/etc/agent-env/statusBar.json'
     );
+    // Verify filewatcher triggers status bar refresh
+    expect(config.customizations.vscode.settings['filewatcher.commands']).toEqual([
+      {
+        match: 'statusBar.json$',
+        event: 'onFolderChange',
+        vscodeTask: 'betterStatusBar.refreshButtons',
+      },
+    ]);
   });
 
   it('refreshes baseline config: does not overwrite existing statusBar.template.json', async () => {

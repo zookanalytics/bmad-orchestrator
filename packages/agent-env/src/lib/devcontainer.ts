@@ -286,7 +286,13 @@ function applyContainerEnvPatch(
 
 /**
  * Pure helper: apply VS Code settings patch to a parsed config object.
- * Injects `betterStatusBar.configurationFile` into `customizations.vscode.settings`.
+ * Injects `betterStatusBar.configurationFile` and `filewatcher.commands`
+ * into `customizations.vscode.settings`.
+ *
+ * The filewatcher entry triggers the Better Status Bar extension to reload
+ * when `statusBar.json` changes externally (e.g., when Claude Code updates
+ * the purpose via the CLI).
+ *
  * Uses defensive checks for non-object intermediate paths.
  * Returns the modified config.
  */
@@ -309,10 +315,17 @@ function applyVscodeSettingsPatch(config: Record<string, unknown>): Record<strin
   }
   const settings = vscode.settings as Record<string, unknown>;
 
-  // Merge: preserve existing settings, overlay betterStatusBar config
+  // Merge: preserve existing settings, overlay betterStatusBar + filewatcher config
   vscode.settings = {
     ...settings,
     'betterStatusBar.configurationFile': `${CONTAINER_AGENT_ENV_DIR}/${STATUS_BAR_JSON_FILENAME}`,
+    'filewatcher.commands': [
+      {
+        match: `${STATUS_BAR_JSON_FILENAME}$`,
+        event: 'onFolderChange',
+        vscodeTask: 'betterStatusBar.refreshButtons',
+      },
+    ],
   };
 
   return config;
