@@ -77,8 +77,8 @@ export async function regenerateStatusBar(
   }
 
   // 2. Fallback to agent-env default template
+  const agentEnvTemplatePath = join(agentEnvDir, STATUS_BAR_TEMPLATE_JSON);
   if (templateContent === null) {
-    const agentEnvTemplatePath = join(agentEnvDir, STATUS_BAR_TEMPLATE_JSON);
     try {
       templateContent = await deps.readFile(agentEnvTemplatePath, 'utf-8');
     } catch (err) {
@@ -92,15 +92,16 @@ export async function regenerateStatusBar(
   if (templateContent === null) {
     throw Object.assign(
       new Error(
-        'No status bar template found. Expected .vscode/statusBar.template.json or .agent-env/statusBar.template.json. ' +
+        `No status bar template found. Checked ${vscodeTemplatePath} and ${agentEnvTemplatePath}. ` +
           'Create a template manually or use `agent-env init-template` when available.'
       ),
       { code: 'TEMPLATE_NOT_FOUND' }
     );
   }
 
-  // Replace all {{PURPOSE}} occurrences
-  const replacementText = purpose ?? NO_PURPOSE_TEXT;
+  // Replace all {{PURPOSE}} occurrences (escape for JSON string context)
+  const rawText = purpose ?? NO_PURPOSE_TEXT;
+  const replacementText = JSON.stringify(rawText).slice(1, -1);
   const output = templateContent.replaceAll(PURPOSE_PLACEHOLDER, replacementText);
 
   // Write the generated file to agent-env directory

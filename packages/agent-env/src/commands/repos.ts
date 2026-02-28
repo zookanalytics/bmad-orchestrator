@@ -50,7 +50,7 @@ export const reposCommand = new Command('repos')
     // Plain text output
     if (result.repos.length === 0) {
       console.log(
-        'No repositories tracked. Create an instance with: agent-env create <name> --repo <url>'
+        'No repositories tracked. Create an instance with: agent-env create <name> --repo <url|slug>'
       );
       return;
     }

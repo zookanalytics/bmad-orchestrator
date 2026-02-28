@@ -103,7 +103,7 @@ describe('repos command', () => {
       expect(consoleLogSpy).toHaveBeenCalledTimes(1);
       const output = consoleLogSpy.mock.calls[0][0] as string;
       expect(output).toContain('No repositories tracked');
-      expect(output).toContain('agent-env create <name> --repo <url>');
+      expect(output).toContain('agent-env create <name> --repo <url|slug>');
     });
   });
 

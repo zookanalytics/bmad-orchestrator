@@ -53,9 +53,9 @@ export function getBaselineConfigPath(): string {
 /**
  * Get the absolute path to the bundled templates directory.
  *
- * Templates are workspace-level files (e.g., `.vscode/statusBar.template.json`)
- * that are copied to the workspace root during instance creation. They are separate
- * from baseline config (which goes into `.agent-env/`).
+ * Templates are used to initialize agent-env-managed workspace files
+ * (e.g., `.agent-env/statusBar.template.json`) during instance creation.
+ * They are separate from baseline config (which also goes into `.agent-env/`).
  *
  * @returns Absolute path to config/templates/ directory
  */
@@ -307,7 +307,7 @@ function applyVscodeSettingsPatch(config: Record<string, unknown>): Record<strin
   if (typeof vscode.settings !== 'object' || vscode.settings === null) {
     vscode.settings = {};
   }
-  const settings = vscode.settings as Record<string, string>;
+  const settings = vscode.settings as Record<string, unknown>;
 
   // Merge: preserve existing settings, overlay betterStatusBar config
   vscode.settings = {

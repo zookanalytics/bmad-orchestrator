@@ -74,7 +74,8 @@ export async function resolveRepoArg(
     };
   }
 
-  const match = result.repos.find((r) => r.slug === repoArg);
+  const slugArg = repoArg.toLowerCase();
+  const match = result.repos.find((r) => r.slug === slugArg);
   if (!match) {
     return {
       ok: false,

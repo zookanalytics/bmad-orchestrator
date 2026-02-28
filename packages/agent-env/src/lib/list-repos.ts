@@ -61,8 +61,8 @@ export async function listRepos(deps?: Partial<ListReposDeps>): Promise<ListRepo
     const wsFsDeps = deps?.workspaceFsDeps;
     const stateFsDeps = deps?.stateFsDeps;
 
-    // Step 1: Scan for workspace names
-    const workspaceNames = await scanWorkspaces(wsFsDeps);
+    // Step 1: Scan for workspace names (sorted for deterministic URL selection)
+    const workspaceNames = (await scanWorkspaces(wsFsDeps)).sort();
 
     if (workspaceNames.length === 0) {
       return { ok: true, repos: [] };
