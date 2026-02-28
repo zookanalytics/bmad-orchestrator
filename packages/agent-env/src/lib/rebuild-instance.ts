@@ -359,7 +359,7 @@ type ContainerStartResult =
 async function startAndDiscoverContainer(
   wsPath: WorkspacePath,
   containerName: string,
-  configSource: string,
+  configSource: 'baseline' | 'repo',
   purpose: string,
   buildNoCache: boolean,
   container: ContainerLifecycle
