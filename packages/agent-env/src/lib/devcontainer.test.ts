@@ -609,6 +609,73 @@ describe('applyBaselinePatches', () => {
       '/etc/agent-env/statusBar.json'
     );
   });
+
+  it('merges filewatcher.commands with existing watchers instead of overwriting', async () => {
+    const configDir = join(tempDir, '.agent-env');
+    await mkdir(configDir, { recursive: true });
+    const existingWatcher = {
+      match: '\\.md$',
+      event: 'onFileChange',
+      vscodeTask: 'markdown.refreshPreview',
+    };
+    await writeFile(
+      join(configDir, 'devcontainer.json'),
+      JSON.stringify({
+        customizations: {
+          vscode: {
+            settings: {
+              'filewatcher.commands': [existingWatcher],
+            },
+          },
+        },
+      })
+    );
+
+    await applyBaselinePatches(tempDir, 'ae-test', {}, { readFile, writeFile }, '.agent-env');
+
+    const content = await readFile(join(configDir, 'devcontainer.json'), 'utf-8');
+    const config = JSON.parse(content);
+    const commands = config.customizations.vscode.settings['filewatcher.commands'];
+    // Existing watcher preserved
+    expect(commands).toContainEqual(existingWatcher);
+    // Our watcher appended
+    expect(commands).toContainEqual(
+      expect.objectContaining({
+        match: 'statusBar.json$',
+        vscodeTask: 'betterStatusBar.refreshButtons',
+      })
+    );
+    expect(commands).toHaveLength(2);
+  });
+
+  it('does not duplicate filewatcher watcher if already present', async () => {
+    const configDir = join(tempDir, '.agent-env');
+    await mkdir(configDir, { recursive: true });
+    const ourWatcher = {
+      match: 'statusBar.json$',
+      event: 'onFolderChange',
+      vscodeTask: 'betterStatusBar.refreshButtons',
+    };
+    await writeFile(
+      join(configDir, 'devcontainer.json'),
+      JSON.stringify({
+        customizations: {
+          vscode: {
+            settings: {
+              'filewatcher.commands': [ourWatcher],
+            },
+          },
+        },
+      })
+    );
+
+    await applyBaselinePatches(tempDir, 'ae-test', {}, { readFile, writeFile }, '.agent-env');
+
+    const content = await readFile(join(configDir, 'devcontainer.json'), 'utf-8');
+    const config = JSON.parse(content);
+    const commands = config.customizations.vscode.settings['filewatcher.commands'];
+    expect(commands).toHaveLength(1);
+  });
 });
 
 // ─── copyStatusBarTemplate ──────────────────────────────────────────────────

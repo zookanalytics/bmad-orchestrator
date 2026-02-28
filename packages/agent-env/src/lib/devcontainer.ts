@@ -315,17 +315,36 @@ function applyVscodeSettingsPatch(config: Record<string, unknown>): Record<strin
   }
   const settings = vscode.settings as Record<string, unknown>;
 
+  // Merge filewatcher.commands: preserve any existing watchers, append ours if absent
+  const existingFilewatcherCommands = Array.isArray(settings['filewatcher.commands'])
+    ? (settings['filewatcher.commands'] as unknown[])
+    : [];
+
+  const statusBarWatcher = {
+    match: `${STATUS_BAR_JSON_FILENAME}$`,
+    event: 'onFolderChange',
+    vscodeTask: 'betterStatusBar.refreshButtons',
+  };
+
+  const hasStatusBarWatcher = existingFilewatcherCommands.some((cmd) => {
+    if (typeof cmd !== 'object' || cmd === null) return false;
+    const c = cmd as { match?: unknown; event?: unknown; vscodeTask?: unknown };
+    return (
+      c.match === statusBarWatcher.match &&
+      c.event === statusBarWatcher.event &&
+      c.vscodeTask === statusBarWatcher.vscodeTask
+    );
+  });
+
+  const mergedFilewatcherCommands = hasStatusBarWatcher
+    ? existingFilewatcherCommands
+    : [...existingFilewatcherCommands, statusBarWatcher];
+
   // Merge: preserve existing settings, overlay betterStatusBar + filewatcher config
   vscode.settings = {
     ...settings,
     'betterStatusBar.configurationFile': `${CONTAINER_AGENT_ENV_DIR}/${STATUS_BAR_JSON_FILENAME}`,
-    'filewatcher.commands': [
-      {
-        match: `${STATUS_BAR_JSON_FILENAME}$`,
-        event: 'onFolderChange',
-        vscodeTask: 'betterStatusBar.refreshButtons',
-      },
-    ],
+    'filewatcher.commands': mergedFilewatcherCommands,
   };
 
   return config;
