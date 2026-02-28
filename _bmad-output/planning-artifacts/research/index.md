@@ -32,6 +32,14 @@ Assessments of external tools for potential adoption.
 
 ---
 
+## Strategic Research
+
+Landscape analysis and competitive evaluation.
+
+- **[strategic-multi-agent-orchestration-landscape-2026-02-27.md](./strategic-multi-agent-orchestration-landscape-2026-02-27.md)** - Evaluation of Gastown (Yegge) and Agent Flywheel (Emanuel) against agent-tools ecosystem; identifies structured execution telemetry and confidence-tracked procedural memory as key gaps; proposes synthesis of hook-enforced skills + autonomous learning
+
+---
+
 ## Technical Research
 
 Deep-dive technical investigations.
@@ -42,4 +50,4 @@ Deep-dive technical investigations.
 
 ---
 
-*Last updated: 2026-01-08*
+*Last updated: 2026-02-27*
