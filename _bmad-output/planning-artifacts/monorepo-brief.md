@@ -48,12 +48,13 @@ The ecosystem organizes around three stable concerns. Each is served by multiple
 - Potential future mechanisms: network proxies, capability-based permissions, Claude plugins for permission management
 - Any tool that prevents an agent from causing harm contributes to Isolate
 
-**Automate** — Replace manual steps in development workflows with declared sequences:
+**Automate** — Replace manual steps in development workflows with declared sequences, and enforce process policies at the right points:
 
 - The orchestrator's workflow engine (to be built) for multi-step declared workflows
-- Keystone workflows for single-prompt isolated workflow execution
+- Keystone workflows for declared pipeline execution with policy enforcement — sequences agent invocations and guarantees that process checks run at the correct workflow points
+- Skills for reusable process policy logic — provider-neutral markdown definitions of behavioral checks, invocable by agents voluntarily and by pipelines mandatorily
 - Potential future contributors: additional workflow runners, Claude plugins for step orchestration
-- Any tool that replaces a manual step in the development sequence contributes to Automate
+- Any tool that replaces a manual step or enforces a process check in the development sequence contributes to Automate
 
 **Observe** — Give the developer visibility into what's happening across all workstreams:
 
@@ -73,6 +74,7 @@ External tools can accelerate specific concerns rather than being competitors to
 | Isolate | devcontainer CLI | Container lifecycle management — already wrapped by agent-env |
 | Automate | Dagu / Temporal | DAG execution engines — potential backend for workflow execution if declared workflows grow complex |
 | Observe | tmux control mode | Session and pane status programmatically — already used for output capture |
+| Automate | BMAD method | Methodology scaffolding — agents, workflow templates, checklists. Consumed as a dependency; project-specific policy enforcement handled by skills and keystone, not BMAD core file modifications |
 
 The principle: embrace external tools that accelerate a concern. Wrap them behind interfaces so they're replaceable. Minimize build time relative to value.
 
@@ -114,6 +116,54 @@ Integration rules are scoped to concerns, not components. These hold regardless 
 
 ---
 
+## Development Process Architecture
+
+This section defines how development methodology, process policy, and enforcement work across the ecosystem. It is distinct from the three runtime concerns (Isolate, Automate, Observe) — those describe what the tools do. This describes how development process is structured and enforced when using those tools.
+
+### Responsibility Model
+
+| Layer | Owner | Responsibility | Boundary |
+|-------|-------|----------------|----------|
+| Methodology scaffolding | BMAD (external) | Agent personas, workflow templates, checklists. Generic development methodology. | Consumed as a dependency. Never modified for project-specific policy. Upgrades overwrite core files. |
+| Reusable policy logic | Skills | The WHAT of any behavioral check — what to verify, what constitutes compliance. Provider-neutral markdown. | Portable across repos and AI platforms. Invocable by agents (voluntary) and by keystone (mandatory). |
+| Orchestration + policy execution | keystone-workflows | Deterministic sequencing and enforcement. Guarantees THAT policy checks run at correct workflow points. | Wraps methodology steps with pre/post policy assertions. Does not modify BMAD internals. |
+| Structural enforcement | git-workflows + CI | Binary pass/fail gates — commit format, linting, test suites, coverage thresholds. | Anything validatable with an exit code. Hooks, GitHub Actions, pre-commit. |
+
+### Project Configuration Convention
+
+Packages consumed by external repos must not hardcode project-specific assumptions. Two mechanisms resolve project-specific behavior:
+
+1. **Detection** — Where possible, packages detect the consuming project's environment (test framework, pre-commit hook existence, monorepo structure) rather than requiring explicit configuration.
+
+2. **Project configuration** — For choices that cannot be detected (coverage levels, review policies, workflow customizations), the consuming repo declares them in a project-level configuration file. Location and schema will be defined by the first package that needs it (likely git-workflows or keystone-workflows) and standardized as a convention.
+
+BMAD module configuration (`_bmad/*/config.yaml`) is BMAD's own concern and is not part of this convention. The ecosystem's project configuration is independent of BMAD's customization surface.
+
+### Improvement Routing
+
+When a retrospective, code review, or external repo surfaces a process improvement, classify it to determine where the implementation belongs:
+
+| Signal | Routes To | Implementation Location |
+|--------|-----------|------------------------|
+| "Check X during workflow step Y" | Skill + keystone policy step | Skill in shared location; policy step in keystone workflow YAML |
+| "Workflow step ordering is wrong" | Keystone workflow definition | `packages/keystone-workflows/workflows/` |
+| "Commit/PR process needs rule W" | git-workflow skill or hook | `.claude/skills/` or git hooks |
+| "CI should enforce Q" | GitHub Actions | `.github/workflows/` |
+| "BMAD default doesn't fit our project" | Upstream BMAD issue | Filed against BMAD; not modified locally |
+| "Tool assumes X but our project does Y" | Project config or detection | Project config file or package-side detection logic |
+
+### External Repo Intake
+
+External repos that consume ecosystem packages contribute improvements by filing GitHub issues in this repository. Issues should capture:
+
+- **Trigger** — What surfaced this (retro finding, bug, observed gap)
+- **Desired behavior** — What should happen that doesn't today
+- **Affected workflow/step** — Where in the development process this applies
+
+Issues do not need to prescribe the implementation approach. The routing heuristic and this architecture guide implementation decisions within the monorepo.
+
+---
+
 ## Architectural Decisions
 
 Ecosystem-level structural decisions. Component-specific architecture decisions belong in those components' architecture docs.
@@ -121,6 +171,10 @@ Ecosystem-level structural decisions. Component-specific architecture decisions 
 **ADR-1: Loosely coupled CLI tools.** Independent packages communicate via CLI contracts. The boundary enforcement prevents scope creep and keeps tools independently testable. Loose coupling also serves cognitive boundaries — when working on agent-env, the workflow engine isn't in your head — and enables parallel AI-assisted development of the ecosystem itself. *Trade-off accepted:* Cross-tool features require CLI contract extensions, which is slower than shared-process calls.
 
 **ADR-2: Workspace-scoped workflows, cross-workspace-ready data model.** Workflows execute within a single workspace. The state model includes workspace identity so the Observe concern can query across workspaces and future triggers don't require a schema migration. No cross-workspace orchestration until a concrete use case demands it. *Trade-off accepted:* Can't run a single workflow across multiple workspaces initially.
+
+**ADR-3: Layered process enforcement.** Development process is enforced through four distinct layers with clear ownership. BMAD provides methodology scaffolding — consumed as a dependency, never modified for project-specific policy. Skills provide reusable policy logic as provider-neutral markdown. Keystone-workflows provides deterministic orchestration and policy execution — guaranteeing that policy checks run at the correct workflow points by wrapping methodology steps with pre/post assertions. Git-workflows and CI provide structural enforcement via hooks, linters, and test suites. *Trade-off accepted:* Policy checks that could be embedded directly in BMAD workflows require a separate skill + keystone step, adding indirection. This is preferred over modifying BMAD core files that are overwritten on upgrade.
+
+**ADR-4: Project-level configuration for consuming repos.** Packages must not hardcode project-specific assumptions (test framework, coverage levels, hook existence). Packages detect environmental facts where possible and read from a project-level configuration file for choices that cannot be detected. This configuration is independent of BMAD module config, which is BMAD's own concern. *Trade-off accepted:* Consuming repos must maintain a configuration file. This is preferred over packages making incorrect assumptions or requiring source-level modifications that break on upgrade.
 
 ---
 
@@ -133,6 +187,7 @@ Ecosystem-level risks. Component-specific risks belong in those components' brie
 | **Automate concern has no runtime** | The Automate concern is the most novel and hardest part of the ecosystem. Isolate and Observe are proven patterns. Without a workflow runner, the ecosystem's core value proposition — less human involvement — remains aspirational. | Define the smallest useful automation: a linear sequence of prompts with completion detection. Ship that before a full DAG engine. Completion detection is solvable via tmux output capture. |
 | **Loose coupling erodes under pressure** | *Tripwire:* the orchestrator imports from agent-env's internal modules, or agent-env reads workflow state. | Integration rules are concern-scoped, not negotiable. If a tool needs something from another concern, the other tool's CLI contract gets extended. |
 | **Shared becomes a coupling mechanism** | *Tripwire:* a component can't be tested without the full monorepo, or Shared contains business logic from a specific tool. | Shared provides framework, not features. Components that don't benefit from Shared aren't forced to use it. Shared imports nothing from any specific tool. |
+| **Process policy fragments across layers** | *Tripwire:* a behavioral check is implemented directly in a BMAD core file, or the same policy logic is duplicated across multiple keystone workflow YAMLs instead of living in a skill. | Follow the routing heuristic in Development Process Architecture. Policy logic lives in skills (single source of truth). Keystone references skills for enforcement. BMAD core files are never modified for project-specific policy. |
 
 ---
 
