@@ -67,7 +67,7 @@ If `gh` CLI is unavailable or lacks permissions to the target repo, the skill ou
 
 ## Distribution
 
-The skill ships as part of keystone-workflows (or git-workflows, whichever is the broader distribution vehicle). For Claude, it installs as a skill/command in `.claude/skills/` or `.claude/commands/`. For Gemini and Codex, it uses whatever platform-equivalent delivery mechanism is established by the cross-platform skill distribution convention (see ADR-4 and the cross-platform research).
+The skill ships as part of keystone-workflows (or git-workflows, whichever is the broader distribution vehicle). For Claude, it installs as a skill/command in `.claude/skills/` or `.claude/commands/`. For Gemini and Codex, it will use whatever platform-equivalent delivery mechanism is defined by the cross-platform skill distribution convention described in ADR-4 and any subsequent cross-platform skill distribution design work.
 
 The skill content (the markdown instructions) is provider-neutral. The delivery wrapper is platform-specific.
 

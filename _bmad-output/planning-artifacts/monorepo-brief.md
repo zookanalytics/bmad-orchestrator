@@ -51,7 +51,7 @@ The ecosystem organizes around three stable concerns. Each is served by multiple
 **Automate** — Replace manual steps in development workflows with declared sequences, and enforce process policies at the right points:
 
 - The orchestrator's workflow engine (to be built) for multi-step declared workflows
-- Keystone workflows for declared pipeline execution with policy enforcement — sequences agent invocations and guarantees that process checks run at the correct workflow points
+- `keystone-workflows` for declared pipeline execution with policy enforcement — sequences agent invocations and guarantees that process checks run at the correct workflow points
 - Skills for reusable process policy logic — provider-neutral markdown definitions of behavioral checks, invocable by agents voluntarily and by pipelines mandatorily
 - Potential future contributors: additional workflow runners, Claude plugins for step orchestration
 - Any tool that replaces a manual step or enforces a process check in the development sequence contributes to Automate
