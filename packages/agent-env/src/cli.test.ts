@@ -123,6 +123,12 @@ async function createMockWorkspace(
   };
 
   await writeFile(stateFile, JSON.stringify(defaultState, null, 2), 'utf8');
+  // Create status bar template so regenerateStatusBar succeeds when purpose is set
+  await writeFile(
+    join(agentEnvDir, 'statusBar.template.json'),
+    '{"label": "$(bookmark) {{PURPOSE}}"}',
+    'utf8'
+  );
 
   // If git related mocks are used, create a .git dir to make git commands work
   await mkdir(join(wsRoot, '.git'), { recursive: true });
@@ -158,6 +164,12 @@ async function createRepoScopedWorkspace(
   };
 
   await writeFile(stateFile, JSON.stringify(defaultState, null, 2), 'utf8');
+  // Create status bar template so regenerateStatusBar succeeds when purpose is set
+  await writeFile(
+    join(agentEnvDir, 'statusBar.template.json'),
+    '{"label": "$(bookmark) {{PURPOSE}}"}',
+    'utf8'
+  );
   await mkdir(join(wsRoot, '.git'), { recursive: true });
 }
 

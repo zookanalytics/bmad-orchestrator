@@ -170,11 +170,12 @@ development_status:
   # Convenience features: repo registry, create from slug, VS Code purpose display.
   # Dependencies: Requires Epic 6 (purpose pipeline + CLI inside container) AND Epic 7 (repo-scoped workspaces).
   # PRD revision 2026-02-14: FR51-FR54
-  env-epic-8: backlog
-  env-8-1-repo-registry-command: backlog
-  env-8-2-create-from-registered-repo: backlog
-  env-8-3-vs-code-purpose-visibility-via-better-status-bar: backlog
-  env-epic-8-retrospective: optional
+  env-epic-8: in-progress
+  env-8-1-repo-registry-command: done
+  env-8-2-create-from-registered-repo: done
+  env-8-3-vs-code-purpose-visibility-via-better-status-bar: done
+  tech-spec-status-bar-template-resolution: done
+  env-epic-8-retrospective: done
 
 # ══════════════════════════════════════════════════════════════════════════════
 # COMPONENT: Release Infrastructure (rel-)
@@ -297,3 +298,31 @@ cross_dependencies:
 #   development-time scaffolding, not a product decision. Remove after Epic 8 when
 #   all workspaces will be repo-scoped format.
 #   Trigger: After Epic 8 completion.
+#
+# [env] Fix InteractiveMenu.test.tsx flaky test (race condition)
+#   Context: env-8-2 code review (L2). Pre-existing race condition in InteractiveMenu
+#   test causes intermittent failures unrelated to any specific story.
+#   Trigger: Next time InteractiveMenu is modified, or during test reliability sweep.
+#
+# [env] Add slug case-sensitivity test for resolveRepoArg
+#   Context: env-8-2 code review (L1). Slug matching behavior is correct but
+#   case-sensitivity is undocumented and untested.
+#   Trigger: Next time resolve-repo-arg.ts is modified.
+#
+# [env] Add spy-based integration tests for statusBar regeneration in purpose pipeline
+#   Context: env-8-3 code review (M3). No direct assertion that regenerateStatusBar()
+#   is called from setPurpose()/setContainerPurpose(). Current coverage is indirect
+#   through unit tests. Spy-based tests would strengthen the integration contract.
+#   Trigger: Next time purpose-instance.ts is modified or during test coverage improvements.
+#
+# [env] Guard Math.max(...spread) in repos command against very large workspace counts
+#   Context: env-8-1 code review (M3). Column-width calculation uses Math.max with
+#   spread operator on all repo entries. Safe for realistic counts but could hit
+#   call-stack limit with thousands of workspaces.
+#   Trigger: If repo count scaling becomes a concern or during performance hardening.
+#
+# [env] Normalize process.exitCode cleanup pattern in command tests
+#   Context: env-8-1 code review (L2). Some test files use process.exitCode = undefined
+#   in afterEach while others use = 0 in beforeEach. Inconsistent but no behavioral
+#   impact. Also env-8-2 debug log notes mocked process.exit continues execution in tests.
+#   Trigger: During test infrastructure cleanup or when adding new command tests.

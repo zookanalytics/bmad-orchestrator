@@ -39,7 +39,7 @@ afterEach(async () => {
   await rm(tempDir, { recursive: true, force: true });
 });
 
-/** Create a workspace directory with state.json */
+/** Create a workspace directory with state.json and status bar template */
 async function createTestWorkspace(workspaceName: string, state: InstanceState): Promise<void> {
   const wsRoot = join(tempDir, AGENT_ENV_DIR, WORKSPACES_DIR, workspaceName);
   const agentEnvDir = join(wsRoot, AGENT_ENV_DIR);
@@ -47,6 +47,12 @@ async function createTestWorkspace(workspaceName: string, state: InstanceState):
 
   await mkdir(agentEnvDir, { recursive: true });
   await writeFile(stateFile, JSON.stringify(state, null, 2), 'utf-8');
+  // Create a status bar template so regenerateStatusBar succeeds
+  await writeFile(
+    join(agentEnvDir, 'statusBar.template.json'),
+    '{"label": "$(bookmark) {{PURPOSE}}"}',
+    'utf-8'
+  );
 }
 
 function createTestState(
@@ -79,6 +85,7 @@ function createTestDeps(): PurposeInstanceDeps {
       homedir: () => tempDir,
     },
     stateFsDeps: { readFile, writeFile, rename, mkdir, appendFile },
+    statusBarDeps: { readFile, writeFile },
   };
 }
 
@@ -282,11 +289,17 @@ describe('setPurpose', () => {
 
 // ─── Container-mode helpers ─────────────────────────────────────────────────
 
-/** Create a state.json file at a given path */
+/** Create a state.json file and status bar template at a given path */
 async function createContainerStateFile(stateDir: string, state: InstanceState): Promise<string> {
   await mkdir(stateDir, { recursive: true });
   const statePath = join(stateDir, STATE_FILE);
   await writeFile(statePath, JSON.stringify(state, null, 2), 'utf-8');
+  // Create status bar template so regenerateStatusBar succeeds
+  await writeFile(
+    join(stateDir, 'statusBar.template.json'),
+    '{"label": "$(bookmark) {{PURPOSE}}"}',
+    'utf-8'
+  );
   return statePath;
 }
 
@@ -296,8 +309,10 @@ function createContainerDeps(stateDir: string, statePath: string): ContainerPurp
     containerEnvDeps: {
       getEnv: (key: string) => (key === 'AGENT_ENV_CONTAINER' ? 'true' : undefined),
     },
+    statusBarDeps: { readFile, writeFile },
     statePath,
     agentEnvDir: stateDir,
+    workspaceRoot: tempDir,
   };
 }
 
@@ -458,8 +473,10 @@ describe('setContainerPurpose', () => {
         appendFile,
       },
       containerEnvDeps: { getEnv: () => 'true' },
+      statusBarDeps: { readFile, writeFile },
       statePath,
       agentEnvDir: stateDir,
+      workspaceRoot: tempDir,
     };
 
     await setContainerPurpose('Test purpose', trackingDeps);

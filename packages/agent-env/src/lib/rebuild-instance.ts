@@ -32,10 +32,11 @@ import type { FsDeps } from './workspace.js';
 
 import { createContainerLifecycle } from './container.js';
 import {
+  applyBaselinePatches,
+  copyStatusBarTemplate,
   getBaselineConfigPath,
   hasDevcontainerConfig,
   parseDockerfileImages,
-  patchContainerName,
   resolveDockerfilePath,
 } from './devcontainer.js';
 import { readState, writeStateAtomic } from './state.js';
@@ -112,14 +113,16 @@ type ConfigRefreshResult =
 /**
  * Refresh devcontainer config before container teardown.
  *
- * For baseline configs: copies fresh baseline files into .agent-env/ and patches
- * the container name. Uses fs.cp merge semantics to preserve state.json.
+ * For baseline configs: copies fresh baseline files into .agent-env/, deploys
+ * status bar template if absent, and applies all baseline patches (container
+ * name, env vars, VS Code settings). Uses fs.cp merge semantics to preserve state.json.
  * For repo configs: verifies the config still exists on disk.
  */
 async function refreshConfig(
   wsRoot: string,
   containerName: string,
   configSource: 'baseline' | 'repo',
+  envVars: Record<string, string>,
   deps: Pick<RebuildInstanceDeps, 'devcontainerFsDeps' | 'rm' | 'rename' | 'logger'>
 ): Promise<ConfigRefreshResult> {
   if (configSource === 'baseline') {
@@ -131,8 +134,24 @@ async function refreshConfig(
         recursive: true,
       });
 
-      // Patch container name
-      await patchContainerName(wsRoot, containerName, deps.devcontainerFsDeps, AGENT_ENV_DIR);
+      // Copy status bar template if not already present (preserves user customizations)
+      const templatePath = join(agentEnvDir, 'statusBar.template.json');
+      try {
+        await deps.devcontainerFsDeps.stat(templatePath);
+        // exists — skip, preserve user customizations
+      } catch (err: unknown) {
+        if ((err as NodeJS.ErrnoException).code !== 'ENOENT') throw err;
+        await copyStatusBarTemplate(wsRoot, deps.devcontainerFsDeps);
+      }
+
+      // Apply all baseline patches (container name, env vars, vscode settings)
+      await applyBaselinePatches(
+        wsRoot,
+        containerName,
+        envVars,
+        deps.devcontainerFsDeps,
+        AGENT_ENV_DIR
+      );
     } catch (err) {
       return {
         ok: false,
@@ -325,6 +344,49 @@ async function teardownContainer(
   return { ok: true };
 }
 
+// ─── Container Startup ──────────────────────────────────────────────────────
+
+type ContainerStartResult =
+  | { ok: true; containerName: string }
+  | { ok: false; error: { code: string; message: string; suggestion?: string } };
+
+/**
+ * Start a fresh container and discover its actual name.
+ *
+ * Handles devcontainer up, baseline config path resolution, and container
+ * name discovery via Docker inspect.
+ */
+async function startAndDiscoverContainer(
+  wsPath: WorkspacePath,
+  containerName: string,
+  configSource: 'baseline' | 'repo',
+  purpose: string,
+  buildNoCache: boolean,
+  container: ContainerLifecycle
+): Promise<ContainerStartResult> {
+  const baselineConfigPath =
+    configSource === 'baseline' ? join(wsPath.root, AGENT_ENV_DIR, 'devcontainer.json') : undefined;
+  const containerResult = await container.devcontainerUp(wsPath.root, containerName, {
+    buildNoCache,
+    remoteEnv: { AGENT_INSTANCE: wsPath.name, AGENT_ENV_PURPOSE: purpose },
+    configPath: baselineConfigPath,
+  });
+  if (!containerResult.ok) {
+    return { ok: false, error: containerResult.error };
+  }
+
+  // Discover actual container name (repo configs may use custom --name)
+  let actualName = containerName;
+  if (containerResult.containerId) {
+    const discovered = await container.getContainerNameById(containerResult.containerId);
+    if (discovered) {
+      actualName = discovered;
+    }
+  }
+
+  return { ok: true, containerName: actualName };
+}
+
 // ─── Rebuild Orchestration ───────────────────────────────────────────────────
 
 /**
@@ -397,7 +459,12 @@ export async function rebuildInstance(
       },
     };
   }
-  const configResult = await refreshConfig(wsPath.root, containerName, configSource, deps);
+  const envVars: Record<string, string> = {
+    AGENT_ENV_INSTANCE: wsPath.name,
+    AGENT_ENV_REPO: state.repoSlug ?? '',
+    AGENT_ENV_PURPOSE: state.purpose ?? '',
+  };
+  const configResult = await refreshConfig(wsPath.root, containerName, configSource, envVars, deps);
   if (!configResult.ok) {
     return { ok: false, error: configResult.error };
   }
@@ -432,43 +499,30 @@ export async function rebuildInstance(
     return { ok: false, error: teardownResult.error, wasRunning };
   }
 
-  // Step 8: Start fresh container via devcontainer up
-  const buildNoCache = noCache && hasDockerfile;
-  const baselineConfigPath =
-    configSource === 'baseline' ? join(wsPath.root, AGENT_ENV_DIR, 'devcontainer.json') : undefined;
-  const containerResult = await deps.container.devcontainerUp(wsPath.root, containerName, {
-    buildNoCache,
-    remoteEnv: { AGENT_INSTANCE: wsPath.name },
-    configPath: baselineConfigPath,
-  });
-  if (!containerResult.ok) {
-    return {
-      ok: false,
-      error: containerResult.error,
-      wasRunning,
-    };
-  }
-
-  // Step 9: Discover actual container name
-  let actualContainerName = containerName;
-  if (containerResult.containerId) {
-    const discovered = await deps.container.getContainerNameById(containerResult.containerId);
-    if (discovered) {
-      actualContainerName = discovered;
-    }
+  // Step 8-9: Start fresh container and discover actual name
+  const startResult = await startAndDiscoverContainer(
+    wsPath,
+    containerName,
+    configSource,
+    state.purpose ?? '',
+    noCache && hasDockerfile,
+    deps.container
+  );
+  if (!startResult.ok) {
+    return { ok: false, error: startResult.error, wasRunning };
   }
 
   // Step 10: Update state with actual name and rebuild timestamp
   const updatedState = {
     ...state,
-    containerName: actualContainerName,
+    containerName: startResult.containerName,
     lastRebuilt: new Date().toISOString(),
   };
   await writeStateAtomic(wsPath, updatedState, deps.stateFsDeps);
 
   return {
     ok: true,
-    containerName: actualContainerName,
+    containerName: startResult.containerName,
     wasRunning,
   };
 }

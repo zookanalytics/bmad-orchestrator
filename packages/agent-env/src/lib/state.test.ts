@@ -667,7 +667,7 @@ describe('ensureGitExclude', () => {
     await ensureGitExclude(tempDir);
 
     const content = await readFile(excludePath, 'utf-8');
-    // Should have newline before .agent-env/
+    // Should have newline before patterns
     expect(content).toBe('# no trailing newline\n.agent-env/\n');
   });
 

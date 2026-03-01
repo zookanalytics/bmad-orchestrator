@@ -14,11 +14,13 @@ import { homedir } from 'node:os';
 
 import type { ContainerEnvDeps } from './container-env.js';
 import type { StateFsDeps } from './state.js';
+import type { StatusBarDeps } from './status-bar.js';
 import type { InstanceState, WorkspacePath } from './types.js';
 import type { FsDeps } from './workspace.js';
 
 import { CONTAINER_AGENT_ENV_DIR, CONTAINER_STATE_PATH } from './container-env.js';
 import { readState, writeStateAtomic, isValidState } from './state.js';
+import { regenerateStatusBar } from './status-bar.js';
 import { getWorkspacePathByName, resolveInstance } from './workspace.js';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
@@ -39,6 +41,7 @@ export type PurposeSetResult =
 export interface PurposeInstanceDeps {
   workspaceFsDeps: FsDeps;
   stateFsDeps: StateFsDeps;
+  statusBarDeps: StatusBarDeps;
 }
 
 // ─── Factory ─────────────────────────────────────────────────────────────────
@@ -51,6 +54,7 @@ export function createPurposeDefaultDeps(): PurposeInstanceDeps {
   return {
     workspaceFsDeps: { mkdir, readdir, stat, homedir },
     stateFsDeps: { readFile, writeFile, rename, mkdir, appendFile },
+    statusBarDeps: { readFile, writeFile },
   };
 }
 
@@ -130,12 +134,32 @@ export async function setPurpose(
   const state = await readState(wsPath, deps.stateFsDeps);
 
   const cleared = value === '';
+  const newPurpose = cleared ? null : value;
   const updatedState = {
     ...state,
-    purpose: cleared ? null : value,
+    purpose: newPurpose,
   };
 
+  // State is persisted first — regenerateStatusBar failure is non-fatal for purpose storage
   await writeStateAtomic(wsPath, updatedState, deps.stateFsDeps);
+
+  // Regenerate statusBar.json from template (fallback chain: .vscode/ → .agent-env/)
+  try {
+    await regenerateStatusBar(wsPath.root, wsPath.agentEnvDir, newPurpose, deps.statusBarDeps);
+  } catch (err) {
+    if ((err as { code?: string }).code === 'TEMPLATE_NOT_FOUND') {
+      return {
+        ok: false,
+        error: {
+          code: 'TEMPLATE_NOT_FOUND',
+          message: (err as Error).message,
+          suggestion:
+            'Create a status bar template at .vscode/statusBar.template.json or .agent-env/statusBar.template.json.',
+        },
+      };
+    }
+    throw err;
+  }
 
   return { ok: true, cleared };
 }
@@ -145,8 +169,11 @@ export async function setPurpose(
 export interface ContainerPurposeDeps {
   stateFsDeps: StateFsDeps;
   containerEnvDeps: ContainerEnvDeps;
+  statusBarDeps: StatusBarDeps;
   statePath: string;
   agentEnvDir: string;
+  /** Workspace root inside the container (where .vscode/ lives). Defaults to cwd. */
+  workspaceRoot: string;
 }
 
 /**
@@ -156,8 +183,10 @@ export function createContainerPurposeDefaultDeps(): ContainerPurposeDeps {
   return {
     stateFsDeps: { readFile, writeFile, rename, mkdir, appendFile },
     containerEnvDeps: { getEnv: (key: string) => process.env[key] },
+    statusBarDeps: { readFile, writeFile },
     statePath: CONTAINER_STATE_PATH,
     agentEnvDir: CONTAINER_AGENT_ENV_DIR,
+    workspaceRoot: process.cwd(),
   };
 }
 
@@ -242,9 +271,10 @@ export async function setContainerPurpose(
   if (!read.ok) return read;
 
   const cleared = value === '';
+  const newPurpose = cleared ? null : value;
   const updatedState: InstanceState = {
     ...read.state,
-    purpose: cleared ? null : value,
+    purpose: newPurpose,
   };
 
   // Use writeStateAtomic for consistency, mocking WorkspacePath for the container
@@ -255,7 +285,26 @@ export async function setContainerPurpose(
     stateFile: deps.statePath,
   };
 
+  // State is persisted first — regenerateStatusBar failure is non-fatal for purpose storage
   await writeStateAtomic(wsPath, updatedState, deps.stateFsDeps);
+
+  // Regenerate statusBar.json from template (fallback chain: workspace root → .agent-env/)
+  try {
+    await regenerateStatusBar(deps.workspaceRoot, deps.agentEnvDir, newPurpose, deps.statusBarDeps);
+  } catch (err) {
+    if ((err as { code?: string }).code === 'TEMPLATE_NOT_FOUND') {
+      return {
+        ok: false,
+        error: {
+          code: 'TEMPLATE_NOT_FOUND',
+          message: (err as Error).message,
+          suggestion:
+            'Create a status bar template at .vscode/statusBar.template.json or .agent-env/statusBar.template.json.',
+        },
+      };
+    }
+    throw err;
+  }
 
   return { ok: true, cleared };
 }

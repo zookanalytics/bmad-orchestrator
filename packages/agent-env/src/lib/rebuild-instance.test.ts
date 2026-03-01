@@ -417,6 +417,62 @@ describe('rebuildInstance', () => {
     expect(extraFilesWarnings).toHaveLength(0);
   });
 
+  it('refreshes baseline config: verifies patches are applied to devcontainer.json', async () => {
+    const state = createTestState('repo-auth', {
+      configSource: 'baseline',
+      purpose: 'OAuth work',
+    });
+    await createTestWorkspace('repo-auth', state, {
+      devcontainerFiles: ['devcontainer.json', 'init-host.sh'],
+    });
+    const deps = createTestDeps();
+
+    await rebuildInstance('auth', deps);
+
+    const wsRoot = join(tempDir, AGENT_ENV_DIR, WORKSPACES_DIR, 'repo-auth');
+    const configPath = join(wsRoot, AGENT_ENV_DIR, 'devcontainer.json');
+    const content = await readFile(configPath, 'utf-8');
+    const config = JSON.parse(content);
+
+    // Verify container name patch
+    expect(config.runArgs).toContain('--name=ae-repo-auth');
+    // Verify env vars (including purpose)
+    expect(config.containerEnv.AGENT_ENV_PURPOSE).toBe('OAuth work');
+    // Verify VS Code settings
+    expect(config.customizations.vscode.settings['betterStatusBar.configurationFile']).toBe(
+      '/etc/agent-env/statusBar.json'
+    );
+    // Verify filewatcher triggers status bar refresh
+    expect(config.customizations.vscode.settings['filewatcher.commands']).toEqual([
+      {
+        match: 'statusBar.json$',
+        event: 'onFolderChange',
+        vscodeTask: 'betterStatusBar.refreshButtons',
+      },
+    ]);
+  });
+
+  it('refreshes baseline config: does not overwrite existing statusBar.template.json', async () => {
+    const state = createTestState('repo-auth', { configSource: 'baseline' });
+    await createTestWorkspace('repo-auth', state, {
+      devcontainerFiles: ['devcontainer.json'],
+    });
+
+    const wsRoot = join(tempDir, AGENT_ENV_DIR, WORKSPACES_DIR, 'repo-auth');
+    const templatePath = join(wsRoot, AGENT_ENV_DIR, 'statusBar.template.json');
+
+    // Create a customized template
+    const customContent = '{"label": "CUSTOM: {{PURPOSE}}"}';
+    await writeFile(templatePath, customContent, 'utf-8');
+
+    const deps = createTestDeps();
+    await rebuildInstance('auth', deps);
+
+    // Verify template was NOT overwritten
+    const finalContent = await readFile(templatePath, 'utf-8');
+    expect(finalContent).toBe(customContent);
+  });
+
   // ─── Config refresh: repo ─────────────────────────────────────────────────
 
   it('preserves config when configSource is repo', async () => {
@@ -611,7 +667,8 @@ describe('rebuildInstance', () => {
     await rebuildInstance('auth', deps);
 
     expect(callOrder).toEqual([
-      'config_copy',
+      'config_copy', // baseline config copy
+      'config_copy', // status bar template copy
       'status_check',
       'container_stop',
       'container_remove',
