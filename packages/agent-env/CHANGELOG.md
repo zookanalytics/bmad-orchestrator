@@ -1,5 +1,19 @@
 # @zookanalytics/agent-env
 
+## 0.5.0
+
+### Minor Changes
+
+- [#32](https://github.com/zookanalytics/bmad-orchestrator/pull/32) [`a0249da`](https://github.com/zookanalytics/bmad-orchestrator/commit/a0249daa142e4a62adca6822b42f46bd17889e96) Thanks [@johnzook](https://github.com/johnzook)! - Add pbcopy clipboard script using OSC 52
+  - Add pbcopy shim that copies stdin to system clipboard via OSC 52 escape sequences
+  - Enable tmux set-clipboard on for reliable OSC 52 relay through nested tmux/SSH/Docker pty chains
+
+- [#39](https://github.com/zookanalytics/bmad-orchestrator/pull/39) [`98bd9cd`](https://github.com/zookanalytics/bmad-orchestrator/commit/98bd9cd093d147554b8f83b6ff73ec5655e35b7d) Thanks [@johnzook](https://github.com/johnzook)! - Add VS Code status bar purpose display and repo listing
+  - Add status bar template rendering with `{{PURPOSE}}` substitution and configurable template resolution
+  - Add filewatcher to refresh Better Status Bar extension when statusBar.json changes externally
+  - Add read-only `agent-env repos` command for listing repositories derived from workspace state
+  - Support repo slugs in the `create` command for quick instance creation from listed repos
+
 ## 0.4.0
 
 ### Minor Changes
