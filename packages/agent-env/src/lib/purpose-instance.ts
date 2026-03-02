@@ -35,7 +35,7 @@ export type PurposeGetResult =
   | { ok: false; error: { code: string; message: string; suggestion?: string } };
 
 export type PurposeSetResult =
-  | { ok: true; cleared: boolean }
+  | { ok: true; cleared: boolean; warning?: string }
   | { ok: false; error: { code: string; message: string; suggestion?: string } };
 
 export interface PurposeInstanceDeps {
@@ -144,17 +144,16 @@ export async function setPurpose(
   await writeStateAtomic(wsPath, updatedState, deps.stateFsDeps);
 
   // Regenerate statusBar.json from template (fallback chain: .vscode/ → .agent-env/)
+  // Template is optional — purpose is already persisted in state.json above.
+  // Missing template only affects VS Code status bar display, not core purpose storage.
   try {
     await regenerateStatusBar(wsPath.root, wsPath.agentEnvDir, newPurpose, deps.statusBarDeps);
   } catch (err) {
     if ((err as { code?: string }).code === 'TEMPLATE_NOT_FOUND') {
       return {
-        ok: false,
-        error: {
-          code: 'TEMPLATE_NOT_FOUND',
-          message: (err as Error).message,
-          suggestion: `Create a status bar template at .vscode/statusBar.template.json or ${wsPath.agentEnvDir}/statusBar.template.json.`,
-        },
+        ok: true,
+        cleared,
+        warning: `Status bar template not found — VS Code status bar won't update. Create one at .vscode/statusBar.template.json or ${wsPath.agentEnvDir}/statusBar.template.json.`,
       };
     }
     throw err;
@@ -288,17 +287,16 @@ export async function setContainerPurpose(
   await writeStateAtomic(wsPath, updatedState, deps.stateFsDeps);
 
   // Regenerate statusBar.json from template (fallback chain: workspace root → agentEnvDir)
+  // Template is optional — purpose is already persisted in state.json above.
+  // Missing template only affects VS Code status bar display, not core purpose storage.
   try {
     await regenerateStatusBar(deps.workspaceRoot, deps.agentEnvDir, newPurpose, deps.statusBarDeps);
   } catch (err) {
     if ((err as { code?: string }).code === 'TEMPLATE_NOT_FOUND') {
       return {
-        ok: false,
-        error: {
-          code: 'TEMPLATE_NOT_FOUND',
-          message: (err as Error).message,
-          suggestion: `Create a status bar template at .vscode/statusBar.template.json or ${deps.agentEnvDir}/statusBar.template.json.`,
-        },
+        ok: true,
+        cleared,
+        warning: `Status bar template not found — VS Code status bar won't update. Create one at .vscode/statusBar.template.json or ${deps.agentEnvDir}/statusBar.template.json.`,
       };
     }
     throw err;

@@ -244,6 +244,29 @@ describe('setPurpose', () => {
     expect(result.error.suggestion).toContain('--repo');
   });
 
+  it('succeeds with warning when status bar template is missing', async () => {
+    // Create workspace WITHOUT status bar template
+    const wsRoot = join(tempDir, AGENT_ENV_DIR, WORKSPACES_DIR, 'repo-auth');
+    const agentEnvDir = join(wsRoot, AGENT_ENV_DIR);
+    const stateFilePath = join(agentEnvDir, STATE_FILE);
+    await mkdir(agentEnvDir, { recursive: true });
+    const state = createTestState('repo-auth');
+    await writeFile(stateFilePath, JSON.stringify(state, null, 2), 'utf-8');
+    const deps = createTestDeps();
+
+    const result = await setPurpose('auth', 'New purpose', deps);
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) throw new Error('Expected success');
+    expect(result.cleared).toBe(false);
+    expect(result.warning).toContain('Status bar template not found');
+
+    // Verify purpose was still persisted in state.json
+    const content = await readFile(stateFilePath, 'utf-8');
+    const updatedState = JSON.parse(content) as InstanceState;
+    expect(updatedState.purpose).toBe('New purpose');
+  });
+
   it('overwrites existing purpose with new value', async () => {
     const state = createTestState('repo-auth', { purpose: 'Old purpose' });
     await createTestWorkspace('repo-auth', state);
@@ -507,6 +530,28 @@ describe('setContainerPurpose', () => {
     expect(result.ok).toBe(false);
     if (result.ok) throw new Error('Expected failure');
     expect(result.error.code).toBe('STATE_CORRUPT');
+  });
+
+  it('succeeds with warning when status bar template is missing', async () => {
+    // Create state file WITHOUT status bar template
+    const stateDir = join(tempDir, 'agent-env');
+    await mkdir(stateDir, { recursive: true });
+    const statePath = join(stateDir, STATE_FILE);
+    const state = createTestState('repo-auth');
+    await writeFile(statePath, JSON.stringify(state, null, 2), 'utf-8');
+    const deps = createContainerDeps(stateDir, statePath);
+
+    const result = await setContainerPurpose('New purpose', deps);
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) throw new Error('Expected success');
+    expect(result.cleared).toBe(false);
+    expect(result.warning).toContain('Status bar template not found');
+
+    // Verify purpose was still persisted in state.json
+    const content = await readFile(statePath, 'utf-8');
+    const updatedState = JSON.parse(content) as InstanceState;
+    expect(updatedState.purpose).toBe('New purpose');
   });
 
   it('overwrites existing purpose with new value', async () => {

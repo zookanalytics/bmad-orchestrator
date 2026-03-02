@@ -118,4 +118,8 @@ function handleSetResult(result: PurposeSetResult): void {
   } else {
     console.log('Purpose updated');
   }
+
+  if (result.warning) {
+    console.warn(`\x1b[33m⚠\x1b[0m  ${result.warning}`);
+  }
 }
