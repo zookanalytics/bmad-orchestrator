@@ -125,7 +125,7 @@ skills/
 # Install all skills from a package in the monorepo
 npx skills add zookanalytics/bmad-orchestrator-bugs2/packages/git-workflow -y --all
 
-# Install a specific skill by name (@ is skills.sh skill-filter syntax)
+# Install a specific skill by name using the --skill flag
 npx skills add zookanalytics/bmad-orchestrator-bugs2 --skill doc-sync-verification -y
 
 # Install all repo-wide skills
@@ -202,6 +202,7 @@ The script was a working prototype created during this research but was never co
 1. **git-workflow skill brief** — a separate agent is drafting the brief for folding git-workflow skills into this repo. The hook enforcement layer for git-workflow will need design once that brief is complete.
 2. **Private repo support** — skills.sh has known bugs with private GitHub repos (issues #436, #418). If skills move to a private repo, this needs validation.
 3. **skills.sh `experimental_sync`** — an experimental command scans `node_modules` for skills (the npm postinstall pattern). Worth monitoring — if it stabilizes, it provides a second distribution channel alongside GitHub repo installation.
+4. **Supply chain pinning** — the `npx skills add` examples run an unpinned third-party CLI. For production Dockerfiles and CI, consider installing `skills` as a pinned devDependency (`pnpm add -D skills@<version>`) and invoking the local binary, or using lockfile integrity checks, to reduce supply-chain risk.
 
 ## Sources
 
