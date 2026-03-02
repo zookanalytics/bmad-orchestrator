@@ -11,6 +11,7 @@ source_verification: true
 # Cross-Platform AI Agent Skill Distribution
 
 **Date:** 2026-03-02
+**Author:** Node
 **Type:** Design — Architecture Decision Record
 
 ---
@@ -124,8 +125,8 @@ skills/
 # Install all skills from a package in the monorepo
 npx skills add zookanalytics/bmad-orchestrator-bugs2/packages/git-workflow -y --all
 
-# Install a specific skill
-npx skills add zookanalytics/bmad-orchestrator-bugs2@doc-sync-verification -y
+# Install a specific skill by name (@ is skills.sh skill-filter syntax)
+npx skills add zookanalytics/bmad-orchestrator-bugs2 --skill doc-sync-verification -y
 
 # Install all repo-wide skills
 npx skills add zookanalytics/bmad-orchestrator-bugs2 -y --all
@@ -194,7 +195,7 @@ The universal enforcement backstop. `pre-commit` and `commit-msg` hooks work reg
 2. skills.sh handles multi-agent distribution with 40+ agent support
 3. Maintaining custom format conversion logic adds cost with no benefit
 
-The script has been deleted.
+The script was a working prototype created during this research but was never committed. It has been removed from the working tree.
 
 ## Open Questions
 
