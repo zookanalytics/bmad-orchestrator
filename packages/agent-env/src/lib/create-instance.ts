@@ -310,8 +310,8 @@ async function setupDevcontainerConfig(
     // Deploy status bar template to .agent-env/ even for repo-config instances.
     // The .agent-env/ dir is bind-mounted to /etc/agent-env in the container,
     // where `agent-env purpose` needs the template to generate statusBar.json.
-    // Non-fatal: template is optional — `agent-env purpose` will show a helpful
-    // TEMPLATE_NOT_FOUND error if it's missing, and users can add one manually.
+    // Non-fatal: template is optional — `agent-env purpose` will log a helpful
+    // TEMPLATE_NOT_FOUND warning but still succeed, and users can add one manually.
     try {
       await copyStatusBarTemplate(wsPath.root, deps.devcontainerFsDeps);
     } catch (err) {

@@ -198,8 +198,8 @@ async function refreshConfig(
     }
 
     // Deploy status bar template if not already present (needed by `agent-env purpose` in container).
-    // Non-fatal: template is optional — `agent-env purpose` will show a helpful
-    // TEMPLATE_NOT_FOUND error if it's missing, and users can add one manually.
+    // Non-fatal: template is optional — `agent-env purpose` will still succeed and show a helpful
+    // TEMPLATE_NOT_FOUND warning if it's missing, and users can add one manually.
     const templatePath = join(wsRoot, AGENT_ENV_DIR, 'statusBar.template.json');
     try {
       await deps.devcontainerFsDeps.stat(templatePath);
@@ -213,8 +213,11 @@ async function refreshConfig(
             `Warning: Failed to copy status bar template: ${copyErr instanceof Error ? copyErr.message : String(copyErr)}`
           );
         }
+      } else {
+        deps.logger?.warn(
+          `Warning: Unexpected error checking status bar template: ${(err as NodeJS.ErrnoException).code}`
+        );
       }
-      // Non-ENOENT stat errors (e.g., EACCES) are silently ignored — template is optional
     }
   }
 
