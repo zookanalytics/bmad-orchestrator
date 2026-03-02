@@ -153,8 +153,7 @@ export async function setPurpose(
         error: {
           code: 'TEMPLATE_NOT_FOUND',
           message: (err as Error).message,
-          suggestion:
-            'Create a status bar template at .vscode/statusBar.template.json or .agent-env/statusBar.template.json.',
+          suggestion: `Create a status bar template at .vscode/statusBar.template.json or ${wsPath.agentEnvDir}/statusBar.template.json.`,
         },
       };
     }
@@ -288,7 +287,7 @@ export async function setContainerPurpose(
   // State is persisted first — regenerateStatusBar failure is non-fatal for purpose storage
   await writeStateAtomic(wsPath, updatedState, deps.stateFsDeps);
 
-  // Regenerate statusBar.json from template (fallback chain: workspace root → .agent-env/)
+  // Regenerate statusBar.json from template (fallback chain: workspace root → agentEnvDir)
   try {
     await regenerateStatusBar(deps.workspaceRoot, deps.agentEnvDir, newPurpose, deps.statusBarDeps);
   } catch (err) {
@@ -298,8 +297,7 @@ export async function setContainerPurpose(
         error: {
           code: 'TEMPLATE_NOT_FOUND',
           message: (err as Error).message,
-          suggestion:
-            'Create a status bar template at .vscode/statusBar.template.json or .agent-env/statusBar.template.json.',
+          suggestion: `Create a status bar template at .vscode/statusBar.template.json or ${deps.agentEnvDir}/statusBar.template.json.`,
         },
       };
     }

@@ -157,8 +157,10 @@ export async function copyBaselineConfig(
  * by `regenerateStatusBar()` as the default fallback when no repo-provided
  * template exists at `.vscode/statusBar.template.json`.
  *
- * Only called when using baseline config. Repos with their own devcontainer
- * config can add a `.vscode/statusBar.template.json` for customization.
+ * Called for both baseline and repo-config instances. The `.agent-env/` dir
+ * is bind-mounted to `/etc/agent-env` in the container, where `agent-env
+ * purpose` needs the template to generate `statusBar.json`. Repos can
+ * override by placing a template at `.vscode/statusBar.template.json`.
  *
  * @param workspacePath - Absolute path to the workspace root
  */
