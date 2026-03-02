@@ -37,6 +37,7 @@ Assessments of external tools for potential adoption.
 Landscape analysis and competitive evaluation.
 
 - **[strategic-multi-agent-orchestration-landscape-2026-02-27.md](./strategic-multi-agent-orchestration-landscape-2026-02-27.md)** - Evaluation of Gastown (Yegge) and Agent Flywheel (Emanuel) against agent-tools ecosystem; identifies structured execution telemetry and confidence-tracked procedural memory as key gaps; proposes synthesis of hook-enforced skills + autonomous learning
+- **[cross-platform-skill-distribution-design-2026-03-02.md](./cross-platform-skill-distribution-design-2026-03-02.md)** - Design for distributing AI agent skills across Claude Code, Gemini CLI, and Codex CLI via skills.sh; selects standard SKILL.md format with two-layer model (skills.sh + npm postinstall hooks)
 
 ---
 
@@ -50,4 +51,4 @@ Deep-dive technical investigations.
 
 ---
 
-*Last updated: 2026-02-27*
+*Last updated: 2026-03-02*
