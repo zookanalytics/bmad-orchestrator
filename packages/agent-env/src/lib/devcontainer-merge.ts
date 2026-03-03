@@ -131,8 +131,12 @@ export async function readRepoConfig(
     try {
       await deps.access(candidate, constants.F_OK);
       content = await deps.readFile(candidate, 'utf-8');
-    } catch {
-      continue;
+    } catch (err) {
+      const code = (err as NodeJS.ErrnoException | undefined)?.code;
+      if (code === 'ENOENT') {
+        continue;
+      }
+      throw err;
     }
 
     // Feedback loop guard: skip auto-generated configs

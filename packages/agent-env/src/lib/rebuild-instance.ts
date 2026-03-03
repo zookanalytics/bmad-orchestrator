@@ -111,7 +111,7 @@ export function createRebuildDefaultDeps(): RebuildInstanceDeps {
 // ─── Config Refresh ──────────────────────────────────────────────────────────
 
 type ConfigRefreshResult =
-  | { ok: true }
+  | { ok: true; repoConfigDetected: boolean }
   | { ok: false; error: { code: string; message: string; suggestion?: string } };
 
 /**
@@ -172,7 +172,7 @@ async function refreshMergedConfig(
     const configPath = join(wsRoot, AGENT_ENV_DIR, 'devcontainer.json');
     await writeGeneratedConfig(configPath, merged, deps.mergeDeps);
 
-    return { ok: true };
+    return { ok: true, repoConfigDetected: repoConfig !== undefined };
   } catch (err) {
     return {
       ok: false,
@@ -480,11 +480,12 @@ export async function rebuildInstance(
     return { ok: false, error: startResult.error, wasRunning };
   }
 
-  // Step 10: Update state with actual name and rebuild timestamp
+  // Step 10: Update state with actual name, rebuild timestamp, and repo config status
   const updatedState = {
     ...state,
     containerName: startResult.containerName,
     lastRebuilt: new Date().toISOString(),
+    repoConfigDetected: configResult.repoConfigDetected,
   };
   await writeStateAtomic(wsPath, updatedState, deps.stateFsDeps);
 

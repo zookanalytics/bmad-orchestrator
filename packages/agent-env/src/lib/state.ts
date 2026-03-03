@@ -100,7 +100,7 @@ export async function writeStateAtomic(
  * @param instance - User-chosen instance name (e.g., "auth")
  * @param repoSlug - Repo slug derived from URL (e.g., "bmad-orchestrator")
  * @param repoUrl - Full git remote URL
- * @param options - Optional container name and repo config detection status
+ * @param options - Optional object; when provided, `repoConfigDetected` is required
  * @returns New InstanceState with current timestamp
  */
 export function createInitialState(
@@ -245,24 +245,21 @@ export function isValidState(value: unknown): value is RawInstanceState {
  *
  * Converts legacy `configSource: 'baseline'` → `repoConfigDetected: false`,
  * `configSource: 'repo'` → `repoConfigDetected: true`, absent → false.
- * Deletes the old `configSource` key from the state object.
- * Returns the mutated state as InstanceState (with required repoConfigDetected).
+ * Returns a new InstanceState without the legacy `configSource` key.
  */
 export function migrateConfigSource(state: RawInstanceState): InstanceState {
-  if (state.repoConfigDetected === undefined) {
-    if (state.configSource === 'repo') {
-      state.repoConfigDetected = true;
-    } else {
-      state.repoConfigDetected = false;
-    }
-  }
+  const { configSource, repoConfigDetected, ...rest } = state as RawInstanceState & {
+    configSource?: RawInstanceState['configSource'];
+    repoConfigDetected?: RawInstanceState['repoConfigDetected'];
+  };
 
-  // Delete legacy configSource key
-  if ('configSource' in state) {
-    delete (state as unknown as Record<string, unknown>).configSource;
-  }
+  const normalizedRepoConfigDetected =
+    repoConfigDetected !== undefined ? repoConfigDetected : configSource === 'repo';
 
-  return state as InstanceState;
+  return {
+    ...rest,
+    repoConfigDetected: normalizedRepoConfigDetected,
+  } as InstanceState;
 }
 
 // ─── Git Exclude ─────────────────────────────────────────────────────────────

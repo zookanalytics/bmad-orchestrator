@@ -21,7 +21,21 @@ export const createCommand = new Command('create')
   .option('--repo <url|slug>', 'Git repo URL, registered slug, or "." for current directory')
   .option('--purpose <text>', 'Set the instance purpose/label at creation time')
   .option('--attach', 'Attach immediately after creation')
-  .action(async (name: string, options: CreateOptions) => {
+  .option('--baseline', '[REMOVED] Config merge replaces this flag')
+  .option('--no-baseline', '[REMOVED] Config merge replaces this flag')
+  .action(async (name: string, options: CreateOptions & { baseline?: boolean }) => {
+    if (options.baseline !== undefined) {
+      console.error(
+        formatError(
+          createError(
+            'REMOVED_OPTION',
+            'The --baseline / --no-baseline flags have been removed.',
+            'Agent-env now always merges managed config with repo config. No flag needed.'
+          )
+        )
+      );
+      process.exit(1);
+    }
     if (!options.repo) {
       console.error(
         formatError(
