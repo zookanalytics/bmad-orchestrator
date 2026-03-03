@@ -1,5 +1,11 @@
 # @zookanalytics/agent-env
 
+## 0.5.1
+
+### Patch Changes
+
+- [#42](https://github.com/zookanalytics/bmad-orchestrator/pull/42) [`7344f41`](https://github.com/zookanalytics/bmad-orchestrator/commit/7344f4134dbebcbb82052daaf3d9ffa3d2abee09) Thanks [@johnzook](https://github.com/johnzook)! - Replace tmux-purpose jq script with TypeScript CLI subcommand and fix status bar template deployment for repo-config instances
+
 ## 0.5.0
 
 ### Minor Changes
