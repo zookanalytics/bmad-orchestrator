@@ -75,7 +75,7 @@ describe('CI changeset enforcement (blocking job)', () => {
   it('changeset-check job hard-fails when no changesets are found', () => {
     const workflow = loadCiWorkflow();
     const job = workflow.jobs['changeset-check'];
-    const statusStep = job.steps.find((s) => s.name?.toLowerCase().includes('changeset'));
+    const statusStep = job.steps.find((s) => s.name === 'Require changeset');
     expect(statusStep).toBeDefined();
     expect(statusStep?.run).toContain('exit 1');
     expect(statusStep?.run).toContain('No changesets present');
@@ -84,14 +84,14 @@ describe('CI changeset enforcement (blocking job)', () => {
   it('changeset-check job uses ::error:: annotation for missing changesets', () => {
     const workflow = loadCiWorkflow();
     const job = workflow.jobs['changeset-check'];
-    const statusStep = job.steps.find((s) => s.name?.toLowerCase().includes('changeset'));
+    const statusStep = job.steps.find((s) => s.name === 'Require changeset');
     expect(statusStep?.run).toContain('::error::');
   });
 
   it('changeset-check still hard-fails on unexpected tool/config errors', () => {
     const workflow = loadCiWorkflow();
     const job = workflow.jobs['changeset-check'];
-    const statusStep = job.steps.find((s) => s.name?.toLowerCase().includes('changeset'));
+    const statusStep = job.steps.find((s) => s.name === 'Require changeset');
     // Must distinguish "no changesets" from other failures (both exit 1)
     expect(statusStep?.run).toContain('pnpm changeset status');
     expect(statusStep?.run).toContain('::error::');
@@ -110,7 +110,7 @@ describe('CI changeset enforcement (blocking job)', () => {
   it('advisory warning is no longer used for missing changesets', () => {
     const workflow = loadCiWorkflow();
     const job = workflow.jobs['changeset-check'];
-    const statusStep = job.steps.find((s) => s.name?.toLowerCase().includes('changeset'));
+    const statusStep = job.steps.find((s) => s.name === 'Require changeset');
     // ::warning:: should NOT appear in the changeset status step
     expect(statusStep?.run).not.toContain('::warning::');
   });
