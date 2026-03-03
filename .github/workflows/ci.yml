@@ -92,23 +92,6 @@ jobs:
           done
           [ "$ERRORS" -eq 0 ] || exit 1
 
-      # Verify changeset configuration health (Story 2.3).
-      # Advisory: warns if no changesets found (e.g., infrastructure-only PRs).
-      # Config/tool failures still hard-fail to catch broken changeset installations.
-      # Only runs on PRs — changeset status compares HEAD against baseBranch ("main").
-      - name: Validate changeset status
-        if: github.event_name == 'pull_request'
-        run: |
-          git branch main origin/main 2>/dev/null || true
-          OUTPUT=$(pnpm changeset status 2>&1) && exit 0
-          if echo "$OUTPUT" | grep -q "No changesets present"; then
-            echo "::warning::No changesets found. If this PR changes publishable package behavior, run 'pnpm changeset' to add one."
-          else
-            echo "::error::Changeset status check failed unexpectedly:"
-            echo "$OUTPUT"
-            exit 1
-          fi
-
       # Pack agent-env tarball for integration testing (Story 1.4).
       # @zookanalytics/shared is bundled into dist via tsup noExternal config.
       - name: Pack agent-env tarball
@@ -131,6 +114,71 @@ jobs:
             packages/*/coverage/
             coverage/
           retention-days: 7
+
+  # Enforce changeset presence on PRs that touch publishable packages.
+  # Blocks merge when no changeset is found. Apply the `no-changeset-needed`
+  # label to opt out for docs-only, CI, or infrastructure PRs.
+  changeset-check:
+    name: Changeset Check
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request'
+
+    steps:
+      # Skip early when opted out via label — job still reports SUCCESS
+      # to satisfy branch protection required status checks.
+      - name: Check for opt-out label
+        if: contains(github.event.pull_request.labels.*.name, 'no-changeset-needed')
+        run: |
+          echo "::notice::Changeset check skipped — 'no-changeset-needed' label is present."
+          echo "SKIP_CHANGESET=true" >> "$GITHUB_ENV"
+
+      - name: Checkout repository
+        if: env.SKIP_CHANGESET != 'true'
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node.js
+        if: env.SKIP_CHANGESET != 'true'
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: '24'
+
+      - name: Setup pnpm
+        if: env.SKIP_CHANGESET != 'true'
+        uses: pnpm/action-setup@41ff72655975bd51cab0327fa583b6e92b6d3061 # v4.2.0
+
+      - name: Get pnpm store directory
+        if: env.SKIP_CHANGESET != 'true'
+        shell: bash
+        run: echo "STORE_PATH=$(pnpm store path --silent)" >> "$GITHUB_ENV"
+
+      - name: Setup pnpm cache
+        if: env.SKIP_CHANGESET != 'true'
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        with:
+          path: ${{ env.STORE_PATH }}
+          key: ${{ runner.os }}-pnpm-store-${{ hashFiles('**/pnpm-lock.yaml') }}
+          restore-keys: |
+            ${{ runner.os }}-pnpm-store-
+
+      - name: Install dependencies
+        if: env.SKIP_CHANGESET != 'true'
+        run: pnpm install --frozen-lockfile
+
+      - name: Require changeset
+        if: env.SKIP_CHANGESET != 'true'
+        run: |
+          git branch main origin/main 2>/dev/null || true
+          OUTPUT=$(pnpm changeset status 2>&1) && exit 0
+          if echo "$OUTPUT" | grep -q "No changesets present"; then
+            echo "::error::No changesets found. Run 'pnpm changeset' to add one, or apply the 'no-changeset-needed' label if this PR does not affect publishable packages."
+            exit 1
+          else
+            echo "::error::Changeset status check failed unexpectedly:"
+            echo "$OUTPUT"
+            exit 1
+          fi
 
   # Clean-room integration test: validates the packaged CLI works for end-users
   # without implicit dependencies on the build environment. NO checkout step
