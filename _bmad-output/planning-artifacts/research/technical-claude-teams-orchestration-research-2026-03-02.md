@@ -2,7 +2,7 @@
 stepsCompleted: [1, 2, 3, 4, 5, 6]
 inputDocuments: []
 workflowType: 'research'
-lastStep: 1
+lastStep: 6
 research_type: 'technical'
 research_topic: 'Claude Teams for Orchestration and Multi-Model Integration'
 research_goals: 'Evaluate Claude Code teams/swarms for workflow orchestration, assess feasibility of multi-model integration (Gemini/Codex) via skills, determine viability of going all-in on Claude ecosystem'
@@ -123,7 +123,7 @@ The question is no longer "can AI agents collaborate?" but "what does it look li
 
 ### Claude Code Teams / Swarm Architecture
 
-Claude Code's agent teams feature, released in early February 2026 alongside Claude Sonnet 5, transforms Claude Code from a single-session coding assistant into a multi-agent orchestration platform. The feature is experimental and must be enabled via `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS` in settings.
+Claude Code's agent teams feature, shipped in early February 2026 with Opus 4.6, transforms Claude Code from a single-session coding assistant into a multi-agent orchestration platform. The feature is experimental and must be enabled via `CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS` in settings.
 
 **Core Architecture:**
 - _Team Lead Pattern:_ One session acts as team lead — it creates the team via `TeamCreate`, breaks work into tasks via `TaskCreate`, spawns teammates as background agents, and coordinates results via `SendMessage`.
@@ -363,16 +363,18 @@ The dominant 2026 pattern is a **two-tier architecture** where Claude serves as 
 
 **Architecture Pattern:**
 ```
-┌─────────────────────────────────────────────┐
-│           Claude (Orchestrator)              │
-│  Planning, Reasoning, Coordination, Review  │
-├──────────┬──────────────┬───────────────────┤
-│          │              │                   │
-│  ┌───────▼──────┐ ┌────▼─────┐ ┌──────────▼──┐
-│  │  Gemini CLI  │ │ Codex CLI│ │ Open Models  │
-│  │  (Speed,     │ │ (Precise │ │ (Cost,       │
-│  │   Breadth)   │ │  Edits)  │ │  Fallback)   │
-│  └──────────────┘ └──────────┘ └─────────────┘
+┌─────────────────────────────────────────────────┐
+│             Claude (Orchestrator)                │
+│    Planning, Reasoning, Coordination, Review     │
+├────────────────┬───────────────┬────────────────┤
+│                │               │                │
+│  ┌─────────┐   │  ┌─────────┐  │  ┌──────────┐  │
+│  │ Gemini  │   │  │  Codex  │  │  │  Open    │  │
+│  │  CLI    │   │  │   CLI   │  │  │  Models  │  │
+│  │ (Speed, │   │  │(Precise │  │  │ (Cost,   │  │
+│  │ Breadth)│   │  │ Edits)  │  │  │ Fallback)│  │
+│  └─────────┘   │  └─────────┘  │  └──────────┘  │
+└────────────────┴───────────────┴────────────────┘
 ```
 
 **Proven Implementations:**
