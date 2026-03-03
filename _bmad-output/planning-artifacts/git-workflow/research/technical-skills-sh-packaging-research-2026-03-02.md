@@ -163,7 +163,7 @@ _Sources: [Vercel skills CLI](https://github.com/vercel-labs/skills), [skills.sh
 
 **Publishing is friction-free:** Put skills in a git repo. Share the repo. There is no registry submission flow. Skills appear on the skills.sh leaderboard automatically through anonymous telemetry when users run `npx skills add`. Once installed by users, the package is tracked and ranked by installation count.
 
-**CORRECTION: `npx skills add` does NOT support npm packages as a source.** The CLI only supports git-based sources (GitHub shorthand, full URLs, GitLab, generic git URLs) and local file paths. There is no npm registry lookup. The product brief's `npx skills add @zookanalytics/git-workflow` would not work — the `@` prefix is not recognized as an npm scope by the skills CLI.
+**CORRECTION: `npx skills add` does NOT support npm packages as a source.** The CLI only supports git-based sources (GitHub shorthand, full URLs, GitLab, generic git URLs) and local file paths. There is no npm registry lookup. An earlier draft of the product brief used `npx skills add @zookanalytics/git-workflow`, which would not work — the `@` prefix is not recognized as an npm scope by the skills CLI.
 
 **Separate npm-based approach exists:** Anthony Fu's [skills-npm](https://github.com/antfu/skills-npm) is a complementary tool that discovers skills bundled inside `node_modules` after `npm install` and symlinks them to agent directories. This is a separate tool, not part of the Vercel skills CLI. An [npm boilerplate](https://github.com/neovateai/agent-skill-npm-boilerplate) also exists for npm-based skill distribution.
 
@@ -713,7 +713,7 @@ The agent-tools monorepo already has changeset infrastructure in place:
 
 **Recommended:** Option B (subtree publish) — gives clean skills.sh identity (`zookanalytics/git-workflow/commit`) while keeping the monorepo as the single source of truth for development.
 
-**Product brief correction needed:** The product brief specifies `npx skills add @zookanalytics/git-workflow`, but the `@` scoped npm syntax is not supported by the skills CLI. The correct install command would be `npx skills add zookanalytics/git-workflow` (GitHub shorthand).
+**Install command reference:** Use GitHub shorthand: `npx skills add zookanalytics/git-workflow`.
 
 _Confidence: HIGH — verified that `npx skills add` does not accept npm packages. Subtree publish is a well-established pattern._
 _Sources: [Vercel skills CLI](https://github.com/vercel-labs/skills), [Changesets](https://github.com/changesets/changesets), monorepo `.changeset/config.json`_
@@ -853,7 +853,7 @@ The one non-standard architectural element — a shared `lib/` directory — is 
 2. **Subtree publish automation** — What CI configuration is needed to automatically push `packages/git-workflow/` to the dedicated `zookanalytics/git-workflow` repo on each release? How does this interact with changesets?
 3. **Hooks postinstall mechanics** — How should the npm postinstall script locate `.git/hooks/` reliably across monorepo and standalone repo layouts?
 4. **Cross-agent description testing** — How do Codex, Gemini CLI, and Cursor differ in skill triggering behavior given the same descriptions?
-5. **Product brief correction** — The product brief specifies `npx skills add @zookanalytics/git-workflow` which won't work. Update to `npx skills add zookanalytics/git-workflow` (GitHub shorthand).
+5. **Historical note: product brief install command** — Earlier drafts specified `npx skills add @zookanalytics/git-workflow`, which would not work. The current product brief correctly uses `npx skills add zookanalytics/git-workflow` (GitHub shorthand); no further change is required.
 
 ### Next Steps
 

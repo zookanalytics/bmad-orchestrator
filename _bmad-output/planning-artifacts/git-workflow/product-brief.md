@@ -15,7 +15,7 @@ author: Node
 
 git-workflow is a new package in the agent-tools monorepo that provides goal-oriented git skills for AI coding agents. Rather than wrapping individual git commands, each skill enforces **workflow completeness** — ensuring every step in a git operation happens, every time, while the AI adapts *how* each step gets done based on context.
 
-The package distributes skills via skills.sh (compatible with Claude Code, Gemini CLI, Codex, and 18+ other agents) and optionally installs git hooks via npm for deterministic enforcement. It has no runtime dependencies on other monorepo packages — the monorepo provides CI, publishing, and changeset infrastructure, not architectural coupling.
+The package is distributed as a skills.sh-compatible skill (installable via `npx skills add zookanalytics/git-workflow`, even when it is not listed in the public skills.sh directory) and can optionally install git hooks via npm for deterministic enforcement. It has no runtime dependencies on other monorepo packages — the monorepo provides CI, publishing, and changeset infrastructure, not architectural coupling — and remains compatible with Claude Code, Gemini CLI, Codex, and 40+ other agents that support the Agent Skills standard.
 
 git-workflow serves the **Automate** concern in the agent-tools ecosystem: replacing the repeatable discipline that both humans and AI agents naturally skip in git operations.
 
