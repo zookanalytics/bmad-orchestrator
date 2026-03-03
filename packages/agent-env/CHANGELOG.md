@@ -1,5 +1,15 @@
 # @zookanalytics/agent-env
 
+## 0.6.0
+
+### Minor Changes
+
+- [#45](https://github.com/zookanalytics/bmad-orchestrator/pull/45) [`4939dbb`](https://github.com/zookanalytics/bmad-orchestrator/commit/4939dbb5a21d03fe98f6254bb09fd6838963746e) Thanks [@johnzook](https://github.com/johnzook)! - Add devcontainer config merge pipeline that replaces the binary baseline/repo choice with a deep merge strategy, always combining managed properties with repo config
+
+### Patch Changes
+
+- [#42](https://github.com/zookanalytics/bmad-orchestrator/pull/42) [`8f6b9f9`](https://github.com/zookanalytics/bmad-orchestrator/commit/8f6b9f9037dc425c87a0b94edd2294e407347e39) Thanks [@johnzook](https://github.com/johnzook)! - Replace tmux-purpose jq script with TypeScript CLI subcommand and fix status bar template deployment for repo-config instances
+
 ## 0.5.0
 
 ### Minor Changes
