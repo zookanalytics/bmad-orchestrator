@@ -9,10 +9,10 @@
  */
 
 /** Path to state.json when running inside a container (bind-mounted from host) */
-export const CONTAINER_STATE_PATH = '/etc/agent-env/state.json';
+export const CONTAINER_STATE_PATH = process.env.AGENT_ENV_STATE_PATH || '/etc/agent-env/state.json';
 
 /** Path to the agent-env directory inside the container */
-export const CONTAINER_AGENT_ENV_DIR = '/etc/agent-env';
+export const CONTAINER_AGENT_ENV_DIR = process.env.AGENT_ENV_CONTAINER_DIR || '/etc/agent-env';
 
 // ─── Types for dependency injection ──────────────────────────────────────────
 

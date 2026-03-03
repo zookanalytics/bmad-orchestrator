@@ -72,6 +72,7 @@ function createTestState(
     lastAttached: '2026-01-20T14:00:00.000Z',
     purpose: null,
     containerName: `ae-${workspaceName}`,
+    repoConfigDetected: false,
     ...overrides,
   };
 }

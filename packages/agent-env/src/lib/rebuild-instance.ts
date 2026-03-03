@@ -11,6 +11,7 @@ import type { ExecuteResult } from '@zookanalytics/shared';
 
 import { createExecutor } from '@zookanalytics/shared';
 import {
+  access,
   cp,
   mkdir,
   readdir,
@@ -25,6 +26,7 @@ import { homedir } from 'node:os';
 import { join } from 'node:path';
 
 import type { ContainerLifecycle } from './container.js';
+import type { DevcontainerMergeDeps } from './devcontainer-merge.js';
 import type { DevcontainerFsDeps } from './devcontainer.js';
 import type { StateFsDeps } from './state.js';
 import type { ContainerResult, InstanceState, WorkspacePath } from './types.js';
@@ -32,13 +34,14 @@ import type { FsDeps } from './workspace.js';
 
 import { createContainerLifecycle } from './container.js';
 import {
-  applyBaselinePatches,
-  copyStatusBarTemplate,
-  getBaselineConfigPath,
-  hasDevcontainerConfig,
-  parseDockerfileImages,
-  resolveDockerfilePath,
-} from './devcontainer.js';
+  buildManagedConfig,
+  loadManagedDefaults,
+  mergeDevcontainerConfigs,
+  readRepoConfig,
+  validateRepoConfig,
+  writeGeneratedConfig,
+} from './devcontainer-merge.js';
+import { copyManagedAssets, parseDockerfileImages, resolveDockerfilePath } from './devcontainer.js';
 import { readState, writeStateAtomic } from './state.js';
 import { AGENT_ENV_DIR } from './types.js';
 import { getWorkspacePathByName, resolveInstance } from './workspace.js';
@@ -65,7 +68,6 @@ export type RebuildResult =
 
 export interface RebuildOptions {
   force?: boolean;
-  configSource?: 'baseline' | 'repo';
   pull?: boolean;
   noCache?: boolean;
 }
@@ -79,6 +81,7 @@ export interface RebuildInstanceDeps {
     DevcontainerFsDeps,
     'cp' | 'mkdir' | 'readdir' | 'readFile' | 'stat' | 'writeFile'
   >;
+  mergeDeps: DevcontainerMergeDeps;
   rm: typeof rm;
   rename: typeof rename;
   logger?: { warn: (message: string) => void; info: (message: string) => void };
@@ -98,6 +101,7 @@ export function createRebuildDefaultDeps(): RebuildInstanceDeps {
     workspaceFsDeps: { mkdir, readdir, stat, homedir },
     stateFsDeps: { readFile, writeFile, rename, mkdir, appendFile },
     devcontainerFsDeps: { cp, mkdir, readdir, readFile, stat, writeFile },
+    mergeDeps: { readFile, writeFile, rename, access },
     rm,
     rename,
     logger: { warn: (msg) => console.warn(msg), info: (msg) => console.info(msg) },
@@ -111,117 +115,75 @@ type ConfigRefreshResult =
   | { ok: false; error: { code: string; message: string; suggestion?: string } };
 
 /**
- * Refresh devcontainer config before container teardown.
+ * Re-merge devcontainer config before container teardown.
  *
- * For baseline configs: copies fresh baseline files into .agent-env/, deploys
- * status bar template if absent, and applies all baseline patches (container
- * name, env vars, VS Code settings). Uses fs.cp merge semantics to preserve state.json.
- * For repo configs: verifies the config still exists on disk.
+ * Always re-runs the full merge pipeline:
+ * 1. Load managed defaults from baseline config
+ * 2. Read repo config (if present)
+ * 3. Validate repo config
+ * 4. Deep merge managed + repo
+ * 5. Copy managed non-JSON assets
+ * 6. Write generated config to .agent-env/devcontainer.json
  */
-async function refreshConfig(
+async function refreshMergedConfig(
   wsRoot: string,
   containerName: string,
-  configSource: 'baseline' | 'repo',
-  envVars: Record<string, string>,
-  deps: Pick<RebuildInstanceDeps, 'devcontainerFsDeps' | 'rm' | 'rename' | 'logger'>
+  wsName: string,
+  repoSlug: string,
+  purpose: string,
+  repoConfigExpected: boolean,
+  deps: Pick<RebuildInstanceDeps, 'devcontainerFsDeps' | 'mergeDeps' | 'logger'>
 ): Promise<ConfigRefreshResult> {
-  if (configSource === 'baseline') {
-    const agentEnvDir = join(wsRoot, AGENT_ENV_DIR);
-    try {
-      // Copy fresh baseline files into .agent-env/ (merges, preserves state.json)
-      await deps.devcontainerFsDeps.mkdir(agentEnvDir, { recursive: true });
-      await deps.devcontainerFsDeps.cp(getBaselineConfigPath(), agentEnvDir, {
-        recursive: true,
-      });
+  try {
+    const defaults = await loadManagedDefaults(deps.mergeDeps);
 
-      // Copy status bar template if not already present (preserves user customizations)
-      const templatePath = join(agentEnvDir, 'statusBar.template.json');
-      try {
-        await deps.devcontainerFsDeps.stat(templatePath);
-        // exists — skip, preserve user customizations
-      } catch (err: unknown) {
-        if ((err as NodeJS.ErrnoException).code !== 'ENOENT') throw err;
-        await copyStatusBarTemplate(wsRoot, deps.devcontainerFsDeps);
-      }
+    const managed = buildManagedConfig(defaults, {
+      instanceName: wsName,
+      containerName,
+      repoSlug,
+      purpose,
+    });
 
-      // Apply all baseline patches (container name, env vars, vscode settings)
-      await applyBaselinePatches(
-        wsRoot,
-        containerName,
-        envVars,
-        deps.devcontainerFsDeps,
-        AGENT_ENV_DIR
-      );
-    } catch (err) {
+    const repoConfig = await readRepoConfig(wsRoot, deps.mergeDeps, deps.logger);
+
+    // AC-19: If state indicates repo config was detected at creation but config is now missing, error
+    if (repoConfigExpected && !repoConfig) {
       return {
         ok: false,
         error: {
-          code: 'CONFIG_REFRESH_FAILED',
-          message: `Failed to refresh baseline config: ${err instanceof Error ? err.message : String(err)}`,
+          code: 'REPO_CONFIG_MISSING',
+          message: `Repo devcontainer config was present at creation but is now missing from ${wsRoot}`,
           suggestion:
-            'The existing container is still intact. Check that the baseline config files exist in the package.',
-        },
-      };
-    }
-  } else {
-    // Repo-provided config: verify it still exists on disk
-    const configExists = await hasDevcontainerConfig(wsRoot, deps.devcontainerFsDeps);
-    if (!configExists) {
-      return {
-        ok: false,
-        error: {
-          code: 'CONFIG_MISSING',
-          message: 'Repo-provided devcontainer config is missing.',
-          suggestion: 'Re-clone the repository or provide a devcontainer config manually.',
+            'Restore the repo config, or recreate the instance with `agent-env create` to generate a managed-only config.',
         },
       };
     }
 
-    // If .devcontainer/ dir exists, verify it contains devcontainer.json
-    // (hasDevcontainerConfig returns true for an empty .devcontainer/ dir)
-    const devcontainerDir = join(wsRoot, '.devcontainer');
-    const dirExists = await deps.devcontainerFsDeps.stat(devcontainerDir).catch(() => null);
-    if (dirExists) {
-      const jsonExists = await deps.devcontainerFsDeps
-        .stat(join(devcontainerDir, 'devcontainer.json'))
-        .catch(() => null);
-      if (!jsonExists) {
-        return {
-          ok: false,
-          error: {
-            code: 'CONFIG_CORRUPT',
-            message: 'Repo-provided devcontainer config is incomplete (missing devcontainer.json).',
-            suggestion: 'Ensure .devcontainer/devcontainer.json exists.',
-          },
-        };
-      }
+    if (repoConfig) {
+      validateRepoConfig(repoConfig, deps.logger);
     }
 
-    // Deploy status bar template if not already present (needed by `agent-env purpose` in container).
-    // Non-fatal: template is optional — `agent-env purpose` will still succeed and show a helpful
-    // TEMPLATE_NOT_FOUND warning if it's missing, and users can add one manually.
-    const templatePath = join(wsRoot, AGENT_ENV_DIR, 'statusBar.template.json');
-    try {
-      await deps.devcontainerFsDeps.stat(templatePath);
-      // exists — skip, preserve user customizations
-    } catch (err: unknown) {
-      if ((err as NodeJS.ErrnoException).code === 'ENOENT') {
-        try {
-          await copyStatusBarTemplate(wsRoot, deps.devcontainerFsDeps);
-        } catch (copyErr) {
-          deps.logger?.warn(
-            `Warning: Failed to copy status bar template: ${copyErr instanceof Error ? copyErr.message : String(copyErr)}`
-          );
-        }
-      } else {
-        deps.logger?.warn(
-          `Warning: Unexpected error checking status bar template: ${(err as NodeJS.ErrnoException).code}`
-        );
-      }
-    }
+    const merged = mergeDevcontainerConfigs(managed, repoConfig);
+
+    // Copy managed non-JSON assets (init-host.sh, status bar template)
+    await copyManagedAssets(wsRoot, deps.devcontainerFsDeps);
+
+    // Write generated config
+    const configPath = join(wsRoot, AGENT_ENV_DIR, 'devcontainer.json');
+    await writeGeneratedConfig(configPath, merged, deps.mergeDeps);
+
+    return { ok: true };
+  } catch (err) {
+    return {
+      ok: false,
+      error: {
+        code: 'CONFIG_REFRESH_FAILED',
+        message: `Failed to refresh config: ${err instanceof Error ? err.message : String(err)}`,
+        suggestion:
+          'The existing container is still intact. Check that the baseline config files exist in the package.',
+      },
+    };
   }
-
-  return { ok: true };
 }
 
 // ─── Workspace Lookup ────────────────────────────────────────────────────
@@ -376,23 +338,20 @@ type ContainerStartResult =
 /**
  * Start a fresh container and discover its actual name.
  *
- * Handles devcontainer up, baseline config path resolution, and container
- * name discovery via Docker inspect.
+ * Always uses --config pointing to .agent-env/devcontainer.json (generated merged config).
  */
 async function startAndDiscoverContainer(
   wsPath: WorkspacePath,
   containerName: string,
-  configSource: 'baseline' | 'repo',
   purpose: string,
   buildNoCache: boolean,
   container: ContainerLifecycle
 ): Promise<ContainerStartResult> {
-  const baselineConfigPath =
-    configSource === 'baseline' ? join(wsPath.root, AGENT_ENV_DIR, 'devcontainer.json') : undefined;
+  const configPath = join(wsPath.root, AGENT_ENV_DIR, 'devcontainer.json');
   const containerResult = await container.devcontainerUp(wsPath.root, containerName, {
     buildNoCache,
     remoteEnv: { AGENT_INSTANCE: wsPath.name, AGENT_ENV_PURPOSE: purpose },
-    configPath: baselineConfigPath,
+    configPath,
   });
   if (!containerResult.ok) {
     return { ok: false, error: containerResult.error };
@@ -432,7 +391,7 @@ async function startAndDiscoverContainer(
  *
  * @param instanceName - User-provided instance name (e.g., "auth")
  * @param deps - Injectable dependencies
- * @param options - Rebuild options (force, pull, noCache, configSource)
+ * @param options - Rebuild options (force, pull, noCache)
  * @returns RebuildResult with success/failure info
  */
 export async function rebuildInstance(
@@ -441,12 +400,7 @@ export async function rebuildInstance(
   options?: RebuildOptions,
   repoSlug?: string
 ): Promise<RebuildResult> {
-  const {
-    force = false,
-    configSource: overrideConfigSource,
-    pull = true,
-    noCache = true,
-  } = options ?? {};
+  const { force = false, pull = true, noCache = true } = options ?? {};
 
   // Step 1: Find workspace
   const wsLookup = await lookupWorkspace(instanceName, deps, repoSlug);
@@ -469,25 +423,16 @@ export async function rebuildInstance(
     };
   }
 
-  // Step 3: Refresh devcontainer config (before teardown — if it fails, container is still intact)
-  const configSource = overrideConfigSource ?? state.configSource;
-  if (!configSource) {
-    return {
-      ok: false,
-      error: {
-        code: 'CONFIG_SOURCE_UNKNOWN',
-        message: `Instance '${instanceName}' was created before config tracking was added.`,
-        suggestion:
-          'Set configSource manually in .agent-env/state.json ("baseline" or "repo"), then retry.',
-      },
-    };
-  }
-  const envVars: Record<string, string> = {
-    AGENT_ENV_INSTANCE: wsPath.name,
-    AGENT_ENV_REPO: state.repoSlug ?? '',
-    AGENT_ENV_PURPOSE: state.purpose ?? '',
-  };
-  const configResult = await refreshConfig(wsPath.root, containerName, configSource, envVars, deps);
+  // Step 3: Re-merge devcontainer config (before teardown — if it fails, container is still intact)
+  const configResult = await refreshMergedConfig(
+    wsPath.root,
+    containerName,
+    wsPath.name,
+    state.repoSlug ?? '',
+    state.purpose ?? '',
+    state.repoConfigDetected,
+    deps
+  );
   if (!configResult.ok) {
     return { ok: false, error: configResult.error };
   }
@@ -523,10 +468,10 @@ export async function rebuildInstance(
   }
 
   // Step 8-9: Start fresh container and discover actual name
+  // Always use --config pointing to .agent-env/devcontainer.json (the generated merged config)
   const startResult = await startAndDiscoverContainer(
     wsPath,
     containerName,
-    configSource,
     state.purpose ?? '',
     noCache && hasDockerfile,
     deps.container

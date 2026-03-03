@@ -9,7 +9,7 @@
 import { appendFile, mkdir, readFile, rename, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 
-import type { InstanceState, WorkspacePath } from './types.js';
+import type { InstanceState, RawInstanceState, WorkspacePath } from './types.js';
 
 import { AGENT_ENV_DIR, CONTAINER_PREFIX, STATE_FILE_TMP, createFallbackState } from './types.js';
 
@@ -53,11 +53,12 @@ export async function readState(
     const content = await deps.readFile(wsPath.stateFile, 'utf-8');
     const parsed: unknown = JSON.parse(content);
 
-    if (!isValidState(parsed)) {
-      return migrateOldState(parsed, wsPath.name) ?? createFallbackState(wsPath.name);
-    }
+    const state: RawInstanceState = isValidState(parsed)
+      ? parsed
+      : ((migrateOldState(parsed, wsPath.name) as RawInstanceState | null) ??
+        (createFallbackState(wsPath.name) as unknown as RawInstanceState));
 
-    return parsed;
+    return migrateConfigSource(state);
   } catch (err) {
     // Return fallback for missing file or bad JSON. Re-throw other errors.
     if (err instanceof SyntaxError || (err as NodeJS.ErrnoException).code === 'ENOENT') {
@@ -99,16 +100,22 @@ export async function writeStateAtomic(
  * @param instance - User-chosen instance name (e.g., "auth")
  * @param repoSlug - Repo slug derived from URL (e.g., "bmad-orchestrator")
  * @param repoUrl - Full git remote URL
- * @param options - Optional container name and config source
+ * @param options - Optional container name and repo config detection status
  * @returns New InstanceState with current timestamp
  */
 export function createInitialState(
   instance: string,
   repoSlug: string,
   repoUrl: string,
-  options?: { containerName?: string; configSource?: 'baseline' | 'repo'; purpose?: string | null }
+  options?: {
+    containerName?: string;
+    repoConfigDetected: boolean;
+    purpose?: string | null;
+  }
 ): InstanceState {
-  const { containerName, configSource, purpose } = options ?? {};
+  const { containerName, repoConfigDetected, purpose } = options ?? {
+    repoConfigDetected: false,
+  };
   const now = new Date().toISOString();
   const workspaceName = `${repoSlug}-${instance}`;
   return {
@@ -119,7 +126,7 @@ export function createInitialState(
     lastAttached: now,
     purpose: purpose ?? null,
     containerName: containerName ?? `${CONTAINER_PREFIX}${workspaceName}`,
-    configSource: configSource ?? 'baseline',
+    repoConfigDetected,
   };
 }
 
@@ -158,7 +165,7 @@ function extractRepoName(url: string): string {
  * @returns A valid InstanceState if migration succeeds, or null if the
  *          parsed object doesn't look like an old-format state.
  */
-function migrateOldState(parsed: unknown, workspaceName: string): InstanceState | null {
+function migrateOldState(parsed: unknown, workspaceName: string): RawInstanceState | null {
   if (typeof parsed !== 'object' || parsed === null) return null;
 
   const obj = parsed as Record<string, unknown>;
@@ -183,7 +190,7 @@ function migrateOldState(parsed: unknown, workspaceName: string): InstanceState 
   const configSource =
     obj.configSource === 'baseline' || obj.configSource === 'repo' ? obj.configSource : undefined;
 
-  const state: InstanceState = {
+  const state: RawInstanceState = {
     instance,
     repoSlug,
     repoUrl: obj.repo,
@@ -206,13 +213,16 @@ function migrateOldState(parsed: unknown, workspaceName: string): InstanceState 
 // ─── Validation ──────────────────────────────────────────────────────────────
 
 /**
- * Type guard to validate parsed JSON is a valid InstanceState.
+ * Type guard to validate parsed JSON is a valid state object.
  *
  * Requires the Epic 7+ schema fields: instance, repoSlug, repoUrl.
  * Old-format state files (with `name`/`repo` instead) fail this check
  * and are migrated by migrateOldState() in readState().
+ *
+ * Does NOT check for repoConfigDetected — that is handled by
+ * migrateConfigSource() post-processing in readState().
  */
-export function isValidState(value: unknown): value is InstanceState {
+export function isValidState(value: unknown): value is RawInstanceState {
   if (typeof value !== 'object' || value === null) return false;
 
   const obj = value as Record<string, unknown>;
@@ -226,6 +236,33 @@ export function isValidState(value: unknown): value is InstanceState {
     (obj.purpose === undefined || obj.purpose === null || typeof obj.purpose === 'string') &&
     typeof obj.containerName === 'string'
   );
+}
+
+// ─── Config Source Migration ─────────────────────────────────────────────────
+
+/**
+ * Post-processing step that normalizes configSource → repoConfigDetected.
+ *
+ * Converts legacy `configSource: 'baseline'` → `repoConfigDetected: false`,
+ * `configSource: 'repo'` → `repoConfigDetected: true`, absent → false.
+ * Deletes the old `configSource` key from the state object.
+ * Returns the mutated state as InstanceState (with required repoConfigDetected).
+ */
+export function migrateConfigSource(state: RawInstanceState): InstanceState {
+  if (state.repoConfigDetected === undefined) {
+    if (state.configSource === 'repo') {
+      state.repoConfigDetected = true;
+    } else {
+      state.repoConfigDetected = false;
+    }
+  }
+
+  // Delete legacy configSource key
+  if ('configSource' in state) {
+    delete (state as unknown as Record<string, unknown>).configSource;
+  }
+
+  return state as InstanceState;
 }
 
 // ─── Git Exclude ─────────────────────────────────────────────────────────────

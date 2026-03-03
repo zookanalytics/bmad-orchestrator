@@ -36,6 +36,14 @@ const gitCloneFailure: ExecuteResult = {
   exitCode: 128,
 };
 
+/** Baseline config fixture returned by mergeDeps.readFile for the baseline config path */
+const BASELINE_CONFIG_JSON = JSON.stringify({
+  image: 'ghcr.io/zookanalytics/bmad-orchestrator/devcontainer:latest',
+  initializeCommand: 'bash .agent-env/init-host.sh',
+  mounts: ['source=${localWorkspaceFolder}/.agent-env,target=/etc/agent-env,type=bind'],
+  containerEnv: { AGENT_ENV_CONTAINER: 'true' },
+});
+
 /** Create a mock container lifecycle */
 function createMockContainer(overrides: Partial<ContainerLifecycle> = {}): ContainerLifecycle {
   return {
@@ -60,10 +68,11 @@ function createMockContainer(overrides: Partial<ContainerLifecycle> = {}): Conta
 
 /**
  * Create a mock stat function that:
- * - Returns real stat for the baseline config path (so copyBaselineConfig can verify it exists)
- * - Returns custom behavior for devcontainer detection in workspace paths
+ * - Returns real stat for the baseline config path (so copyManagedAssets can verify it exists)
+ * - Returns real stat for paths under tempDir (workspace files created by tests)
+ * - Throws ENOENT otherwise
  */
-function createDevcontainerStatMock(hasExistingDevcontainer: boolean) {
+function createDevcontainerStatMock() {
   const baselinePath = getBaselineConfigPath();
   const templatesPath = getTemplatesPath();
   return vi.fn().mockImplementation(async (path: string) => {
@@ -71,12 +80,69 @@ function createDevcontainerStatMock(hasExistingDevcontainer: boolean) {
     if (path.startsWith(baselinePath) || path.startsWith(templatesPath)) {
       return stat(path);
     }
-    // For workspace paths (.devcontainer checks)
-    if (hasExistingDevcontainer) {
-      return { isDirectory: () => true, isFile: () => false };
+    // Let real filesystem handle workspace paths under tempDir
+    if (path.startsWith(tempDir)) {
+      return stat(path);
     }
     throw Object.assign(new Error('ENOENT'), { code: 'ENOENT' });
   });
+}
+
+/**
+ * Create mock mergeDeps for the devcontainer merge pipeline.
+ *
+ * - readFile: returns baseline config JSON for baseline config path, throws ENOENT otherwise
+ * - writeFile: no-op (resolves successfully)
+ * - rename: no-op (resolves successfully)
+ * - access: resolves successfully for baseline config path, throws ENOENT otherwise
+ *
+ * When hasRepoDevcontainer is true, readFile and access also succeed for
+ * .devcontainer/devcontainer.json paths under the workspace, simulating a
+ * cloned repo that ships its own devcontainer config.
+ */
+function createMockMergeDeps(hasRepoDevcontainer = false) {
+  const baselineConfigPath = join(getBaselineConfigPath(), 'devcontainer.json');
+
+  const mockReadFile = vi.fn().mockImplementation(async (path: string) => {
+    if (path === baselineConfigPath) {
+      return BASELINE_CONFIG_JSON;
+    }
+    if (
+      hasRepoDevcontainer &&
+      path.includes('.devcontainer') &&
+      path.endsWith('devcontainer.json')
+    ) {
+      return JSON.stringify({
+        image: 'node:22',
+        customizations: { vscode: { extensions: ['repo.ext'] } },
+      });
+    }
+    throw Object.assign(new Error('ENOENT'), { code: 'ENOENT' });
+  }) as unknown as typeof readFile;
+
+  const mockAccess = vi.fn().mockImplementation(async (path: string) => {
+    if (path === baselineConfigPath) {
+      return undefined;
+    }
+    if (
+      hasRepoDevcontainer &&
+      path.includes('.devcontainer') &&
+      path.endsWith('devcontainer.json')
+    ) {
+      return undefined;
+    }
+    throw Object.assign(new Error('ENOENT'), { code: 'ENOENT' });
+  }) as unknown as typeof import('node:fs/promises').access;
+
+  const mockWriteFile = vi.fn().mockResolvedValue(undefined) as unknown as typeof writeFile;
+  const mockRename = vi.fn().mockResolvedValue(undefined) as unknown as typeof rename;
+
+  return {
+    readFile: mockReadFile,
+    writeFile: mockWriteFile,
+    rename: mockRename,
+    access: mockAccess,
+  };
 }
 
 /**
@@ -86,7 +152,7 @@ function createDevcontainerStatMock(hasExistingDevcontainer: boolean) {
 function createTestDeps(
   cloneResult: ExecuteResult,
   containerOverrides: Partial<ContainerLifecycle> = {},
-  hasExistingDevcontainer = false
+  hasRepoDevcontainer = false
 ): CreateInstanceDeps {
   const executor = vi
     .fn()
@@ -122,9 +188,10 @@ function createTestDeps(
       cp: vi.fn().mockResolvedValue(undefined),
       mkdir,
       readFile: devcontainerReadFile,
-      stat: createDevcontainerStatMock(hasExistingDevcontainer),
+      stat: createDevcontainerStatMock(),
       writeFile: devcontainerWriteFile,
     },
+    mergeDeps: createMockMergeDeps(hasRepoDevcontainer),
     rm,
     logger: {
       warn: vi.fn(),
@@ -485,65 +552,42 @@ describe('createInstance', () => {
     expect(result.error.message).toContain('Invalid repository URL');
   });
 
-  it('copies baseline config when no devcontainer exists in cloned repo', async () => {
-    const deps = createTestDeps(gitCloneSuccess, {}, false);
-
-    await createInstance('auth', 'https://github.com/user/bmad-orch.git', deps);
-
-    expect(deps.devcontainerFsDeps.cp).toHaveBeenCalled();
-  });
-
-  it('skips baseline config copy and baseline patching when devcontainer already exists', async () => {
-    const deps = createTestDeps(gitCloneSuccess, {}, true);
-
-    await createInstance('auth', 'https://github.com/user/bmad-orch.git', deps);
-
-    // Baseline config should NOT be copied, but status bar template IS deployed to .agent-env/
-    const cpCalls = (deps.devcontainerFsDeps.cp as ReturnType<typeof vi.fn>).mock.calls;
-    expect(cpCalls).toHaveLength(1);
-    const [src, dest] = cpCalls[0] as [string, string];
-    expect(src).toContain('statusBar.template.json');
-    expect(dest).toContain(join(AGENT_ENV_DIR, 'statusBar.template.json'));
-    // No baseline patching (readFile/writeFile for devcontainer.json)
-    expect(deps.devcontainerFsDeps.readFile).not.toHaveBeenCalled();
-    expect(deps.devcontainerFsDeps.writeFile).not.toHaveBeenCalled();
-  });
-
-  it('succeeds and logs warning when status bar template copy fails for repo config', async () => {
-    const deps = createTestDeps(gitCloneSuccess, {}, true);
-    // Make cp fail (simulates permission error on .agent-env/ write)
-    (deps.devcontainerFsDeps.cp as ReturnType<typeof vi.fn>).mockRejectedValue(
-      new Error('EACCES: permission denied')
-    );
-
-    const result = await createInstance('auth', 'https://github.com/user/bmad-orch.git', deps);
-
-    // Should succeed — template copy failure is non-fatal for repo-config instances
-    expect(result.ok).toBe(true);
-    expect(deps.logger?.warn).toHaveBeenCalledWith(
-      expect.stringContaining('Failed to copy status bar template')
-    );
-  });
-
-  it('applies baseline patches (name, env, settings) to devcontainer.json', async () => {
+  it('copies managed assets via copyManagedAssets', async () => {
     const deps = createTestDeps(gitCloneSuccess);
 
     await createInstance('auth', 'https://github.com/user/bmad-orch.git', deps);
 
-    // Should have read the devcontainer.json from .agent-env/ (baseline config dir)
-    expect(deps.devcontainerFsDeps.readFile).toHaveBeenCalledWith(
-      expect.stringContaining('.agent-env/devcontainer.json'),
-      'utf-8'
-    );
+    // copyManagedAssets uses devcontainerFsDeps.cp to copy baseline assets (excluding devcontainer.json)
+    expect(deps.devcontainerFsDeps.cp).toHaveBeenCalled();
+  });
 
-    // Should have written back with --name runArg, env vars, and vscode settings
-    expect(deps.devcontainerFsDeps.writeFile).toHaveBeenCalledWith(
-      expect.stringContaining('.agent-env/devcontainer.json'),
-      expect.stringContaining('"--name=ae-bmad-orch-auth"')
-    );
-    expect(deps.devcontainerFsDeps.writeFile).toHaveBeenCalledWith(
-      expect.stringContaining('.agent-env/devcontainer.json'),
-      expect.stringContaining('betterStatusBar.configurationFile')
+  it('writes generated config to .agent-env/devcontainer.json via mergeDeps', async () => {
+    const deps = createTestDeps(gitCloneSuccess);
+
+    await createInstance('auth', 'https://github.com/user/bmad-orch.git', deps);
+
+    // writeGeneratedConfig uses mergeDeps.writeFile then mergeDeps.rename
+    // The final config should end up at .agent-env/devcontainer.json
+    const writeFileCalls = (deps.mergeDeps.writeFile as ReturnType<typeof vi.fn>).mock.calls;
+    expect(writeFileCalls.length).toBeGreaterThan(0);
+
+    // The write target should be the .agent-env/devcontainer.json path (or its .tmp sibling)
+    const writtenPath = writeFileCalls[0][0] as string;
+    expect(writtenPath).toContain('.agent-env');
+    expect(writtenPath).toContain('devcontainer.json');
+  });
+
+  it('always passes configPath to devcontainerUp pointing to .agent-env/devcontainer.json', async () => {
+    const deps = createTestDeps(gitCloneSuccess);
+
+    await createInstance('auth', 'https://github.com/user/bmad-orch.git', deps);
+
+    expect(deps.container.devcontainerUp).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.any(String),
+      expect.objectContaining({
+        configPath: expect.stringContaining(join('.agent-env', 'devcontainer.json')),
+      })
     );
   });
 
@@ -559,8 +603,7 @@ describe('createInstance', () => {
       getContainerNameById: vi.fn().mockResolvedValue('agenttools-bmad-orch'),
     };
 
-    // Use existing devcontainer (so we don't patch it)
-    const deps = createTestDeps(gitCloneSuccess, containerOverrides, true);
+    const deps = createTestDeps(gitCloneSuccess, containerOverrides);
 
     const result = await createInstance('auth', 'https://github.com/user/bmad-orch.git', deps);
 
@@ -605,8 +648,7 @@ describe('createInstance', () => {
       getContainerNameById: vi.fn().mockResolvedValue('custom-container-name'),
     };
 
-    // Use existing devcontainer (so we don't patch it)
-    const deps = createTestDeps(gitCloneSuccess, containerOverrides, true);
+    const deps = createTestDeps(gitCloneSuccess, containerOverrides);
 
     const result = await createInstance('auth', 'https://github.com/user/bmad-orch.git', deps);
 
@@ -619,7 +661,7 @@ describe('createInstance', () => {
     expect(state.containerName).toBe('custom-container-name');
   });
 
-  it('sets configSource to baseline when repo has no devcontainer config', async () => {
+  it('sets repoConfigDetected to false when repo has no devcontainer config', async () => {
     const deps = createTestDeps(gitCloneSuccess, {}, false);
 
     const result = await createInstance('auth', 'https://github.com/user/bmad-orch.git', deps);
@@ -629,10 +671,10 @@ describe('createInstance', () => {
 
     const stateContent = await readFile(result.workspacePath.stateFile, 'utf-8');
     const state = JSON.parse(stateContent);
-    expect(state.configSource).toBe('baseline');
+    expect(state.repoConfigDetected).toBe(false);
   });
 
-  it('sets configSource to repo when repo has its own devcontainer config', async () => {
+  it('sets repoConfigDetected to true when repo has its own devcontainer config', async () => {
     const deps = createTestDeps(gitCloneSuccess, {}, true);
 
     const result = await createInstance('auth', 'https://github.com/user/bmad-orch.git', deps);
@@ -642,7 +684,7 @@ describe('createInstance', () => {
 
     const stateContent = await readFile(result.workspacePath.stateFile, 'utf-8');
     const state = JSON.parse(stateContent);
-    expect(state.configSource).toBe('repo');
+    expect(state.repoConfigDetected).toBe(true);
   });
 
   it('adds .agent-env/ to .git/info/exclude after writing state', async () => {
@@ -703,23 +745,25 @@ describe('createInstance', () => {
     expect(state.purpose).toBeNull();
   });
 
-  it('includes AGENT_ENV_PURPOSE in baseline patches for baseline config', async () => {
-    const deps = createTestDeps(gitCloneSuccess, {}, false);
+  it('includes AGENT_ENV_PURPOSE in generated config', async () => {
+    const deps = createTestDeps(gitCloneSuccess);
 
     await createInstance('auth', 'https://github.com/user/bmad-orch.git', deps, {
       purpose: 'JWT authentication',
     });
 
-    // Baseline patches are applied via devcontainerFsDeps.writeFile
-    const writeFileCalls = (deps.devcontainerFsDeps.writeFile as ReturnType<typeof vi.fn>).mock
-      .calls;
-    // Find the call that contains AGENT_ENV_PURPOSE
-    const envPatchCall = writeFileCalls.find(
+    // The generated config is written via mergeDeps.writeFile
+    const writeFileCalls = (deps.mergeDeps.writeFile as ReturnType<typeof vi.fn>).mock.calls;
+    // Find the call that writes the generated config (contains AGENT_ENV_PURPOSE)
+    const configWriteCall = writeFileCalls.find(
       (call: unknown[]) =>
         typeof call[1] === 'string' && (call[1] as string).includes('AGENT_ENV_PURPOSE')
     );
-    expect(envPatchCall).toBeDefined();
-    const writtenContent = JSON.parse((envPatchCall as unknown[])[1] as string);
+    expect(configWriteCall).toBeDefined();
+    // Extract just the JSON portion (skip the auto-generated header line)
+    const written = (configWriteCall as unknown[])[1] as string;
+    const jsonStart = written.indexOf('{');
+    const writtenContent = JSON.parse(written.slice(jsonStart));
     expect(writtenContent.containerEnv.AGENT_ENV_PURPOSE).toBe('JWT authentication');
   });
 
@@ -772,199 +816,21 @@ describe('createInstance', () => {
     expect(deps.executor).not.toHaveBeenCalled();
   });
 
-  it('sets AGENT_ENV_PURPOSE to empty string in patchContainerEnv when no purpose', async () => {
-    const deps = createTestDeps(gitCloneSuccess, {}, false);
+  it('sets AGENT_ENV_PURPOSE to empty string in generated config when no purpose', async () => {
+    const deps = createTestDeps(gitCloneSuccess);
 
     await createInstance('auth', 'https://github.com/user/bmad-orch.git', deps);
 
-    const writeFileCalls = (deps.devcontainerFsDeps.writeFile as ReturnType<typeof vi.fn>).mock
-      .calls;
-    const envPatchCall = writeFileCalls.find(
+    const writeFileCalls = (deps.mergeDeps.writeFile as ReturnType<typeof vi.fn>).mock.calls;
+    const configWriteCall = writeFileCalls.find(
       (call: unknown[]) =>
         typeof call[1] === 'string' && (call[1] as string).includes('AGENT_ENV_PURPOSE')
     );
-    expect(envPatchCall).toBeDefined();
-    const writtenContent = JSON.parse((envPatchCall as unknown[])[1] as string);
+    expect(configWriteCall).toBeDefined();
+    const written = (configWriteCall as unknown[])[1] as string;
+    const jsonStart = written.indexOf('{');
+    const writtenContent = JSON.parse(written.slice(jsonStart));
     expect(writtenContent.containerEnv.AGENT_ENV_PURPOSE).toBe('');
-  });
-});
-
-// ─── baseline choice tests ──────────────────────────────────────────────────
-
-describe('createInstance baseline choice', () => {
-  it('uses baseline when repo has no devcontainer config (no flags needed)', async () => {
-    const deps = createTestDeps(gitCloneSuccess, {}, false);
-
-    const result = await createInstance('auth', 'https://github.com/user/bmad-orch.git', deps);
-
-    expect(result.ok).toBe(true);
-    if (!result.ok) throw new Error('Expected success');
-
-    const stateContent = await readFile(result.workspacePath.stateFile, 'utf-8');
-    const state = JSON.parse(stateContent);
-    expect(state.configSource).toBe('baseline');
-    // askUser should not have been called
-  });
-
-  it('calls askUser when repo has devcontainer config and no baseline flag', async () => {
-    const askUser = vi.fn().mockResolvedValue('repo');
-    const deps = createTestDeps(gitCloneSuccess, {}, true);
-
-    const result = await createInstance('auth', 'https://github.com/user/bmad-orch.git', deps, {
-      askUser,
-    });
-
-    expect(result.ok).toBe(true);
-    expect(askUser).toHaveBeenCalled();
-    if (!result.ok) throw new Error('Expected success');
-
-    const stateContent = await readFile(result.workspacePath.stateFile, 'utf-8');
-    const state = JSON.parse(stateContent);
-    expect(state.configSource).toBe('repo');
-  });
-
-  it('uses baseline when askUser returns baseline', async () => {
-    const askUser = vi.fn().mockResolvedValue('baseline');
-    const deps = createTestDeps(gitCloneSuccess, {}, true);
-
-    const result = await createInstance('auth', 'https://github.com/user/bmad-orch.git', deps, {
-      askUser,
-    });
-
-    expect(result.ok).toBe(true);
-    expect(askUser).toHaveBeenCalled();
-    // When user chose baseline, baseline config should have been copied
-    expect(deps.devcontainerFsDeps.cp).toHaveBeenCalled();
-    if (!result.ok) throw new Error('Expected success');
-
-    const stateContent = await readFile(result.workspacePath.stateFile, 'utf-8');
-    const state = JSON.parse(stateContent);
-    expect(state.configSource).toBe('baseline');
-  });
-
-  it('forces baseline when --baseline flag is set, even when repo has config', async () => {
-    const askUser = vi.fn();
-    const deps = createTestDeps(gitCloneSuccess, {}, true);
-
-    const result = await createInstance('auth', 'https://github.com/user/bmad-orch.git', deps, {
-      baseline: true,
-      askUser,
-    });
-
-    expect(result.ok).toBe(true);
-    // askUser should NOT have been called (flag overrides prompt)
-    expect(askUser).not.toHaveBeenCalled();
-    // Baseline config should have been copied
-    expect(deps.devcontainerFsDeps.cp).toHaveBeenCalled();
-    if (!result.ok) throw new Error('Expected success');
-
-    const stateContent = await readFile(result.workspacePath.stateFile, 'utf-8');
-    const state = JSON.parse(stateContent);
-    expect(state.configSource).toBe('baseline');
-  });
-
-  it('forces repo config when --no-baseline flag is set (baseline: false)', async () => {
-    const askUser = vi.fn();
-    const deps = createTestDeps(gitCloneSuccess, {}, true);
-
-    const result = await createInstance('auth', 'https://github.com/user/bmad-orch.git', deps, {
-      baseline: false,
-      askUser,
-    });
-
-    expect(result.ok).toBe(true);
-    // askUser should NOT have been called (flag overrides prompt)
-    expect(askUser).not.toHaveBeenCalled();
-    // Baseline config should NOT have been copied, but status bar template IS deployed to .agent-env/
-    const cpCalls = (deps.devcontainerFsDeps.cp as ReturnType<typeof vi.fn>).mock.calls;
-    expect(cpCalls).toHaveLength(1);
-    const [src, dest] = cpCalls[0] as [string, string];
-    expect(src).toContain('statusBar.template.json');
-    expect(dest).toContain(join(AGENT_ENV_DIR, 'statusBar.template.json'));
-    if (!result.ok) throw new Error('Expected success');
-
-    const stateContent = await readFile(result.workspacePath.stateFile, 'utf-8');
-    const state = JSON.parse(stateContent);
-    expect(state.configSource).toBe('repo');
-  });
-
-  it('defaults to repo config when no askUser callback and repo has config', async () => {
-    // No askUser provided — non-interactive fallback
-    const deps = createTestDeps(gitCloneSuccess, {}, true);
-
-    const result = await createInstance('auth', 'https://github.com/user/bmad-orch.git', deps);
-
-    expect(result.ok).toBe(true);
-    if (!result.ok) throw new Error('Expected success');
-
-    const stateContent = await readFile(result.workspacePath.stateFile, 'utf-8');
-    const state = JSON.parse(stateContent);
-    expect(state.configSource).toBe('repo');
-  });
-
-  it('uses baseline when --baseline flag set and repo has NO config', async () => {
-    const deps = createTestDeps(gitCloneSuccess, {}, false);
-
-    const result = await createInstance('auth', 'https://github.com/user/bmad-orch.git', deps, {
-      baseline: true,
-    });
-
-    expect(result.ok).toBe(true);
-    if (!result.ok) throw new Error('Expected success');
-
-    const stateContent = await readFile(result.workspacePath.stateFile, 'utf-8');
-    const state = JSON.parse(stateContent);
-    expect(state.configSource).toBe('baseline');
-  });
-
-  it('uses baseline when --no-baseline flag set but repo has NO config', async () => {
-    // --no-baseline but no repo config → baseline is the only option
-    const deps = createTestDeps(gitCloneSuccess, {}, false);
-
-    const result = await createInstance('auth', 'https://github.com/user/bmad-orch.git', deps, {
-      baseline: false,
-    });
-
-    expect(result.ok).toBe(true);
-    if (!result.ok) throw new Error('Expected success');
-
-    const stateContent = await readFile(result.workspacePath.stateFile, 'utf-8');
-    const state = JSON.parse(stateContent);
-    expect(state.configSource).toBe('baseline');
-  });
-
-  it('passes configPath for baseline when user chose baseline via prompt', async () => {
-    const askUser = vi.fn().mockResolvedValue('baseline');
-    const deps = createTestDeps(gitCloneSuccess, {}, true);
-
-    await createInstance('auth', 'https://github.com/user/bmad-orch.git', deps, {
-      askUser,
-    });
-
-    expect(deps.container.devcontainerUp).toHaveBeenCalledWith(
-      expect.any(String),
-      expect.any(String),
-      expect.objectContaining({
-        configPath: expect.stringContaining(join('.agent-env', 'devcontainer.json')),
-      })
-    );
-  });
-
-  it('does not pass configPath when using repo config', async () => {
-    const askUser = vi.fn().mockResolvedValue('repo');
-    const deps = createTestDeps(gitCloneSuccess, {}, true);
-
-    await createInstance('auth', 'https://github.com/user/bmad-orch.git', deps, {
-      askUser,
-    });
-
-    expect(deps.container.devcontainerUp).toHaveBeenCalledWith(
-      expect.any(String),
-      expect.any(String),
-      expect.objectContaining({
-        configPath: undefined,
-      })
-    );
   });
 });
 

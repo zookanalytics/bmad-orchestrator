@@ -4,17 +4,16 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 
+import type { DevcontainerFsDeps } from './devcontainer.js';
+
 import {
-  applyBaselinePatches,
-  copyBaselineConfig,
+  copyManagedAssets,
   copyStatusBarTemplate,
   getBaselineConfigPath,
   getPackageRoot,
   getTemplatesPath,
   hasDevcontainerConfig,
   listBaselineFiles,
-  patchContainerName,
-  patchContainerEnv,
   resetPackageRoot,
   resolveDockerfilePath,
   parseDockerfileImages,
@@ -130,21 +129,18 @@ describe('hasDevcontainerConfig', () => {
   });
 
   it('returns true when root-level devcontainer.json exists', async () => {
-    const { writeFile } = await import('node:fs/promises');
     await writeFile(join(tempDir, 'devcontainer.json'), '{}');
     const result = await hasDevcontainerConfig(tempDir);
     expect(result).toBe(true);
   });
 
   it('returns true when root-level .devcontainer.json exists', async () => {
-    const { writeFile } = await import('node:fs/promises');
     await writeFile(join(tempDir, '.devcontainer.json'), '{}');
     const result = await hasDevcontainerConfig(tempDir);
     expect(result).toBe(true);
   });
 
   it('returns false when .devcontainer path exists but is a file', async () => {
-    const { writeFile } = await import('node:fs/promises');
     await writeFile(join(tempDir, '.devcontainer'), 'not a directory');
     const result = await hasDevcontainerConfig(tempDir);
     // .devcontainer is a file not a dir, and devcontainer.json doesn't exist
@@ -154,43 +150,6 @@ describe('hasDevcontainerConfig', () => {
   it('returns false for non-existent workspace path', async () => {
     const result = await hasDevcontainerConfig(join(tempDir, 'nonexistent'));
     expect(result).toBe(false);
-  });
-});
-
-// ─── copyBaselineConfig ──────────────────────────────────────────────────────
-
-describe('copyBaselineConfig', () => {
-  it('creates .agent-env/ directory in workspace', async () => {
-    await copyBaselineConfig(tempDir);
-    const stats = await stat(join(tempDir, '.agent-env'));
-    expect(stats.isDirectory()).toBe(true);
-  });
-
-  it('copies devcontainer.json to workspace', async () => {
-    await copyBaselineConfig(tempDir);
-    const stats = await stat(join(tempDir, '.agent-env', 'devcontainer.json'));
-    expect(stats.isFile()).toBe(true);
-  });
-
-  it('copies init-host.sh to workspace', async () => {
-    await copyBaselineConfig(tempDir);
-    const stats = await stat(join(tempDir, '.agent-env', 'init-host.sh'));
-    expect(stats.isFile()).toBe(true);
-  });
-
-  it('creates .agent-env/ even if parent dirs are missing', async () => {
-    const deepPath = join(tempDir, 'nested', 'workspace');
-    await mkdir(deepPath, { recursive: true });
-    await copyBaselineConfig(deepPath);
-
-    const stats = await stat(join(deepPath, '.agent-env', 'devcontainer.json'));
-    expect(stats.isFile()).toBe(true);
-  });
-
-  it('workspace is not detected by hasDevcontainerConfig after copy (config is in .agent-env/)', async () => {
-    expect(await hasDevcontainerConfig(tempDir)).toBe(false);
-    await copyBaselineConfig(tempDir);
-    expect(await hasDevcontainerConfig(tempDir)).toBe(false);
   });
 });
 
@@ -218,7 +177,9 @@ describe('listBaselineFiles', () => {
       .fn()
       .mockRejectedValue(Object.assign(new Error('ENOENT'), { code: 'ENOENT' }));
     await expect(
-      listBaselineFiles({ readdir: mockReaddir as unknown as typeof readdir })
+      listBaselineFiles({
+        readdir: mockReaddir as unknown as Pick<DevcontainerFsDeps, 'readdir'>['readdir'],
+      })
     ).rejects.toThrow('ENOENT');
   });
 });
@@ -267,118 +228,6 @@ describe('devcontainer.json content', () => {
 
   it('does not define customizations (provided by image LABEL metadata)', () => {
     expect(config.customizations).toBeUndefined();
-  });
-});
-
-// ─── patchContainerName ──────────────────────────────────────────────────────
-
-describe('patchContainerName', () => {
-  it('adds runArgs with --name to devcontainer.json', async () => {
-    await copyBaselineConfig(tempDir);
-    await patchContainerName(tempDir, 'ae-my-project-auth', undefined, '.agent-env');
-
-    const content = await readFile(join(tempDir, '.agent-env', 'devcontainer.json'), 'utf-8');
-    const config = JSON.parse(content);
-    expect(config.runArgs).toContain('--name=ae-my-project-auth');
-  });
-
-  it('preserves existing devcontainer.json properties', async () => {
-    await copyBaselineConfig(tempDir);
-    await patchContainerName(tempDir, 'ae-test', undefined, '.agent-env');
-
-    const content = await readFile(join(tempDir, '.agent-env', 'devcontainer.json'), 'utf-8');
-    const config = JSON.parse(content);
-    expect(config.image).toBe('ghcr.io/zookanalytics/bmad-orchestrator/devcontainer:latest');
-    expect(config.initializeCommand).toContain('init-host.sh');
-  });
-
-  it('replaces existing --name flag in runArgs', async () => {
-    const { writeFile } = await import('node:fs/promises');
-    await mkdir(join(tempDir, '.devcontainer'), { recursive: true });
-    await writeFile(
-      join(tempDir, '.devcontainer', 'devcontainer.json'),
-      JSON.stringify({ runArgs: ['--name=old-name', '--hostname=test'] })
-    );
-
-    await patchContainerName(tempDir, 'ae-new-name');
-
-    const content = await readFile(join(tempDir, '.devcontainer', 'devcontainer.json'), 'utf-8');
-    const config = JSON.parse(content);
-    expect(config.runArgs).toEqual(['--hostname=test', '--name=ae-new-name']);
-  });
-});
-
-// ─── patchContainerEnv ───────────────────────────────────────────────────────
-
-describe('patchContainerEnv', () => {
-  it('adds containerEnv entries to baseline devcontainer.json', async () => {
-    await copyBaselineConfig(tempDir);
-    await patchContainerEnv(
-      tempDir,
-      { AGENT_ENV_INSTANCE: 'bmad-orch-auth', AGENT_ENV_REPO: 'bmad-orch' },
-      undefined,
-      '.agent-env'
-    );
-
-    const content = await readFile(join(tempDir, '.agent-env', 'devcontainer.json'), 'utf-8');
-    const config = JSON.parse(content);
-    expect(config.containerEnv.AGENT_ENV_INSTANCE).toBe('bmad-orch-auth');
-    expect(config.containerEnv.AGENT_ENV_REPO).toBe('bmad-orch');
-  });
-
-  it('preserves existing containerEnv entries', async () => {
-    await copyBaselineConfig(tempDir);
-    await patchContainerEnv(
-      tempDir,
-      { AGENT_ENV_INSTANCE: 'test-instance' },
-      undefined,
-      '.agent-env'
-    );
-
-    const content = await readFile(join(tempDir, '.agent-env', 'devcontainer.json'), 'utf-8');
-    const config = JSON.parse(content);
-    // Should preserve the AGENT_ENV_CONTAINER=true from baseline
-    expect(config.containerEnv.AGENT_ENV_CONTAINER).toBe('true');
-    expect(config.containerEnv.AGENT_ENV_INSTANCE).toBe('test-instance');
-  });
-
-  it('overwrites existing env var with same key', async () => {
-    await mkdir(join(tempDir, '.devcontainer'), { recursive: true });
-    await writeFile(
-      join(tempDir, '.devcontainer', 'devcontainer.json'),
-      JSON.stringify({ containerEnv: { FOO: 'old-value', BAR: 'keep' } })
-    );
-
-    await patchContainerEnv(tempDir, { FOO: 'new-value' });
-
-    const content = await readFile(join(tempDir, '.devcontainer', 'devcontainer.json'), 'utf-8');
-    const config = JSON.parse(content);
-    expect(config.containerEnv.FOO).toBe('new-value');
-    expect(config.containerEnv.BAR).toBe('keep');
-  });
-
-  it('creates containerEnv when none exists', async () => {
-    await mkdir(join(tempDir, '.devcontainer'), { recursive: true });
-    await writeFile(
-      join(tempDir, '.devcontainer', 'devcontainer.json'),
-      JSON.stringify({ image: 'node:22' })
-    );
-
-    await patchContainerEnv(tempDir, { MY_VAR: 'my-value' });
-
-    const content = await readFile(join(tempDir, '.devcontainer', 'devcontainer.json'), 'utf-8');
-    const config = JSON.parse(content);
-    expect(config.containerEnv.MY_VAR).toBe('my-value');
-  });
-
-  it('preserves other devcontainer.json properties', async () => {
-    await copyBaselineConfig(tempDir);
-    await patchContainerEnv(tempDir, { AGENT_ENV_INSTANCE: 'test' }, undefined, '.agent-env');
-
-    const content = await readFile(join(tempDir, '.agent-env', 'devcontainer.json'), 'utf-8');
-    const config = JSON.parse(content);
-    expect(config.image).toBe('ghcr.io/zookanalytics/bmad-orchestrator/devcontainer:latest');
-    expect(config.initializeCommand).toContain('init-host.sh');
   });
 });
 
@@ -576,171 +425,6 @@ FROM builder`;
   });
 });
 
-// ─── applyBaselinePatches ────────────────────────────────────────────────────
-
-describe('applyBaselinePatches', () => {
-  it('applies container name, env vars, and vscode settings in a single write', async () => {
-    await copyBaselineConfig(tempDir);
-
-    await applyBaselinePatches(
-      tempDir,
-      'ae-bmad-orch-auth',
-      { AGENT_ENV_INSTANCE: 'bmad-orch-auth', AGENT_ENV_PURPOSE: 'OAuth' },
-      { readFile, writeFile },
-      '.agent-env'
-    );
-
-    const content = await readFile(join(tempDir, '.agent-env', 'devcontainer.json'), 'utf-8');
-    const config = JSON.parse(content);
-
-    // Container name
-    expect(config.runArgs).toContain('--name=ae-bmad-orch-auth');
-    // Env vars (merged with existing)
-    expect(config.containerEnv.AGENT_ENV_CONTAINER).toBe('true');
-    expect(config.containerEnv.AGENT_ENV_INSTANCE).toBe('bmad-orch-auth');
-    expect(config.containerEnv.AGENT_ENV_PURPOSE).toBe('OAuth');
-    // VS Code settings
-    expect(config.customizations.vscode.settings['betterStatusBar.configurationFile']).toBe(
-      '/etc/agent-env/statusBar.json'
-    );
-    // Filewatcher triggers status bar refresh on external changes
-    expect(config.customizations.vscode.settings['filewatcher.commands']).toEqual([
-      {
-        match: 'statusBar.json$',
-        event: 'onFolderChange',
-        vscodeTask: 'betterStatusBar.refreshButtons',
-      },
-    ]);
-  });
-
-  it('preserves existing runArgs while patching --name', async () => {
-    const configDir = join(tempDir, '.agent-env');
-    await mkdir(configDir, { recursive: true });
-    await writeFile(
-      join(configDir, 'devcontainer.json'),
-      JSON.stringify({ runArgs: ['--hostname=test', '--name=old-name'] })
-    );
-
-    await applyBaselinePatches(tempDir, 'ae-new', {}, { readFile, writeFile }, '.agent-env');
-
-    const content = await readFile(join(configDir, 'devcontainer.json'), 'utf-8');
-    const config = JSON.parse(content);
-    expect(config.runArgs).toEqual(['--hostname=test', '--name=ae-new']);
-  });
-
-  it('creates customizations.vscode.settings when absent', async () => {
-    const configDir = join(tempDir, '.agent-env');
-    await mkdir(configDir, { recursive: true });
-    await writeFile(join(configDir, 'devcontainer.json'), JSON.stringify({ image: 'node:22' }));
-
-    await applyBaselinePatches(tempDir, 'ae-test', {}, { readFile, writeFile }, '.agent-env');
-
-    const content = await readFile(join(configDir, 'devcontainer.json'), 'utf-8');
-    const config = JSON.parse(content);
-    expect(config.customizations.vscode.settings['betterStatusBar.configurationFile']).toBe(
-      '/etc/agent-env/statusBar.json'
-    );
-    expect(config.customizations.vscode.settings['filewatcher.commands']).toEqual([
-      {
-        match: 'statusBar.json$',
-        event: 'onFolderChange',
-        vscodeTask: 'betterStatusBar.refreshButtons',
-      },
-    ]);
-  });
-
-  it('preserves existing vscode settings while adding betterStatusBar', async () => {
-    const configDir = join(tempDir, '.agent-env');
-    await mkdir(configDir, { recursive: true });
-    await writeFile(
-      join(configDir, 'devcontainer.json'),
-      JSON.stringify({
-        customizations: {
-          vscode: {
-            settings: { 'editor.fontSize': 14 },
-          },
-        },
-      })
-    );
-
-    await applyBaselinePatches(tempDir, 'ae-test', {}, { readFile, writeFile }, '.agent-env');
-
-    const content = await readFile(join(configDir, 'devcontainer.json'), 'utf-8');
-    const config = JSON.parse(content);
-    expect(config.customizations.vscode.settings['editor.fontSize']).toBe(14);
-    expect(config.customizations.vscode.settings['betterStatusBar.configurationFile']).toBe(
-      '/etc/agent-env/statusBar.json'
-    );
-  });
-
-  it('merges filewatcher.commands with existing watchers instead of overwriting', async () => {
-    const configDir = join(tempDir, '.agent-env');
-    await mkdir(configDir, { recursive: true });
-    const existingWatcher = {
-      match: '\\.md$',
-      event: 'onFileChange',
-      vscodeTask: 'markdown.refreshPreview',
-    };
-    await writeFile(
-      join(configDir, 'devcontainer.json'),
-      JSON.stringify({
-        customizations: {
-          vscode: {
-            settings: {
-              'filewatcher.commands': [existingWatcher],
-            },
-          },
-        },
-      })
-    );
-
-    await applyBaselinePatches(tempDir, 'ae-test', {}, { readFile, writeFile }, '.agent-env');
-
-    const content = await readFile(join(configDir, 'devcontainer.json'), 'utf-8');
-    const config = JSON.parse(content);
-    const commands = config.customizations.vscode.settings['filewatcher.commands'];
-    // Existing watcher preserved
-    expect(commands).toContainEqual(existingWatcher);
-    // Our watcher appended
-    expect(commands).toContainEqual(
-      expect.objectContaining({
-        match: 'statusBar.json$',
-        vscodeTask: 'betterStatusBar.refreshButtons',
-      })
-    );
-    expect(commands).toHaveLength(2);
-  });
-
-  it('does not duplicate filewatcher watcher if already present', async () => {
-    const configDir = join(tempDir, '.agent-env');
-    await mkdir(configDir, { recursive: true });
-    const ourWatcher = {
-      match: 'statusBar.json$',
-      event: 'onFolderChange',
-      vscodeTask: 'betterStatusBar.refreshButtons',
-    };
-    await writeFile(
-      join(configDir, 'devcontainer.json'),
-      JSON.stringify({
-        customizations: {
-          vscode: {
-            settings: {
-              'filewatcher.commands': [ourWatcher],
-            },
-          },
-        },
-      })
-    );
-
-    await applyBaselinePatches(tempDir, 'ae-test', {}, { readFile, writeFile }, '.agent-env');
-
-    const content = await readFile(join(configDir, 'devcontainer.json'), 'utf-8');
-    const config = JSON.parse(content);
-    const commands = config.customizations.vscode.settings['filewatcher.commands'];
-    expect(commands).toHaveLength(1);
-  });
-});
-
 // ─── copyStatusBarTemplate ──────────────────────────────────────────────────
 
 describe('copyStatusBarTemplate', () => {
@@ -769,10 +453,7 @@ describe('copyStatusBarTemplate', () => {
     };
 
     await expect(
-      copyStatusBarTemplate(
-        tempDir,
-        mockDeps as unknown as Parameters<typeof copyStatusBarTemplate>[1]
-      )
+      copyStatusBarTemplate(tempDir, mockDeps as unknown as DevcontainerFsDeps)
     ).resolves.not.toThrow();
     expect(mockDeps.cp).not.toHaveBeenCalled();
   });
@@ -787,11 +468,27 @@ describe('copyStatusBarTemplate', () => {
     };
 
     await expect(
-      copyStatusBarTemplate(
-        tempDir,
-        mockDeps as unknown as Parameters<typeof copyStatusBarTemplate>[1]
-      )
+      copyStatusBarTemplate(tempDir, mockDeps as unknown as DevcontainerFsDeps)
     ).rejects.toThrow('Permission denied');
     expect(mockDeps.cp).not.toHaveBeenCalled();
+  });
+});
+
+// ─── copyManagedAssets ───────────────────────────────────────────────────────
+
+describe('copyManagedAssets', () => {
+  it('copies managed assets and skip devcontainer.json', async () => {
+    await copyManagedAssets(tempDir);
+
+    // Should have init-host.sh
+    const initHostStats = await stat(join(tempDir, '.agent-env', 'init-host.sh'));
+    expect(initHostStats.isFile()).toBe(true);
+
+    // Should NOT have devcontainer.json (it's skipped by filter)
+    await expect(stat(join(tempDir, '.agent-env', 'devcontainer.json'))).rejects.toThrow('ENOENT');
+
+    // Should have statusBar.template.json
+    const templateStats = await stat(join(tempDir, '.agent-env', 'statusBar.template.json'));
+    expect(templateStats.isFile()).toBe(true);
   });
 });
