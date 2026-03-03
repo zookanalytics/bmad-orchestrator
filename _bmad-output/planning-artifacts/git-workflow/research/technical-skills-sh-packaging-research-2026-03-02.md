@@ -10,14 +10,14 @@ research_type: 'technical'
 research_topic: 'skills.sh packaging and distribution standard'
 research_goals: 'Understand packaging format, naming conventions, and distribution mechanics for shipping git-workflow; identify existing similar git-related skills packages'
 user_name: 'Node'
-date: '2026-03-02'
+startedAt: '2026-03-02'
 web_research_enabled: true
 source_verification: true
 ---
 
 # Packaging git-workflow for the Agent Skills Ecosystem: Technical Research
 
-**Date:** 2026-03-02
+**Date:** 2026-03-02 to 2026-03-03
 **Author:** Node
 **Research Type:** Technical — skills.sh packaging and distribution standard
 
@@ -690,10 +690,10 @@ _Sources: [ShellSpec](https://shellspec.info/), [ShellSpec GitHub](https://githu
 
 The agent-tools monorepo already has changeset infrastructure in place:
 
-**Existing setup (from `.changeset/config.json`):**
-- Scope: `@zookanalytics`
-- Access: `public`
-- Base branch: `main`
+**Existing setup:**
+- Scope: `@zookanalytics` (convention from existing `packages/*/package.json` files)
+- Access: `public` (from `.changeset/config.json`)
+- Base branch: `main` (from `.changeset/config.json`)
 - Changelog: `@changesets/changelog-github` tied to `ZookAnalytics/bmad-orchestrator`
 - GitHub Actions: automated "Version Packages" PRs
 

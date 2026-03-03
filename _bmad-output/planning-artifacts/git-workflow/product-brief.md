@@ -95,7 +95,7 @@ AI coding agents (Claude Code, Gemini CLI, Codex) and automated workflow systems
 
 ### User Journey
 
-1. **Installation:** `npx skills add @zookanalytics/git-workflow` — skills appear in the agent's available commands. Optional `npm install` adds git hooks for deterministic enforcement.
+1. **Installation:** `npx skills add zookanalytics/git-workflow` — skills appear in the agent's available commands. Optional `npm install @zookanalytics/git-workflow` adds git hooks for deterministic enforcement.
 2. **Calibration:** Skills discover existing project conventions (commit spec, PR templates, CI config). Developer validates that the skill understands the project's standards — a brief alignment step, not a configuration project.
 3. **First use:** Developer invokes `/commit` after a coding session. The skill runs checks, crafts a message respecting the project's commit spec, and produces a clean commit. Developer thinks: "that's what I used to do manually in 5 steps."
 4. **Daily use:** Skills become invisible infrastructure. Agents call commit as part of automated workflows. Developer calls PR Update when signing off on work, PR Merge when CI is green. The manual checklist disappears.
