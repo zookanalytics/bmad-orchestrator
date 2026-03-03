@@ -17,6 +17,7 @@ import { purposeCommand } from './commands/purpose.js';
 import { rebuildCommand } from './commands/rebuild.js';
 import { removeCommand } from './commands/remove.js';
 import { reposCommand } from './commands/repos.js';
+import { tmuxStatusCommand } from './commands/tmux-status.js';
 import { InteractiveMenu } from './components/InteractiveMenu.js';
 import { attachInstance, createAttachDefaultDeps } from './lib/attach-instance.js';
 import { launchInteractiveMenu } from './lib/interactive-menu.js';
@@ -42,6 +43,7 @@ program.addCommand(rebuildCommand);
 program.addCommand(removeCommand);
 program.addCommand(purposeCommand);
 program.addCommand(reposCommand);
+program.addCommand(tmuxStatusCommand);
 program.addCommand(completionCommand);
 
 // Default action: interactive menu (TTY) or help (non-TTY)

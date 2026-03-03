@@ -9,7 +9,7 @@ import type { ContainerLifecycle } from './container.js';
 import type { CreateInstanceDeps } from './create-instance.js';
 
 import { createInstance, resolveRepoUrl, attachToInstance } from './create-instance.js';
-import { getBaselineConfigPath } from './devcontainer.js';
+import { getBaselineConfigPath, getTemplatesPath } from './devcontainer.js';
 import { AGENT_ENV_DIR, WORKSPACES_DIR } from './types.js';
 
 // ─── createInstance tests ───────────────────────────────────────────────────
@@ -65,9 +65,10 @@ function createMockContainer(overrides: Partial<ContainerLifecycle> = {}): Conta
  */
 function createDevcontainerStatMock(hasExistingDevcontainer: boolean) {
   const baselinePath = getBaselineConfigPath();
+  const templatesPath = getTemplatesPath();
   return vi.fn().mockImplementation(async (path: string) => {
-    // Allow baseline config path to use real stat
-    if (path.startsWith(baselinePath) || path === baselinePath) {
+    // Allow baseline config and templates paths to use real stat
+    if (path.startsWith(baselinePath) || path.startsWith(templatesPath)) {
       return stat(path);
     }
     // For workspace paths (.devcontainer checks)
@@ -497,10 +498,31 @@ describe('createInstance', () => {
 
     await createInstance('auth', 'https://github.com/user/bmad-orch.git', deps);
 
-    // Should not copy or patch since .devcontainer already exists
-    expect(deps.devcontainerFsDeps.cp).not.toHaveBeenCalled();
+    // Baseline config should NOT be copied, but status bar template IS deployed to .agent-env/
+    const cpCalls = (deps.devcontainerFsDeps.cp as ReturnType<typeof vi.fn>).mock.calls;
+    expect(cpCalls).toHaveLength(1);
+    const [src, dest] = cpCalls[0] as [string, string];
+    expect(src).toContain('statusBar.template.json');
+    expect(dest).toContain(join(AGENT_ENV_DIR, 'statusBar.template.json'));
+    // No baseline patching (readFile/writeFile for devcontainer.json)
     expect(deps.devcontainerFsDeps.readFile).not.toHaveBeenCalled();
     expect(deps.devcontainerFsDeps.writeFile).not.toHaveBeenCalled();
+  });
+
+  it('succeeds and logs warning when status bar template copy fails for repo config', async () => {
+    const deps = createTestDeps(gitCloneSuccess, {}, true);
+    // Make cp fail (simulates permission error on .agent-env/ write)
+    (deps.devcontainerFsDeps.cp as ReturnType<typeof vi.fn>).mockRejectedValue(
+      new Error('EACCES: permission denied')
+    );
+
+    const result = await createInstance('auth', 'https://github.com/user/bmad-orch.git', deps);
+
+    // Should succeed — template copy failure is non-fatal for repo-config instances
+    expect(result.ok).toBe(true);
+    expect(deps.logger?.warn).toHaveBeenCalledWith(
+      expect.stringContaining('Failed to copy status bar template')
+    );
   });
 
   it('applies baseline patches (name, env, settings) to devcontainer.json', async () => {
@@ -853,8 +875,12 @@ describe('createInstance baseline choice', () => {
     expect(result.ok).toBe(true);
     // askUser should NOT have been called (flag overrides prompt)
     expect(askUser).not.toHaveBeenCalled();
-    // Baseline config should NOT have been copied
-    expect(deps.devcontainerFsDeps.cp).not.toHaveBeenCalled();
+    // Baseline config should NOT have been copied, but status bar template IS deployed to .agent-env/
+    const cpCalls = (deps.devcontainerFsDeps.cp as ReturnType<typeof vi.fn>).mock.calls;
+    expect(cpCalls).toHaveLength(1);
+    const [src, dest] = cpCalls[0] as [string, string];
+    expect(src).toContain('statusBar.template.json');
+    expect(dest).toContain(join(AGENT_ENV_DIR, 'statusBar.template.json'));
     if (!result.ok) throw new Error('Expected success');
 
     const stateContent = await readFile(result.workspacePath.stateFile, 'utf-8');

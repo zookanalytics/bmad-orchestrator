@@ -376,10 +376,15 @@ describe('rebuildInstance', () => {
     });
     const deps = createTestDeps();
 
-    // Override to 'repo' — should NOT refresh baseline config
+    // Override to 'repo' — should NOT refresh baseline config, but DOES deploy status bar template
     await rebuildInstance('auth', deps, { force: false, configSource: 'repo' });
 
-    expect(deps.devcontainerFsDeps.cp).not.toHaveBeenCalled();
+    // cp is called for status bar template to .agent-env/, not for baseline config
+    const cpCalls = (deps.devcontainerFsDeps.cp as ReturnType<typeof vi.fn>).mock.calls;
+    expect(cpCalls).toHaveLength(1);
+    const [src, dest] = cpCalls[0] as [string, string];
+    expect(src).toContain('statusBar.template.json');
+    expect(dest).toContain(join(AGENT_ENV_DIR, 'statusBar.template.json'));
   });
 
   it('does not warn about extra files during baseline refresh (copies directly into .agent-env/)', async () => {
@@ -484,8 +489,32 @@ describe('rebuildInstance', () => {
 
     await rebuildInstance('auth', deps);
 
-    // Should NOT copy baseline files when configSource is 'repo'
-    expect(deps.devcontainerFsDeps.cp).not.toHaveBeenCalled();
+    // Should NOT copy baseline files, but DOES deploy status bar template to .agent-env/
+    const cpCalls = (deps.devcontainerFsDeps.cp as ReturnType<typeof vi.fn>).mock.calls;
+    expect(cpCalls).toHaveLength(1);
+    const [src, dest] = cpCalls[0] as [string, string];
+    expect(src).toContain('statusBar.template.json');
+    expect(dest).toContain(join(AGENT_ENV_DIR, 'statusBar.template.json'));
+  });
+
+  it('succeeds and logs warning when status bar template copy fails for repo config', async () => {
+    const state = createTestState('repo-auth', { configSource: 'repo' });
+    await createTestWorkspace('repo-auth', state, {
+      devcontainerFiles: ['devcontainer.json', 'Dockerfile'],
+    });
+    const deps = createTestDeps();
+    // Make cp fail (simulates permission error on .agent-env/ write)
+    (deps.devcontainerFsDeps.cp as ReturnType<typeof vi.fn>).mockRejectedValue(
+      new Error('EACCES: permission denied')
+    );
+
+    const result = await rebuildInstance('auth', deps);
+
+    // Should succeed — template copy failure is non-fatal for repo-config instances
+    expect(result.ok).toBe(true);
+    expect(deps.logger?.warn).toHaveBeenCalledWith(
+      expect.stringContaining('Failed to copy status bar template')
+    );
   });
 
   it('returns CONFIG_MISSING when repo config is absent on disk', async () => {

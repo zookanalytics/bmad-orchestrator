@@ -196,6 +196,29 @@ async function refreshConfig(
         };
       }
     }
+
+    // Deploy status bar template if not already present (needed by `agent-env purpose` in container).
+    // Non-fatal: template is optional — `agent-env purpose` will still succeed and show a helpful
+    // TEMPLATE_NOT_FOUND warning if it's missing, and users can add one manually.
+    const templatePath = join(wsRoot, AGENT_ENV_DIR, 'statusBar.template.json');
+    try {
+      await deps.devcontainerFsDeps.stat(templatePath);
+      // exists — skip, preserve user customizations
+    } catch (err: unknown) {
+      if ((err as NodeJS.ErrnoException).code === 'ENOENT') {
+        try {
+          await copyStatusBarTemplate(wsRoot, deps.devcontainerFsDeps);
+        } catch (copyErr) {
+          deps.logger?.warn(
+            `Warning: Failed to copy status bar template: ${copyErr instanceof Error ? copyErr.message : String(copyErr)}`
+          );
+        }
+      } else {
+        deps.logger?.warn(
+          `Warning: Unexpected error checking status bar template: ${(err as NodeJS.ErrnoException).code}`
+        );
+      }
+    }
   }
 
   return { ok: true };

@@ -1,9 +1,11 @@
 /**
- * Unit tests for image/scripts/tmux-purpose.sh
+ * Integration tests for image/scripts/tmux-purpose.sh (thin wrapper)
  *
- * Tests the jq-based extraction logic of the tmux purpose display script.
- * Each test writes a fixture state.json, runs the script with STATE_FILE overridden,
- * and asserts the output.
+ * The shell script delegates to `agent-env tmux-status` and falls back
+ * to "?" when agent-env is unavailable. The actual formatting and state
+ * parsing logic is tested in tmux-status.test.ts.
+ *
+ * These tests verify the wrapper's fallback behavior by manipulating PATH.
  */
 
 import { execSync } from 'node:child_process';
@@ -16,9 +18,8 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 // ─── Test helpers ────────────────────────────────────────────────────────────
 
 let tempDir: string;
-let stateFile: string;
 
-// Resolve script path from package root (src/lib/ → ../../ → package root → ../../../../image/scripts/)
+// Resolve script path from package root
 const currentDir = fileURLToPath(new URL('.', import.meta.url));
 const SCRIPT_PATH = join(currentDir, '..', '..', '..', '..', 'image', 'scripts', 'tmux-purpose.sh');
 
@@ -28,7 +29,6 @@ beforeEach(() => {
     `tmux-purpose-test-${Date.now()}-${Math.random().toString(36).slice(2)}`
   );
   mkdirSync(tempDir, { recursive: true });
-  stateFile = join(tempDir, 'state.json');
 });
 
 afterEach(() => {
@@ -36,138 +36,67 @@ afterEach(() => {
 });
 
 /**
- * Run tmux-purpose.sh with STATE_FILE overridden to a test fixture path.
- * Uses STATE_FILE_OVERRIDE environment variable.
+ * Run tmux-purpose.sh with a fake agent-env script on PATH.
+ * The fake script outputs the given string and exits with the given code.
  */
-function runPurposeScript(stateFilePath: string): string {
+function runWithFakeAgentEnv(fakeOutput: string, exitCode = 0): string {
+  // Create a fake agent-env script
+  const fakeBinDir = join(tempDir, 'bin');
+  mkdirSync(fakeBinDir, { recursive: true });
+  writeFileSync(
+    join(fakeBinDir, 'agent-env'),
+    `#!/bin/bash\necho "${fakeOutput}"\nexit ${exitCode}\n`,
+    { mode: 0o755 }
+  );
+
   try {
     return execSync(`bash "${SCRIPT_PATH}"`, {
       encoding: 'utf-8',
       timeout: 5000,
-      env: { ...process.env, STATE_FILE_OVERRIDE: stateFilePath },
+      env: { ...process.env, PATH: `${fakeBinDir}:${process.env.PATH}` },
     }).trim();
   } catch (error) {
-    // Script may exit 0 but produce output on stderr
-    const err = error as { stdout?: string; stderr?: string };
+    const err = error as { stdout?: string };
+    return (err.stdout ?? '').trim();
+  }
+}
+
+/**
+ * Run tmux-purpose.sh with agent-env removed from PATH.
+ */
+function runWithoutAgentEnv(): string {
+  try {
+    return execSync(`bash "${SCRIPT_PATH}"`, {
+      encoding: 'utf-8',
+      timeout: 5000,
+      env: { ...process.env, PATH: '/usr/bin:/bin' },
+    }).trim();
+  } catch (error) {
+    const err = error as { stdout?: string };
     return (err.stdout ?? '').trim();
   }
 }
 
 // ─── Tests ───────────────────────────────────────────────────────────────────
 
-describe('tmux-purpose.sh', () => {
-  describe('purpose display formatting', () => {
-    it('shows "instance | purpose" when purpose is set', () => {
-      writeFileSync(stateFile, JSON.stringify({ instance: 'auth', purpose: 'JWT authentication' }));
-      expect(runPurposeScript(stateFile)).toBe('auth | JWT authentication');
-    });
-
-    it('shows instance name only when purpose is null', () => {
-      writeFileSync(stateFile, JSON.stringify({ instance: 'auth', purpose: null }));
-      expect(runPurposeScript(stateFile)).toBe('auth');
-    });
-
-    it('shows instance name only when purpose is empty string', () => {
-      writeFileSync(stateFile, JSON.stringify({ instance: 'auth', purpose: '' }));
-      expect(runPurposeScript(stateFile)).toBe('auth');
-    });
-
-    it('shows instance name only when purpose key is absent', () => {
-      writeFileSync(stateFile, JSON.stringify({ instance: 'auth' }));
-      expect(runPurposeScript(stateFile)).toBe('auth');
-    });
+describe('tmux-purpose.sh (wrapper)', () => {
+  it('passes through agent-env tmux-status output', () => {
+    expect(runWithFakeAgentEnv('auth | JWT authentication')).toBe('auth | JWT authentication');
   });
 
-  describe('purpose truncation', () => {
-    it('does not truncate purpose at exactly 40 characters', () => {
-      const purpose40 = '1234567890123456789012345678901234567890'; // exactly 40
-      writeFileSync(stateFile, JSON.stringify({ instance: 'test', purpose: purpose40 }));
-      expect(runPurposeScript(stateFile)).toBe(`test | ${purpose40}`);
-    });
-
-    it('truncates purpose longer than 40 characters with ellipsis', () => {
-      const purpose41 = '12345678901234567890123456789012345678901'; // 41 chars
-      writeFileSync(stateFile, JSON.stringify({ instance: 'test', purpose: purpose41 }));
-      expect(runPurposeScript(stateFile)).toBe('test | 1234567890123456789012345678901234567890…');
-    });
-
-    it('truncates long real-world purpose', () => {
-      const longPurpose =
-        'This is a very long purpose that definitely exceeds forty characters in length';
-      writeFileSync(stateFile, JSON.stringify({ instance: 'my-instance', purpose: longPurpose }));
-      const result = runPurposeScript(stateFile);
-      expect(result).toContain('my-instance | ');
-      expect(result).toContain('…');
-      // The purpose part (after "my-instance | ") should be 40 chars + ellipsis
-      const purposePart = result.split(' | ')[1];
-      expect(purposePart.length).toBe(41); // 40 chars + "…"
-    });
+  it('passes through instance-only output', () => {
+    expect(runWithFakeAgentEnv('auth')).toBe('auth');
   });
 
-  describe('graceful fallbacks', () => {
-    it('shows "?" when state file does not exist', () => {
-      const nonExistent = join(tempDir, 'does-not-exist.json');
-      expect(runPurposeScript(nonExistent)).toBe('?');
-    });
-
-    it('shows "?" when state file contains malformed JSON', () => {
-      writeFileSync(stateFile, '{bad json content');
-      expect(runPurposeScript(stateFile)).toBe('?');
-    });
-
-    it('shows "?" when state file is empty', () => {
-      writeFileSync(stateFile, '');
-      expect(runPurposeScript(stateFile)).toBe('?');
-    });
-
-    it('shows "?" when instance is null', () => {
-      writeFileSync(stateFile, JSON.stringify({ instance: null, purpose: 'some purpose' }));
-      expect(runPurposeScript(stateFile)).toBe('?');
-    });
-
-    it('shows "?" when instance is empty string', () => {
-      writeFileSync(stateFile, JSON.stringify({ instance: '', purpose: 'some purpose' }));
-      expect(runPurposeScript(stateFile)).toBe('?');
-    });
-
-    it('shows "?" when JSON is empty object', () => {
-      writeFileSync(stateFile, '{}');
-      expect(runPurposeScript(stateFile)).toBe('?');
-    });
+  it('falls back to "?" when agent-env is not available', () => {
+    expect(runWithoutAgentEnv()).toBe('?');
   });
 
-  describe('real-world state.json', () => {
-    it('handles full state.json with all fields', () => {
-      writeFileSync(
-        stateFile,
-        JSON.stringify({
-          instance: 'epics',
-          repoSlug: 'bmad-orchestrator',
-          repoUrl: 'git@github.com:zookanalytics/bmad-orchestrator.git',
-          createdAt: '2026-02-15T09:13:56.366Z',
-          lastAttached: '2026-02-15T09:13:56.366Z',
-          purpose: 'Epic 6 implementation',
-          containerName: 'ae-bmad-orchestrator-epics',
-          configSource: 'repo',
-        })
-      );
-      expect(runPurposeScript(stateFile)).toBe('epics | Epic 6 implementation');
-    });
+  it('falls back to "?" when agent-env exits non-zero', () => {
+    expect(runWithFakeAgentEnv('', 1)).toBe('?');
+  });
 
-    it('handles state.json with purpose null and extra fields', () => {
-      writeFileSync(
-        stateFile,
-        JSON.stringify({
-          instance: 'dev',
-          repoSlug: 'my-project',
-          repoUrl: 'https://github.com/user/project.git',
-          createdAt: '2026-02-16T00:00:00.000Z',
-          lastAttached: '2026-02-16T00:00:00.000Z',
-          purpose: null,
-          containerName: 'ae-my-project-dev',
-        })
-      );
-      expect(runPurposeScript(stateFile)).toBe('dev');
-    });
+  it('falls back to "?" when agent-env returns empty output', () => {
+    expect(runWithFakeAgentEnv('')).toBe('?');
   });
 });

@@ -25,6 +25,9 @@ export const STATUS_BAR_TEMPLATE_JSON = 'statusBar.template.json';
 /** Generated file name (in .agent-env/, gitignored) */
 export const STATUS_BAR_JSON = 'statusBar.json';
 
+/** Error code thrown when no status bar template is found */
+export const TEMPLATE_NOT_FOUND = 'TEMPLATE_NOT_FOUND' as const;
+
 /** Placeholder token in the template */
 const PURPOSE_PLACEHOLDER = '{{PURPOSE}}';
 
@@ -95,7 +98,7 @@ export async function regenerateStatusBar(
         `No status bar template found. Checked ${vscodeTemplatePath} and ${agentEnvTemplatePath}. ` +
           'Create a template manually or use `agent-env init-template` when available.'
       ),
-      { code: 'TEMPLATE_NOT_FOUND' }
+      { code: TEMPLATE_NOT_FOUND }
     );
   }
 

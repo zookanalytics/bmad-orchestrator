@@ -20,7 +20,7 @@ import type { FsDeps } from './workspace.js';
 
 import { CONTAINER_AGENT_ENV_DIR, CONTAINER_STATE_PATH } from './container-env.js';
 import { readState, writeStateAtomic, isValidState } from './state.js';
-import { regenerateStatusBar } from './status-bar.js';
+import { regenerateStatusBar, TEMPLATE_NOT_FOUND } from './status-bar.js';
 import { getWorkspacePathByName, resolveInstance } from './workspace.js';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
@@ -35,7 +35,7 @@ export type PurposeGetResult =
   | { ok: false; error: { code: string; message: string; suggestion?: string } };
 
 export type PurposeSetResult =
-  | { ok: true; cleared: boolean }
+  | { ok: true; cleared: boolean; warning?: string }
   | { ok: false; error: { code: string; message: string; suggestion?: string } };
 
 export interface PurposeInstanceDeps {
@@ -59,6 +59,27 @@ export function createPurposeDefaultDeps(): PurposeInstanceDeps {
 }
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
+
+/**
+ * Wrapper around regenerateStatusBar that treats a missing template as non-fatal.
+ * Returns a warning string when the template is missing, or undefined on success.
+ */
+async function regenerateStatusBarSafe(
+  workspaceRoot: string,
+  agentEnvDir: string,
+  purpose: string | null,
+  statusBarDeps: StatusBarDeps
+): Promise<string | undefined> {
+  try {
+    await regenerateStatusBar(workspaceRoot, agentEnvDir, purpose, statusBarDeps);
+  } catch (err) {
+    if ((err as { code?: string }).code === TEMPLATE_NOT_FOUND) {
+      return `Status bar template not found — VS Code status bar won't update. Create one at .vscode/statusBar.template.json or ${agentEnvDir}/statusBar.template.json.`;
+    }
+    throw err;
+  }
+  return undefined;
+}
 
 function validatePurposeLength(value: string): PurposeSetResult | null {
   if (value.length > MAX_PURPOSE_LENGTH) {
@@ -144,24 +165,16 @@ export async function setPurpose(
   await writeStateAtomic(wsPath, updatedState, deps.stateFsDeps);
 
   // Regenerate statusBar.json from template (fallback chain: .vscode/ → .agent-env/)
-  try {
-    await regenerateStatusBar(wsPath.root, wsPath.agentEnvDir, newPurpose, deps.statusBarDeps);
-  } catch (err) {
-    if ((err as { code?: string }).code === 'TEMPLATE_NOT_FOUND') {
-      return {
-        ok: false,
-        error: {
-          code: 'TEMPLATE_NOT_FOUND',
-          message: (err as Error).message,
-          suggestion:
-            'Create a status bar template at .vscode/statusBar.template.json or .agent-env/statusBar.template.json.',
-        },
-      };
-    }
-    throw err;
-  }
+  // Template is optional — purpose is already persisted in state.json above.
+  // Missing template only affects VS Code status bar display, not core purpose storage.
+  const warning = await regenerateStatusBarSafe(
+    wsPath.root,
+    wsPath.agentEnvDir,
+    newPurpose,
+    deps.statusBarDeps
+  );
 
-  return { ok: true, cleared };
+  return { ok: true, cleared, warning };
 }
 
 // ─── Container-Aware Purpose Operations ─────────────────────────────────────
@@ -288,23 +301,15 @@ export async function setContainerPurpose(
   // State is persisted first — regenerateStatusBar failure is non-fatal for purpose storage
   await writeStateAtomic(wsPath, updatedState, deps.stateFsDeps);
 
-  // Regenerate statusBar.json from template (fallback chain: workspace root → .agent-env/)
-  try {
-    await regenerateStatusBar(deps.workspaceRoot, deps.agentEnvDir, newPurpose, deps.statusBarDeps);
-  } catch (err) {
-    if ((err as { code?: string }).code === 'TEMPLATE_NOT_FOUND') {
-      return {
-        ok: false,
-        error: {
-          code: 'TEMPLATE_NOT_FOUND',
-          message: (err as Error).message,
-          suggestion:
-            'Create a status bar template at .vscode/statusBar.template.json or .agent-env/statusBar.template.json.',
-        },
-      };
-    }
-    throw err;
-  }
+  // Regenerate statusBar.json from template (fallback chain: workspace root → agentEnvDir)
+  // Template is optional — purpose is already persisted in state.json above.
+  // Missing template only affects VS Code status bar display, not core purpose storage.
+  const warning = await regenerateStatusBarSafe(
+    deps.workspaceRoot,
+    deps.agentEnvDir,
+    newPurpose,
+    deps.statusBarDeps
+  );
 
-  return { ok: true, cleared };
+  return { ok: true, cleared, warning };
 }
