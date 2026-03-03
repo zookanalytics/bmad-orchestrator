@@ -1,3 +1,4 @@
+import { accessSync } from 'node:fs';
 import { mkdir, readdir, readFile, rm, stat, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -8,10 +9,13 @@ import {
   copyBaselineConfig,
   copyStatusBarTemplate,
   getBaselineConfigPath,
+  getPackageRoot,
+  getTemplatesPath,
   hasDevcontainerConfig,
   listBaselineFiles,
   patchContainerName,
   patchContainerEnv,
+  resetPackageRoot,
   resolveDockerfilePath,
   parseDockerfileImages,
 } from './devcontainer.js';
@@ -21,6 +25,7 @@ import {
 let tempDir: string;
 
 beforeEach(async () => {
+  resetPackageRoot();
   tempDir = join(
     tmpdir(),
     `agent-env-test-devcontainer-${Date.now()}-${Math.random().toString(36).slice(2)}`
@@ -32,23 +37,81 @@ afterEach(async () => {
   await rm(tempDir, { recursive: true, force: true });
 });
 
-// ─── getBaselineConfigPath ───────────────────────────────────────────────────
+// ─── getBaselineConfigPath & getTemplatesPath ────────────────────────────────
 
-describe('getBaselineConfigPath', () => {
-  it('returns a path ending with config/baseline', () => {
+describe('Path resolution (baseline & templates)', () => {
+  it('getBaselineConfigPath returns a path ending with config/baseline', () => {
     const result = getBaselineConfigPath();
     expect(result).toMatch(/config\/baseline$/);
+    expect(result).toMatch(/^\//); // absolute
   });
 
-  it('returns an absolute path', () => {
-    const result = getBaselineConfigPath();
-    expect(result).toMatch(/^\//);
+  it('getTemplatesPath returns a path ending with config/templates', () => {
+    const result = getTemplatesPath();
+    expect(result).toMatch(/config\/templates$/);
+    expect(result).toMatch(/^\//); // absolute
   });
 
-  it('points to an existing directory', async () => {
-    const result = getBaselineConfigPath();
-    const stats = await stat(result);
-    expect(stats.isDirectory()).toBe(true);
+  it('both point to existing directories', async () => {
+    const baseline = getBaselineConfigPath();
+    const templates = getTemplatesPath();
+
+    expect((await stat(baseline)).isDirectory()).toBe(true);
+    expect((await stat(templates)).isDirectory()).toBe(true);
+  });
+});
+
+// ─── getPackageRoot ──────────────────────────────────────────────────────────
+
+describe('getPackageRoot', () => {
+  // We use the real filesystem for depth testing but need to reset cache
+  beforeEach(() => {
+    resetPackageRoot();
+  });
+
+  it('successfully finds package root in current dev environment', async () => {
+    const root = getPackageRoot();
+    expect(root).toMatch(/(^|\/)agent-env$/);
+    // Verify it's actually the directory containing our package.json
+    await expect(readFile(join(root, 'package.json'), 'utf-8')).resolves.toBeDefined();
+  });
+
+  it('caches the result after first call', () => {
+    const spy = vi.fn(accessSync);
+    getPackageRoot(spy);
+    const callCount = spy.mock.calls.length;
+    getPackageRoot(spy);
+    expect(spy.mock.calls.length).toBe(callCount); // No additional calls
+  });
+
+  it('throws helpful error when package.json is nowhere to be found', () => {
+    const mockAccess = () => {
+      throw Object.assign(new Error('ENOENT'), { code: 'ENOENT' });
+    };
+
+    expect(() => getPackageRoot(mockAccess as typeof accessSync)).toThrow(
+      /Could not find package\.json/
+    );
+  });
+
+  it('stops and throws when encountering EACCES (permission denied)', () => {
+    const mockAccess = () => {
+      throw Object.assign(new Error('EACCES'), { code: 'EACCES' });
+    };
+
+    expect(() => getPackageRoot(mockAccess as typeof accessSync)).toThrow(
+      /Permission denied accessing/
+    );
+  });
+
+  it('stops and throws when encountering EPERM (permission denied)', () => {
+    const mockAccess = () => {
+      throw Object.assign(new Error('EPERM'), { code: 'EPERM' });
+    };
+
+    expect(() => getPackageRoot(mockAccess as typeof accessSync)).toThrow(
+      /Permission denied accessing/
+    );
   });
 });
 

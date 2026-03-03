@@ -6,6 +6,7 @@
  */
 
 import { parse as parseJsonc, type ParseError } from 'jsonc-parser';
+import { accessSync } from 'node:fs';
 import { access, cp, mkdir, readdir, readFile, stat, writeFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -35,6 +36,56 @@ const DOT_DEVCONTAINER_JSON = '.devcontainer.json';
 
 // ─── Path utilities ──────────────────────────────────────────────────────────
 
+/** Resolved package root, cached for the lifetime of the process. */
+let cachedPackageRoot: string | undefined;
+
+/**
+ * Resets the cached package root. Used for testing path resolution at different depths.
+ * @internal
+ */
+export function resetPackageRoot(): void {
+  cachedPackageRoot = undefined;
+}
+
+/**
+ * Resolves the absolute path to the package root by walking up from the current module.
+ *
+ * The module's runtime path differs between dev mode (`src/lib/devcontainer.ts`
+ * — 3 levels deep) and the tsup bundle (`dist/cli.js` — 2 levels deep).
+ * Walking up to find `package.json` works regardless of depth.
+ *
+ * @param checkAccess - File access function (defaults to node:fs.accessSync)
+ * @returns Absolute path to the directory containing package.json
+ * @throws Error if package.json cannot be found or accessed
+ */
+export function getPackageRoot(checkAccess = accessSync): string {
+  if (cachedPackageRoot) return cachedPackageRoot;
+
+  let dir = dirname(fileURLToPath(import.meta.url));
+  const startDir = dir;
+
+  for (;;) {
+    try {
+      checkAccess(join(dir, 'package.json'));
+      cachedPackageRoot = dir;
+      return dir;
+    } catch (err: unknown) {
+      // If we hit a permission error, we should stop - walking up to a parent
+      // we CAN access would yield a false positive (e.g. monorepo root).
+      const code = (err as NodeJS.ErrnoException | { code?: unknown })?.code;
+      if (code === 'EACCES' || code === 'EPERM') {
+        throw new Error(`Permission denied accessing ${join(dir, 'package.json')}`);
+      }
+
+      const parent = dirname(dir);
+      if (parent === dir) {
+        throw new Error(`Could not find package.json in ${startDir} or any parent directory`);
+      }
+      dir = parent;
+    }
+  }
+}
+
 /**
  * Get the absolute path to the bundled baseline config directory.
  *
@@ -44,10 +95,7 @@ const DOT_DEVCONTAINER_JSON = '.devcontainer.json';
  * @returns Absolute path to config/baseline/ directory
  */
 export function getBaselineConfigPath(): string {
-  const currentFile = fileURLToPath(import.meta.url);
-  // From src/lib/devcontainer.ts -> ../../config/baseline
-  const packageRoot = dirname(dirname(dirname(currentFile)));
-  return join(packageRoot, 'config', 'baseline');
+  return join(getPackageRoot(), 'config', 'baseline');
 }
 
 /**
@@ -60,9 +108,7 @@ export function getBaselineConfigPath(): string {
  * @returns Absolute path to config/templates/ directory
  */
 export function getTemplatesPath(): string {
-  const currentFile = fileURLToPath(import.meta.url);
-  const packageRoot = dirname(dirname(dirname(currentFile)));
-  return join(packageRoot, 'config', 'templates');
+  return join(getPackageRoot(), 'config', 'templates');
 }
 
 // ─── Detection ───────────────────────────────────────────────────────────────
