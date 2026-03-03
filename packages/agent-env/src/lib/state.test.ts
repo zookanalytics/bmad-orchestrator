@@ -28,6 +28,7 @@ const validState: InstanceState = {
   lastAttached: '2026-01-28T12:00:00.000Z',
   purpose: 'Authentication feature',
   containerName: 'ae-bmad-orch-auth',
+  repoConfigDetected: false,
 };
 
 beforeEach(async () => {
@@ -325,54 +326,62 @@ describe('createInitialState', () => {
   it('accepts custom container name', () => {
     const state = createInitialState('test', 'repo', 'repo-url', {
       containerName: 'custom-container',
+      repoConfigDetected: false,
     });
     expect(state.containerName).toBe('custom-container');
   });
 
-  it('sets configSource when provided', () => {
-    const state = createInitialState('test', 'repo', 'repo-url', { configSource: 'repo' });
-    expect(state.configSource).toBe('repo');
+  it('sets repoConfigDetected when provided', () => {
+    const state = createInitialState('test', 'repo', 'repo-url', { repoConfigDetected: true });
+    expect(state.repoConfigDetected).toBe(true);
   });
 
-  it('defaults configSource to baseline when not provided', () => {
+  it('defaults repoConfigDetected to false when not provided', () => {
     const state = createInitialState('test', 'repo', 'repo-url');
-    expect(state.configSource).toBe('baseline');
+    expect(state.repoConfigDetected).toBe(false);
   });
 
-  it('sets both containerName and configSource via options', () => {
+  it('sets both containerName and repoConfigDetected via options', () => {
     const state = createInitialState('test', 'repo', 'repo-url', {
       containerName: 'custom',
-      configSource: 'repo',
+      repoConfigDetected: true,
     });
     expect(state.containerName).toBe('custom');
-    expect(state.configSource).toBe('repo');
+    expect(state.repoConfigDetected).toBe(true);
   });
 
   it('sets purpose when provided as string', () => {
     const state = createInitialState('test', 'repo', 'repo-url', {
       purpose: 'JWT authentication',
+      repoConfigDetected: false,
     });
     expect(state.purpose).toBe('JWT authentication');
   });
 
   it('sets purpose to null when provided as null', () => {
-    const state = createInitialState('test', 'repo', 'repo-url', { purpose: null });
+    const state = createInitialState('test', 'repo', 'repo-url', {
+      purpose: null,
+      repoConfigDetected: false,
+    });
     expect(state.purpose).toBeNull();
   });
 
   it('defaults purpose to null when not provided', () => {
-    const state = createInitialState('test', 'repo', 'repo-url', { containerName: 'custom' });
+    const state = createInitialState('test', 'repo', 'repo-url', {
+      containerName: 'custom',
+      repoConfigDetected: false,
+    });
     expect(state.purpose).toBeNull();
   });
 
-  it('sets purpose alongside containerName and configSource', () => {
+  it('sets purpose alongside containerName and repoConfigDetected', () => {
     const state = createInitialState('test', 'repo', 'repo-url', {
       containerName: 'custom',
-      configSource: 'repo',
+      repoConfigDetected: true,
       purpose: 'OAuth integration',
     });
     expect(state.containerName).toBe('custom');
-    expect(state.configSource).toBe('repo');
+    expect(state.repoConfigDetected).toBe(true);
     expect(state.purpose).toBe('OAuth integration');
   });
 });
@@ -480,7 +489,7 @@ describe('old-format state migration', () => {
     expect(state.containerName).toBe(`${CONTAINER_PREFIX}no-container`);
   });
 
-  it('preserves configSource from old state', async () => {
+  it('migrates configSource from old state to repoConfigDetected', async () => {
     const wsPath = createWorkspacePath(tempDir, 'with-config');
     await mkdir(wsPath.agentEnvDir, { recursive: true });
     const oldState = {
@@ -496,7 +505,8 @@ describe('old-format state migration', () => {
 
     const state = await readState(wsPath);
 
-    expect(state.configSource).toBe('repo');
+    expect(state.repoConfigDetected).toBe(true);
+    expect('configSource' in state).toBe(false);
   });
 
   it('handles empty repo URL gracefully', async () => {
@@ -589,7 +599,7 @@ describe('old-format state migration', () => {
     expect(state.repoSlug).toBe('unknown');
   });
 
-  it('accepts new-format state without configSource field', async () => {
+  it('migrates state without configSource to repoConfigDetected: false', async () => {
     const wsPath = createWorkspacePath(tempDir, 'no-config-source');
     await mkdir(wsPath.agentEnvDir, { recursive: true });
     const newState = {
@@ -608,7 +618,7 @@ describe('old-format state migration', () => {
     expect(state.instance).toBe('auth');
     expect(state.repoSlug).toBe('bmad-orch');
     expect(state.containerName).toBe('ae-bmad-orch-auth');
-    expect(state.configSource).toBeUndefined();
+    expect(state.repoConfigDetected).toBe(false);
   });
 });
 

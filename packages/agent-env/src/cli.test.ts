@@ -120,6 +120,7 @@ async function createMockWorkspace(
     lastAttached: '2026-01-01T00:00:00Z',
     purpose: null,
     containerName: `ae-repo-${instanceName}`,
+    repoConfigDetected: false,
     ...stateOverrides,
   };
 
@@ -161,6 +162,7 @@ async function createRepoScopedWorkspace(
     lastAttached: '2026-01-01T00:00:00Z',
     purpose: null,
     containerName: `ae-${repoSlug}-${instanceName}`,
+    repoConfigDetected: false,
     ...stateOverrides,
   };
 
@@ -221,28 +223,12 @@ describe('agent-env CLI', () => {
       expect(stderrStripped).toMatch(/❌ \[MISSING_OPTION\] The --repo flag is required\./);
     });
 
-    it('create --help shows --repo, --purpose, --attach, --baseline and --no-baseline options', async () => {
+    it('create --help shows --repo, --purpose, and --attach options', async () => {
       const result = await runCli(['create', '--help']);
       expect(result.exitCode).toBe(0);
       expect(result.stdout).toContain('--repo');
       expect(result.stdout).toContain('--purpose');
       expect(result.stdout).toContain('--attach');
-      expect(result.stdout).toContain('--baseline');
-      expect(result.stdout).toContain('--no-baseline');
-    });
-
-    it('create with both --baseline and --no-baseline shows mutual exclusion error', async () => {
-      const result = await runCli([
-        'create',
-        'test-instance',
-        '--repo',
-        'https://github.com/user/repo.git',
-        '--baseline',
-        '--no-baseline',
-      ]);
-      const stderrStripped = stripAnsiCodes(result.stderr);
-      expect(result.exitCode).toBe(1);
-      expect(stderrStripped).toContain('Cannot specify both --baseline and --no-baseline');
     });
 
     it('create with --repo . resolves current directory git remote', async () => {
@@ -307,45 +293,76 @@ describe('agent-env CLI', () => {
       expect(stderrStripped).toMatch(/MISSING_ARGUMENT/);
     });
 
-    // These tests rely on /etc/agent-env/state.json NOT existing.
-    // Inside a real devcontainer that file is bind-mounted from the host,
-    // so the CLI reads it successfully instead of returning STATE_NOT_FOUND.
-    const isRealContainer = process.env.AGENT_ENV_CONTAINER === 'true';
+    it('purpose inside container reads from /etc/agent-env/state.json', async () => {
+      // Create state file at temp location simulating container mount
+      const etcAgentEnv = join(tempRoot, 'etc-agent-env');
+      await mkdir(etcAgentEnv, { recursive: true });
+      const statePath = join(etcAgentEnv, 'state.json');
+      await writeFile(
+        statePath,
+        JSON.stringify({
+          instance: 'test-instance',
+          repoSlug: 'repo',
+          repoUrl: 'https://github.com/test/repo.git',
+          createdAt: '2026-01-01T00:00:00Z',
+          lastAttached: '2026-01-01T00:00:00Z',
+          purpose: 'JWT authentication',
+          containerName: 'ae-repo-test-instance',
+          repoConfigDetected: false,
+        }),
+        'utf-8'
+      );
 
-    it.skipIf(isRealContainer)(
-      'purpose inside container returns STATE_NOT_FOUND when state file is missing',
-      async () => {
-        // Run purpose in simulated container mode
-        // Note: We can't easily redirect /etc/agent-env in the CLI test,
-        // so we just verify that container detection works and that the CLI
-        // reports STATE_NOT_FOUND when the state file is absent.
-        const result = await runCli(['purpose'], {
-          AGENT_ENV_CONTAINER: 'true',
-        });
+      // Run purpose in simulated container mode, pointing to our temp etc
+      const result = await runCli(['purpose'], {
+        AGENT_ENV_CONTAINER: 'true',
+        AGENT_ENV_STATE_PATH: statePath,
+        AGENT_ENV_CONTAINER_DIR: etcAgentEnv,
+      });
 
-        // Inside container mode, it tries to read /etc/agent-env/state.json
-        // which won't exist in the test environment, so expect STATE_NOT_FOUND.
-        const stderrStripped = stripAnsiCodes(result.stderr);
-        expect(result.exitCode).toBe(1);
-        expect(stderrStripped).toMatch(/STATE_NOT_FOUND/);
-      }
-    );
+      expect(result.exitCode).toBe(0);
+      expect(result.stdout.trim()).toBe('JWT authentication');
+    });
 
-    it.skipIf(isRealContainer)(
-      'purpose inside container sets purpose without instance name',
-      async () => {
-        // Same as above — verifies container detection with set mode
-        const result = await runCli(['purpose', 'new purpose text'], {
-          AGENT_ENV_CONTAINER: 'true',
-        });
+    it('purpose inside container sets purpose without instance name', async () => {
+      // Create state file AND template so it can succeed
+      const etcAgentEnv = join(tempRoot, 'etc-agent-env');
+      await mkdir(etcAgentEnv, { recursive: true });
+      const statePath = join(etcAgentEnv, 'state.json');
+      await writeFile(
+        statePath,
+        JSON.stringify({
+          instance: 'test-instance',
+          repoSlug: 'repo',
+          repoUrl: 'https://github.com/test/repo.git',
+          createdAt: '2026-01-01T00:00:00Z',
+          lastAttached: '2026-01-01T00:00:00Z',
+          purpose: 'Old purpose',
+          containerName: 'ae-repo-test-instance',
+          repoConfigDetected: false,
+        }),
+        'utf-8'
+      );
+      await writeFile(
+        join(etcAgentEnv, 'statusBar.template.json'),
+        '{"label": "$(bookmark) {{PURPOSE}}"}',
+        'utf-8'
+      );
 
-        // In container mode, the first arg is the purpose value (not instance name)
-        // Tries to write to /etc/agent-env/state.json which doesn't exist in test
-        const stderrStripped = stripAnsiCodes(result.stderr);
-        expect(result.exitCode).toBe(1);
-        expect(stderrStripped).toMatch(/STATE_NOT_FOUND/);
-      }
-    );
+      // Run purpose in simulated container mode
+      const result = await runCli(['purpose', 'new purpose text'], {
+        AGENT_ENV_CONTAINER: 'true',
+        AGENT_ENV_STATE_PATH: statePath,
+        AGENT_ENV_CONTAINER_DIR: etcAgentEnv,
+      });
+
+      expect(result.exitCode).toBe(0);
+      expect(result.stdout).toContain('Purpose updated');
+
+      // Verify state was written
+      const updatedState = JSON.parse(await readFile(statePath, 'utf-8'));
+      expect(updatedState.purpose).toBe('new purpose text');
+    });
   });
 
   describe('completion command', () => {
@@ -699,7 +716,7 @@ describe('--repo flag integration', () => {
 
   describe('rebuild with --repo', () => {
     it('finds instance when --repo matches (proceeds past workspace lookup)', async () => {
-      await createRepoScopedWorkspace('rbtest', 'alpha', { configSource: 'baseline' });
+      await createRepoScopedWorkspace('rbtest', 'alpha', { repoConfigDetected: false });
       const result = await runCli(['rebuild', 'rbtest', '--repo', 'alpha', '--yes'], {
         MOCK_DOCKER_AVAILABLE: 'true',
       });

@@ -1,6 +1,7 @@
 import type { ExecuteResult } from '@zookanalytics/shared';
 
 import {
+  access,
   cp,
   mkdir,
   readdir,
@@ -64,16 +65,12 @@ async function createTestWorkspace(
   // Create devcontainer config files if specified
   if (options?.devcontainerFiles) {
     // Baseline configs go to .agent-env/, repo configs go to .devcontainer/
-    const configDir =
-      state.configSource === 'baseline' ? agentEnvDir : join(wsRoot, '.devcontainer');
+    const configDir = !state.repoConfigDetected ? agentEnvDir : join(wsRoot, '.devcontainer');
     await mkdir(configDir, { recursive: true });
     for (const file of options.devcontainerFiles) {
       if (file === 'devcontainer.json') {
-        await writeFile(
-          join(configDir, file),
-          JSON.stringify({ build: { dockerfile: 'Dockerfile' } }),
-          'utf-8'
-        );
+        // Use a valid repo config (no build/dockerfile/image — validateRepoConfig rejects those)
+        await writeFile(join(configDir, file), JSON.stringify({}), 'utf-8');
       } else if (file === 'Dockerfile') {
         await writeFile(
           join(configDir, file),
@@ -104,6 +101,7 @@ function createTestState(
     lastAttached: '2026-01-20T14:00:00.000Z',
     purpose: null,
     containerName: `ae-${workspaceName}`,
+    repoConfigDetected: false,
     ...overrides,
   };
 }
@@ -155,6 +153,42 @@ function createDevcontainerStatMock(hasExistingDevcontainer: boolean) {
   });
 }
 
+/** Baseline config fixture content for merge mocks */
+const BASELINE_CONFIG_JSON = JSON.stringify({
+  image: 'ghcr.io/zookanalytics/bmad-orchestrator/devcontainer:latest',
+  initializeCommand: 'bash .agent-env/init-host.sh',
+  mounts: ['source=${localWorkspaceFolder}/.agent-env,target=/etc/agent-env,type=bind'],
+  containerEnv: { AGENT_ENV_CONTAINER: 'true' },
+});
+
+/**
+ * Create mergeDeps mock.
+ *
+ * - readFile returns baseline config JSON when path matches config/baseline/devcontainer.json,
+ *   otherwise delegates to real readFile.
+ * - access resolves for baseline paths, otherwise delegates to real access.
+ * - writeFile and rename delegate to real implementations (so generated config is written to disk).
+ */
+function createMergeDeps() {
+  const baselinePath = getBaselineConfigPath();
+  return {
+    readFile: vi.fn().mockImplementation(async (path: string, encoding?: string) => {
+      if (path.includes('config/baseline/devcontainer.json')) {
+        return BASELINE_CONFIG_JSON;
+      }
+      return readFile(path, encoding as BufferEncoding);
+    }),
+    access: vi.fn().mockImplementation(async (path: string, mode?: number) => {
+      if (path.startsWith(baselinePath)) {
+        return; // resolve successfully for baseline paths
+      }
+      return access(path, mode);
+    }),
+    writeFile: vi.fn().mockImplementation(writeFile),
+    rename: vi.fn().mockImplementation(rename),
+  };
+}
+
 function createTestDeps(overrides: Partial<RebuildInstanceDeps> = {}): RebuildInstanceDeps {
   const executor = vi.fn().mockResolvedValue({
     ok: true,
@@ -187,6 +221,7 @@ function createTestDeps(overrides: Partial<RebuildInstanceDeps> = {}): RebuildIn
       stat: createDevcontainerStatMock(true),
       writeFile: vi.fn().mockImplementation(writeFile),
     },
+    mergeDeps: createMergeDeps(),
     rm: vi.fn().mockImplementation(rm),
     rename: vi.fn().mockImplementation(rename),
     logger: { warn: vi.fn(), info: vi.fn() },
@@ -200,7 +235,7 @@ describe('rebuildInstance', () => {
   // ─── Success cases ──────────────────────────────────────────────────────────
 
   it('rebuilds a stopped instance successfully', async () => {
-    const state = createTestState('repo-auth', { configSource: 'baseline' });
+    const state = createTestState('repo-auth', { repoConfigDetected: false });
     await createTestWorkspace('repo-auth', state, {
       devcontainerFiles: ['devcontainer.json', 'init-host.sh'],
     });
@@ -215,7 +250,7 @@ describe('rebuildInstance', () => {
   });
 
   it('stops container before rebuilding', async () => {
-    const state = createTestState('repo-auth', { configSource: 'baseline' });
+    const state = createTestState('repo-auth', { repoConfigDetected: false });
     await createTestWorkspace('repo-auth', state, {
       devcontainerFiles: ['devcontainer.json', 'init-host.sh'],
     });
@@ -228,7 +263,7 @@ describe('rebuildInstance', () => {
   });
 
   it('removes container after stopping', async () => {
-    const state = createTestState('repo-auth', { configSource: 'baseline' });
+    const state = createTestState('repo-auth', { repoConfigDetected: false });
     await createTestWorkspace('repo-auth', state, {
       devcontainerFiles: ['devcontainer.json', 'init-host.sh'],
     });
@@ -241,7 +276,7 @@ describe('rebuildInstance', () => {
   });
 
   it('runs devcontainer up after removing container', async () => {
-    const state = createTestState('repo-auth', { configSource: 'baseline' });
+    const state = createTestState('repo-auth', { repoConfigDetected: false });
     await createTestWorkspace('repo-auth', state, {
       devcontainerFiles: ['devcontainer.json', 'init-host.sh'],
     });
@@ -261,7 +296,7 @@ describe('rebuildInstance', () => {
   });
 
   it('preserves workspace files during rebuild', async () => {
-    const state = createTestState('repo-auth', { configSource: 'baseline' });
+    const state = createTestState('repo-auth', { repoConfigDetected: false });
     await createTestWorkspace('repo-auth', state, {
       devcontainerFiles: ['devcontainer.json', 'init-host.sh'],
     });
@@ -279,7 +314,7 @@ describe('rebuildInstance', () => {
   });
 
   it('finds workspace by exact name', async () => {
-    const state = createTestState('repo-auth', { configSource: 'baseline' });
+    const state = createTestState('repo-auth', { repoConfigDetected: false });
     await createTestWorkspace('repo-auth', state, {
       devcontainerFiles: ['devcontainer.json', 'init-host.sh'],
     });
@@ -293,7 +328,7 @@ describe('rebuildInstance', () => {
   it('finds workspace by instance field in state.json', async () => {
     const state = createTestState('bmad-orch-auth', {
       repoSlug: 'bmad-orch',
-      configSource: 'baseline',
+      repoConfigDetected: false,
     });
     await createTestWorkspace('bmad-orch-auth', state, {
       devcontainerFiles: ['devcontainer.json', 'init-host.sh'],
@@ -307,8 +342,8 @@ describe('rebuildInstance', () => {
 
   // ─── Config refresh: baseline ──────────────────────────────────────────────
 
-  it('refreshes baseline config: copies into .agent-env/ and patches there', async () => {
-    const state = createTestState('repo-auth', { configSource: 'baseline' });
+  it('refreshes merged config: copies managed assets into .agent-env/ and writes generated config', async () => {
+    const state = createTestState('repo-auth', { repoConfigDetected: false });
     await createTestWorkspace('repo-auth', state, {
       devcontainerFiles: ['devcontainer.json', 'init-host.sh'],
     });
@@ -319,18 +354,23 @@ describe('rebuildInstance', () => {
     const wsRoot = join(tempDir, AGENT_ENV_DIR, WORKSPACES_DIR, 'repo-auth');
     const agentEnvDir = join(wsRoot, AGENT_ENV_DIR);
 
-    // Should have ensured .agent-env/ exists
+    // Should have ensured .agent-env/ exists (called by copyManagedAssets)
     expect(deps.devcontainerFsDeps.mkdir).toHaveBeenCalledWith(agentEnvDir, {
       recursive: true,
     });
-    // Should have copied baseline files into .agent-env/
-    expect(deps.devcontainerFsDeps.cp).toHaveBeenCalledWith(expect.any(String), agentEnvDir, {
-      recursive: true,
-    });
+    // Should have copied baseline assets into .agent-env/ (excluding devcontainer.json)
+    expect(deps.devcontainerFsDeps.cp).toHaveBeenCalledWith(
+      expect.any(String),
+      agentEnvDir,
+      expect.objectContaining({ recursive: true })
+    );
+    // Should have written the generated config via mergeDeps
+    expect(deps.mergeDeps.writeFile).toHaveBeenCalled();
+    expect(deps.mergeDeps.rename).toHaveBeenCalled();
   });
 
   it('updates state with lastRebuilt timestamp', async () => {
-    const state = createTestState('repo-auth', { configSource: 'baseline' });
+    const state = createTestState('repo-auth', { repoConfigDetected: false });
     await createTestWorkspace('repo-auth', state, {
       devcontainerFiles: ['devcontainer.json', 'init-host.sh'],
     });
@@ -352,43 +392,8 @@ describe('rebuildInstance', () => {
     expect(new Date(updatedState.lastRebuilt).getTime()).not.toBeNaN();
   });
 
-  it('returns CONFIG_SOURCE_UNKNOWN when configSource is missing from state', async () => {
-    const state = createTestState('repo-auth');
-    delete (state as unknown as Record<string, unknown>).configSource;
-    await createTestWorkspace('repo-auth', state, {
-      devcontainerFiles: ['devcontainer.json', 'init-host.sh'],
-    });
-    const deps = createTestDeps();
-
-    const result = await rebuildInstance('auth', deps);
-
-    expect(result.ok).toBe(false);
-    if (result.ok) throw new Error('Expected failure');
-    expect(result.error.code).toBe('CONFIG_SOURCE_UNKNOWN');
-    expect(result.error.suggestion).toContain('state.json');
-  });
-
-  it('uses overrideConfigSource when state lacks configSource', async () => {
-    const state = createTestState('repo-auth');
-    delete (state as unknown as Record<string, unknown>).configSource;
-    await createTestWorkspace('repo-auth', state, {
-      devcontainerFiles: ['devcontainer.json'],
-    });
-    const deps = createTestDeps();
-
-    // Override to 'repo' — should NOT refresh baseline config, but DOES deploy status bar template
-    await rebuildInstance('auth', deps, { force: false, configSource: 'repo' });
-
-    // cp is called for status bar template to .agent-env/, not for baseline config
-    const cpCalls = (deps.devcontainerFsDeps.cp as ReturnType<typeof vi.fn>).mock.calls;
-    expect(cpCalls).toHaveLength(1);
-    const [src, dest] = cpCalls[0] as [string, string];
-    expect(src).toContain('statusBar.template.json');
-    expect(dest).toContain(join(AGENT_ENV_DIR, 'statusBar.template.json'));
-  });
-
   it('does not warn about extra files during baseline refresh (copies directly into .agent-env/)', async () => {
-    const state = createTestState('repo-auth', { configSource: 'baseline' });
+    const state = createTestState('repo-auth', { repoConfigDetected: false });
     await createTestWorkspace('repo-auth', state, {
       devcontainerFiles: ['devcontainer.json', 'init-host.sh', 'custom-script.sh'],
     });
@@ -405,7 +410,7 @@ describe('rebuildInstance', () => {
   });
 
   it('does not log when no extra files exist', async () => {
-    const state = createTestState('repo-auth', { configSource: 'baseline' });
+    const state = createTestState('repo-auth', { repoConfigDetected: false });
     await createTestWorkspace('repo-auth', state, {
       devcontainerFiles: ['devcontainer.json', 'init-host.sh'],
     });
@@ -422,9 +427,9 @@ describe('rebuildInstance', () => {
     expect(extraFilesWarnings).toHaveLength(0);
   });
 
-  it('refreshes baseline config: verifies patches are applied to devcontainer.json', async () => {
+  it('refreshes merged config: verifies managed properties are applied to generated devcontainer.json', async () => {
     const state = createTestState('repo-auth', {
-      configSource: 'baseline',
+      repoConfigDetected: false,
       purpose: 'OAuth work',
     });
     await createTestWorkspace('repo-auth', state, {
@@ -437,7 +442,9 @@ describe('rebuildInstance', () => {
     const wsRoot = join(tempDir, AGENT_ENV_DIR, WORKSPACES_DIR, 'repo-auth');
     const configPath = join(wsRoot, AGENT_ENV_DIR, 'devcontainer.json');
     const content = await readFile(configPath, 'utf-8');
-    const config = JSON.parse(content);
+    // Strip auto-generated header comment line before parsing JSON
+    const jsonContent = content.replace(/^\/\/.*\n/, '');
+    const config = JSON.parse(jsonContent);
 
     // Verify container name patch
     expect(config.runArgs).toContain('--name=ae-repo-auth');
@@ -457,156 +464,10 @@ describe('rebuildInstance', () => {
     ]);
   });
 
-  it('refreshes baseline config: does not overwrite existing statusBar.template.json', async () => {
-    const state = createTestState('repo-auth', { configSource: 'baseline' });
-    await createTestWorkspace('repo-auth', state, {
-      devcontainerFiles: ['devcontainer.json'],
-    });
-
-    const wsRoot = join(tempDir, AGENT_ENV_DIR, WORKSPACES_DIR, 'repo-auth');
-    const templatePath = join(wsRoot, AGENT_ENV_DIR, 'statusBar.template.json');
-
-    // Create a customized template
-    const customContent = '{"label": "CUSTOM: {{PURPOSE}}"}';
-    await writeFile(templatePath, customContent, 'utf-8');
-
-    const deps = createTestDeps();
-    await rebuildInstance('auth', deps);
-
-    // Verify template was NOT overwritten
-    const finalContent = await readFile(templatePath, 'utf-8');
-    expect(finalContent).toBe(customContent);
-  });
-
-  // ─── Config refresh: repo ─────────────────────────────────────────────────
-
-  it('preserves config when configSource is repo', async () => {
-    const state = createTestState('repo-auth', { configSource: 'repo' });
-    await createTestWorkspace('repo-auth', state, {
-      devcontainerFiles: ['devcontainer.json'],
-    });
-    const deps = createTestDeps();
-
-    await rebuildInstance('auth', deps);
-
-    // Should NOT copy baseline files, but DOES deploy status bar template to .agent-env/
-    const cpCalls = (deps.devcontainerFsDeps.cp as ReturnType<typeof vi.fn>).mock.calls;
-    expect(cpCalls).toHaveLength(1);
-    const [src, dest] = cpCalls[0] as [string, string];
-    expect(src).toContain('statusBar.template.json');
-    expect(dest).toContain(join(AGENT_ENV_DIR, 'statusBar.template.json'));
-  });
-
-  it('succeeds and logs warning when status bar template copy fails for repo config', async () => {
-    const state = createTestState('repo-auth', { configSource: 'repo' });
-    await createTestWorkspace('repo-auth', state, {
-      devcontainerFiles: ['devcontainer.json', 'Dockerfile'],
-    });
-    const deps = createTestDeps();
-    // Make cp fail (simulates permission error on .agent-env/ write)
-    (deps.devcontainerFsDeps.cp as ReturnType<typeof vi.fn>).mockRejectedValue(
-      new Error('EACCES: permission denied')
-    );
-
-    const result = await rebuildInstance('auth', deps);
-
-    // Should succeed — template copy failure is non-fatal for repo-config instances
-    expect(result.ok).toBe(true);
-    expect(deps.logger?.warn).toHaveBeenCalledWith(
-      expect.stringContaining('Failed to copy status bar template')
-    );
-  });
-
-  it('returns CONFIG_MISSING when repo config is absent on disk', async () => {
-    const state = createTestState('repo-auth', { configSource: 'repo' });
-    // Create workspace WITHOUT .devcontainer/
-    await createTestWorkspace('repo-auth', state);
-    const deps = createTestDeps({
-      devcontainerFsDeps: {
-        cp: vi.fn().mockResolvedValue(undefined),
-        mkdir: vi.fn().mockImplementation(mkdir),
-        readdir: vi.fn().mockImplementation(readdir),
-        readFile: vi.fn().mockResolvedValue('{}'),
-        stat: createDevcontainerStatMock(false), // no devcontainer config
-        writeFile: vi.fn().mockResolvedValue(undefined),
-      },
-    });
-
-    const result = await rebuildInstance('auth', deps);
-
-    expect(result.ok).toBe(false);
-    if (result.ok) throw new Error('Expected failure');
-    expect(result.error.code).toBe('CONFIG_MISSING');
-    expect(result.error.suggestion).toContain('Re-clone');
-  });
-
-  it('returns CONFIG_CORRUPT when repo config exists but devcontainer.json is missing', async () => {
-    const state = createTestState('repo-auth', { configSource: 'repo' });
-    // Create workspace WITH .devcontainer/ but WITHOUT devcontainer.json
-    await createTestWorkspace('repo-auth', state);
-    const wsRoot = join(tempDir, AGENT_ENV_DIR, WORKSPACES_DIR, 'repo-auth');
-    await mkdir(join(wsRoot, '.devcontainer'), { recursive: true });
-
-    const deps = createTestDeps({
-      devcontainerFsDeps: {
-        cp: vi.fn().mockResolvedValue(undefined),
-        mkdir: vi.fn().mockImplementation(mkdir),
-        readdir: vi.fn().mockImplementation(readdir),
-        readFile: vi.fn().mockResolvedValue('{}'),
-        stat: vi.fn().mockImplementation(async (path: string) => {
-          if (path.endsWith('.devcontainer')) {
-            return { isDirectory: () => true, isFile: () => false };
-          }
-          if (path.endsWith('devcontainer.json')) {
-            throw Object.assign(new Error('ENOENT'), { code: 'ENOENT' });
-          }
-          return stat(path);
-        }),
-        writeFile: vi.fn().mockResolvedValue(undefined),
-      },
-    });
-
-    const result = await rebuildInstance('auth', deps);
-
-    expect(result.ok).toBe(false);
-    if (result.ok) throw new Error('Expected failure');
-    expect(result.error.code).toBe('CONFIG_CORRUPT');
-    expect(result.error.message).toContain('missing devcontainer.json');
-  });
-
-  it('accepts root-level repo config when .devcontainer/ dir does not exist', async () => {
-    const state = createTestState('repo-auth', { configSource: 'repo' });
-    await createTestWorkspace('repo-auth', state);
-    const deps = createTestDeps({
-      devcontainerFsDeps: {
-        cp: vi.fn().mockResolvedValue(undefined),
-        mkdir: vi.fn().mockImplementation(mkdir),
-        readdir: vi.fn().mockImplementation(readdir),
-        readFile: vi.fn().mockResolvedValue('{}'),
-        stat: vi.fn().mockImplementation(async (path: string) => {
-          // Root-level devcontainer.json exists
-          if (path.endsWith('devcontainer.json') && !path.includes('.devcontainer/')) {
-            return { isDirectory: () => false, isFile: () => true };
-          }
-          // .devcontainer/ dir does NOT exist
-          if (path.endsWith('.devcontainer')) {
-            throw Object.assign(new Error('ENOENT'), { code: 'ENOENT' });
-          }
-          return stat(path);
-        }),
-        writeFile: vi.fn().mockResolvedValue(undefined),
-      },
-    });
-
-    const result = await rebuildInstance('auth', deps);
-
-    expect(result.ok).toBe(true);
-  });
-
   // ─── Config refresh failure ───────────────────────────────────────────────
 
   it('returns error when config refresh fails and does NOT stop container', async () => {
-    const state = createTestState('repo-auth', { configSource: 'baseline' });
+    const state = createTestState('repo-auth', { repoConfigDetected: false });
     await createTestWorkspace('repo-auth', state, {
       devcontainerFiles: ['devcontainer.json', 'init-host.sh'],
     });
@@ -635,10 +496,46 @@ describe('rebuildInstance', () => {
     expect(mockContainer.devcontainerUp).not.toHaveBeenCalled();
   });
 
+  // ─── Repo config missing (AC-19) ──────────────────────────────────────────
+
+  it('returns REPO_CONFIG_MISSING when state.repoConfigDetected is true but repo config is absent', async () => {
+    // State says repo config was detected at creation, but .devcontainer/devcontainer.json is gone
+    const state = createTestState('repo-auth', { repoConfigDetected: true });
+    await createTestWorkspace('repo-auth', state, {
+      // Do NOT create .devcontainer/devcontainer.json
+      devcontainerFiles: ['init-host.sh'],
+    });
+
+    const mockContainer = createMockContainer();
+    const deps = createTestDeps({
+      container: mockContainer,
+      devcontainerFsDeps: {
+        cp: vi.fn().mockImplementation(cp),
+        mkdir: vi.fn().mockImplementation(mkdir),
+        readdir: vi.fn().mockImplementation(readdir),
+        readFile: vi.fn().mockImplementation(readFile),
+        stat: createDevcontainerStatMock(false), // no .devcontainer directory
+        writeFile: vi.fn().mockImplementation(writeFile),
+      },
+    });
+
+    const result = await rebuildInstance('auth', deps);
+
+    expect(result.ok).toBe(false);
+    if (result.ok) throw new Error('Expected failure');
+    expect(result.error.code).toBe('REPO_CONFIG_MISSING');
+    expect(result.error.message).toContain('missing');
+    expect(result.error.suggestion).toContain('Restore');
+    // Container should NOT be torn down when config check fails
+    expect(mockContainer.containerStop).not.toHaveBeenCalled();
+    expect(mockContainer.containerRemove).not.toHaveBeenCalled();
+    expect(mockContainer.devcontainerUp).not.toHaveBeenCalled();
+  });
+
   // ─── Operation ordering ───────────────────────────────────────────────────
 
-  it('calls operations in correct order: config refresh → status → stop → remove → devcontainer up', async () => {
-    const state = createTestState('repo-auth', { configSource: 'baseline' });
+  it('calls operations in correct order: merge config → copy assets → write config → status → stop → remove → devcontainer up', async () => {
+    const state = createTestState('repo-auth', { repoConfigDetected: false });
     await createTestWorkspace('repo-auth', state, {
       devcontainerFiles: ['devcontainer.json', 'init-host.sh'],
     });
@@ -663,8 +560,34 @@ describe('rebuildInstance', () => {
       }),
     });
 
+    const baselinePath = getBaselineConfigPath();
+    const mockMergeDeps = {
+      readFile: vi.fn().mockImplementation(async (path: string) => {
+        if (path.includes('config/baseline/devcontainer.json')) {
+          callOrder.push('load_managed_defaults');
+          return BASELINE_CONFIG_JSON;
+        }
+        return readFile(path, 'utf-8');
+      }),
+      access: vi.fn().mockImplementation(async (path: string, mode?: number) => {
+        if (path.startsWith(baselinePath)) return;
+        return access(path, mode);
+      }),
+      writeFile: vi.fn().mockImplementation(async (...args: Parameters<typeof writeFile>) => {
+        callOrder.push('write_generated_config');
+        return writeFile(...args);
+      }),
+      rename: vi.fn().mockImplementation(async (from: string, to: string) => {
+        if (from.endsWith('devcontainer.json.tmp')) {
+          callOrder.push('rename_generated_config');
+        }
+        return rename(from, to);
+      }),
+    };
+
     const deps = createTestDeps({
       container: mockContainer,
+      mergeDeps: mockMergeDeps,
       rm: vi.fn().mockImplementation(async (path: string, opts?: unknown) => {
         return rm(path, opts as Parameters<typeof rm>[1]);
       }),
@@ -683,7 +606,7 @@ describe('rebuildInstance', () => {
       },
       devcontainerFsDeps: {
         cp: vi.fn().mockImplementation(async () => {
-          callOrder.push('config_copy');
+          callOrder.push('asset_copy');
         }),
         mkdir: vi.fn().mockImplementation(mkdir),
         readdir: vi.fn().mockImplementation(readdir),
@@ -696,8 +619,11 @@ describe('rebuildInstance', () => {
     await rebuildInstance('auth', deps);
 
     expect(callOrder).toEqual([
-      'config_copy', // baseline config copy
-      'config_copy', // status bar template copy
+      'load_managed_defaults', // step 1: load baseline config
+      'asset_copy', // step 3a: copy baseline assets (excluding devcontainer.json)
+      'asset_copy', // step 3b: copy status bar template
+      'write_generated_config', // step 4a: write generated config to .tmp
+      'rename_generated_config', // step 4b: atomic rename .tmp → devcontainer.json
       'status_check',
       'container_stop',
       'container_remove',
@@ -709,7 +635,7 @@ describe('rebuildInstance', () => {
   // ─── Container running check ───────────────────────────────────────────────
 
   it('blocks rebuild when container is running and force=false', async () => {
-    const state = createTestState('repo-auth', { configSource: 'baseline' });
+    const state = createTestState('repo-auth', { repoConfigDetected: false });
     await createTestWorkspace('repo-auth', state, {
       devcontainerFiles: ['devcontainer.json', 'init-host.sh'],
     });
@@ -733,7 +659,7 @@ describe('rebuildInstance', () => {
   });
 
   it('does not stop or remove container when running check blocks', async () => {
-    const state = createTestState('repo-auth', { configSource: 'baseline' });
+    const state = createTestState('repo-auth', { repoConfigDetected: false });
     await createTestWorkspace('repo-auth', state, {
       devcontainerFiles: ['devcontainer.json', 'init-host.sh'],
     });
@@ -754,7 +680,7 @@ describe('rebuildInstance', () => {
   });
 
   it('rebuilds running container when force=true', async () => {
-    const state = createTestState('repo-auth', { configSource: 'baseline' });
+    const state = createTestState('repo-auth', { repoConfigDetected: false });
     await createTestWorkspace('repo-auth', state, {
       devcontainerFiles: ['devcontainer.json', 'init-host.sh'],
     });
@@ -780,7 +706,7 @@ describe('rebuildInstance', () => {
   // ─── Container not-found case ──────────────────────────────────────────────
 
   it('skips stop and remove when container is not found', async () => {
-    const state = createTestState('repo-auth', { configSource: 'baseline' });
+    const state = createTestState('repo-auth', { repoConfigDetected: false });
     await createTestWorkspace('repo-auth', state, {
       devcontainerFiles: ['devcontainer.json', 'init-host.sh'],
     });
@@ -804,7 +730,7 @@ describe('rebuildInstance', () => {
   // ─── Container name discovery ──────────────────────────────────────────────
 
   it('discovers actual container name from containerId', async () => {
-    const state = createTestState('repo-auth', { configSource: 'baseline' });
+    const state = createTestState('repo-auth', { repoConfigDetected: false });
     await createTestWorkspace('repo-auth', state, {
       devcontainerFiles: ['devcontainer.json', 'init-host.sh'],
     });
@@ -827,7 +753,7 @@ describe('rebuildInstance', () => {
   });
 
   it('updates state when container name changes', async () => {
-    const state = createTestState('repo-auth', { configSource: 'baseline' });
+    const state = createTestState('repo-auth', { repoConfigDetected: false });
     await createTestWorkspace('repo-auth', state, {
       devcontainerFiles: ['devcontainer.json', 'init-host.sh'],
     });
@@ -861,7 +787,7 @@ describe('rebuildInstance', () => {
   });
 
   it('always updates state with lastRebuilt timestamp even if name unchanged', async () => {
-    const state = createTestState('repo-auth', { configSource: 'baseline' });
+    const state = createTestState('repo-auth', { repoConfigDetected: false });
     await createTestWorkspace('repo-auth', state, {
       devcontainerFiles: ['devcontainer.json', 'init-host.sh'],
     });
@@ -905,12 +831,12 @@ describe('rebuildInstance', () => {
   it('returns AMBIGUOUS_INSTANCE when multiple workspaces match', async () => {
     await createTestWorkspace(
       'repo1-auth',
-      createTestState('repo1-auth', { repoSlug: 'repo1', configSource: 'baseline' }),
+      createTestState('repo1-auth', { repoSlug: 'repo1', repoConfigDetected: false }),
       { devcontainerFiles: ['devcontainer.json', 'Dockerfile', 'init-host.sh', 'post-create.sh'] }
     );
     await createTestWorkspace(
       'repo2-auth',
-      createTestState('repo2-auth', { repoSlug: 'repo2', configSource: 'baseline' }),
+      createTestState('repo2-auth', { repoSlug: 'repo2', repoConfigDetected: false }),
       { devcontainerFiles: ['devcontainer.json', 'Dockerfile', 'init-host.sh', 'post-create.sh'] }
     );
     const deps = createTestDeps();
@@ -925,7 +851,7 @@ describe('rebuildInstance', () => {
   });
 
   it('returns ORBSTACK_REQUIRED when Docker is not available', async () => {
-    const state = createTestState('repo-auth', { configSource: 'baseline' });
+    const state = createTestState('repo-auth', { repoConfigDetected: false });
     await createTestWorkspace('repo-auth', state, {
       devcontainerFiles: ['devcontainer.json', 'init-host.sh'],
     });
@@ -943,7 +869,7 @@ describe('rebuildInstance', () => {
   });
 
   it('returns error when container stop fails', async () => {
-    const state = createTestState('repo-auth', { configSource: 'baseline' });
+    const state = createTestState('repo-auth', { repoConfigDetected: false });
     await createTestWorkspace('repo-auth', state, {
       devcontainerFiles: ['devcontainer.json', 'init-host.sh'],
     });
@@ -968,7 +894,7 @@ describe('rebuildInstance', () => {
   });
 
   it('returns error when container remove fails', async () => {
-    const state = createTestState('repo-auth', { configSource: 'baseline' });
+    const state = createTestState('repo-auth', { repoConfigDetected: false });
     await createTestWorkspace('repo-auth', state, {
       devcontainerFiles: ['devcontainer.json', 'init-host.sh'],
     });
@@ -992,7 +918,7 @@ describe('rebuildInstance', () => {
   });
 
   it('returns error when devcontainer up fails', async () => {
-    const state = createTestState('repo-auth', { configSource: 'baseline' });
+    const state = createTestState('repo-auth', { repoConfigDetected: false });
     await createTestWorkspace('repo-auth', state, {
       devcontainerFiles: ['devcontainer.json', 'init-host.sh'],
     });
@@ -1019,7 +945,7 @@ describe('rebuildInstance', () => {
   });
 
   it('includes wasRunning in error result when devcontainer up fails after stopping', async () => {
-    const state = createTestState('repo-auth', { configSource: 'baseline' });
+    const state = createTestState('repo-auth', { repoConfigDetected: false });
     await createTestWorkspace('repo-auth', state, {
       devcontainerFiles: ['devcontainer.json', 'init-host.sh'],
     });
@@ -1052,7 +978,7 @@ describe('rebuildInstance', () => {
   // ─── Pull behavior ──────────────────────────────────────────────────────
 
   it('default rebuild calls dockerPull for each FROM image found in Dockerfile', async () => {
-    const state = createTestState('repo-auth', { configSource: 'repo' });
+    const state = createTestState('repo-auth', { repoConfigDetected: true });
     await createTestWorkspace('repo-auth', state, {
       devcontainerFiles: ['devcontainer.json', 'Dockerfile'],
       dockerfileContent: 'FROM node:22-bookworm-slim\n',
@@ -1066,7 +992,7 @@ describe('rebuildInstance', () => {
   });
 
   it('skips pull entirely when pull is false', async () => {
-    const state = createTestState('repo-auth', { configSource: 'repo' });
+    const state = createTestState('repo-auth', { repoConfigDetected: true });
     await createTestWorkspace('repo-auth', state, {
       devcontainerFiles: ['devcontainer.json', 'Dockerfile'],
     });
@@ -1079,7 +1005,7 @@ describe('rebuildInstance', () => {
   });
 
   it('returns IMAGE_PULL_FAILED error and does NOT stop/remove container on pull failure', async () => {
-    const state = createTestState('repo-auth', { configSource: 'repo' });
+    const state = createTestState('repo-auth', { repoConfigDetected: true });
     await createTestWorkspace('repo-auth', state, {
       devcontainerFiles: ['devcontainer.json', 'Dockerfile'],
     });
@@ -1105,7 +1031,7 @@ describe('rebuildInstance', () => {
   });
 
   it('skips pull with info log when no Dockerfile found', async () => {
-    const state = createTestState('repo-auth', { configSource: 'repo' });
+    const state = createTestState('repo-auth', { repoConfigDetected: true });
     await createTestWorkspace('repo-auth', state);
     // Create a .devcontainer/ with only devcontainer.json (image-based, no Dockerfile)
     const wsRoot = join(tempDir, AGENT_ENV_DIR, WORKSPACES_DIR, 'repo-auth');
@@ -1126,7 +1052,7 @@ describe('rebuildInstance', () => {
   });
 
   it('skips parameterized FROM lines with logger.warn', async () => {
-    const state = createTestState('repo-auth', { configSource: 'repo' });
+    const state = createTestState('repo-auth', { repoConfigDetected: true });
     await createTestWorkspace('repo-auth', state, {
       devcontainerFiles: ['devcontainer.json', 'Dockerfile'],
       dockerfileContent: 'FROM node:22\nFROM ${BASE_IMAGE}\n',
@@ -1146,7 +1072,7 @@ describe('rebuildInstance', () => {
   // ─── noCache behavior ──────────────────────────────────────────────────
 
   it('default rebuild passes buildNoCache true to devcontainerUp', async () => {
-    const state = createTestState('repo-auth', { configSource: 'repo' });
+    const state = createTestState('repo-auth', { repoConfigDetected: true });
     await createTestWorkspace('repo-auth', state, {
       devcontainerFiles: ['devcontainer.json', 'Dockerfile'],
     });
@@ -1163,7 +1089,7 @@ describe('rebuildInstance', () => {
   });
 
   it('pull false still passes buildNoCache true (flags are independent)', async () => {
-    const state = createTestState('repo-auth', { configSource: 'repo' });
+    const state = createTestState('repo-auth', { repoConfigDetected: true });
     await createTestWorkspace('repo-auth', state, {
       devcontainerFiles: ['devcontainer.json', 'Dockerfile'],
     });
@@ -1181,7 +1107,7 @@ describe('rebuildInstance', () => {
   });
 
   it('passes buildNoCache false when noCache is false', async () => {
-    const state = createTestState('repo-auth', { configSource: 'baseline' });
+    const state = createTestState('repo-auth', { repoConfigDetected: false });
     await createTestWorkspace('repo-auth', state, {
       devcontainerFiles: ['devcontainer.json', 'init-host.sh'],
     });
@@ -1202,7 +1128,7 @@ describe('rebuildInstance', () => {
   });
 
   it('baseline rebuild defaults to buildNoCache false (image-based, no Dockerfile after refresh)', async () => {
-    const state = createTestState('repo-auth', { configSource: 'baseline' });
+    const state = createTestState('repo-auth', { repoConfigDetected: false });
     await createTestWorkspace('repo-auth', state, {
       devcontainerFiles: ['devcontainer.json', 'init-host.sh'],
     });
@@ -1223,7 +1149,7 @@ describe('rebuildInstance', () => {
   });
 
   it('does not pass buildNoCache when no Dockerfile exists (image-based config)', async () => {
-    const state = createTestState('repo-auth', { configSource: 'repo' });
+    const state = createTestState('repo-auth', { repoConfigDetected: true });
     await createTestWorkspace('repo-auth', state);
     const wsRoot = join(tempDir, AGENT_ENV_DIR, WORKSPACES_DIR, 'repo-auth');
     const devcontainerDir = join(wsRoot, '.devcontainer');
@@ -1247,7 +1173,7 @@ describe('rebuildInstance', () => {
   // ─── Pull ordering verification ────────────────────────────────────────
 
   it('pull failure prevents container teardown (stop is never called)', async () => {
-    const state = createTestState('repo-auth', { configSource: 'repo' });
+    const state = createTestState('repo-auth', { repoConfigDetected: true });
     await createTestWorkspace('repo-auth', state, {
       devcontainerFiles: ['devcontainer.json', 'Dockerfile'],
     });

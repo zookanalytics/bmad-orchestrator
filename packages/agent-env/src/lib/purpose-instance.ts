@@ -19,7 +19,7 @@ import type { InstanceState, WorkspacePath } from './types.js';
 import type { FsDeps } from './workspace.js';
 
 import { CONTAINER_AGENT_ENV_DIR, CONTAINER_STATE_PATH } from './container-env.js';
-import { readState, writeStateAtomic, isValidState } from './state.js';
+import { readState, writeStateAtomic, isValidState, migrateConfigSource } from './state.js';
 import { regenerateStatusBar, TEMPLATE_NOT_FOUND } from './status-bar.js';
 import { getWorkspacePathByName, resolveInstance } from './workspace.js';
 
@@ -222,7 +222,7 @@ async function readContainerState(deps: ContainerPurposeDeps): Promise<Container
       };
     }
 
-    return { ok: true, state: parsed };
+    return { ok: true, state: migrateConfigSource(parsed) };
   } catch (err) {
     if ((err as NodeJS.ErrnoException).code === 'ENOENT') {
       return {

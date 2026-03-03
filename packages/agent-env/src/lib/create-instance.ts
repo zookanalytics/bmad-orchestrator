@@ -9,6 +9,7 @@ import type { ExecuteResult } from '@zookanalytics/shared';
 
 import { createExecutor } from '@zookanalytics/shared';
 import {
+  access,
   appendFile,
   cp,
   mkdir,
@@ -23,6 +24,7 @@ import { homedir } from 'node:os';
 import { dirname, join } from 'node:path';
 
 import type { ContainerLifecycle } from './container.js';
+import type { DevcontainerMergeDeps } from './devcontainer-merge.js';
 import type { DevcontainerFsDeps } from './devcontainer.js';
 import type { StateFsDeps } from './state.js';
 import type { ContainerError, WorkspacePath } from './types.js';
@@ -30,11 +32,14 @@ import type { FsDeps } from './workspace.js';
 
 import { createContainerLifecycle } from './container.js';
 import {
-  applyBaselinePatches,
-  copyBaselineConfig,
-  copyStatusBarTemplate,
-  hasDevcontainerConfig,
-} from './devcontainer.js';
+  buildManagedConfig,
+  loadManagedDefaults,
+  mergeDevcontainerConfigs,
+  readRepoConfig,
+  validateRepoConfig,
+  writeGeneratedConfig,
+} from './devcontainer-merge.js';
+import { copyManagedAssets } from './devcontainer.js';
 import { MAX_PURPOSE_LENGTH } from './purpose-instance.js';
 import { createInitialState, ensureGitExclude, writeStateAtomic } from './state.js';
 import { AGENT_ENV_DIR, MAX_INSTANCE_NAME_LENGTH } from './types.js';
@@ -125,6 +130,7 @@ export interface CreateInstanceDeps {
   workspaceFsDeps: FsDeps;
   stateFsDeps: StateFsDeps;
   devcontainerFsDeps: Pick<DevcontainerFsDeps, 'cp' | 'mkdir' | 'readFile' | 'stat' | 'writeFile'>;
+  mergeDeps: DevcontainerMergeDeps;
   rm: typeof rm;
   logger?: {
     warn: (message: string) => void;
@@ -242,6 +248,7 @@ export function createDefaultDeps(): CreateInstanceDeps {
     workspaceFsDeps: { mkdir, readdir, stat, homedir },
     stateFsDeps: { readFile, writeFile, rename, mkdir, appendFile },
     devcontainerFsDeps: { cp, mkdir, readFile, stat, writeFile },
+    mergeDeps: { readFile, writeFile, rename, access },
     rm,
     logger: {
       warn: (msg) => console.warn(msg),
@@ -251,129 +258,64 @@ export function createDefaultDeps(): CreateInstanceDeps {
 }
 
 /**
- * Determine whether to use baseline or repo config.
+ * Set up the merged devcontainer configuration for the workspace.
  *
- * Logic:
- * - No repo config → always use baseline (regardless of flags)
- * - Has repo config + force-baseline → use baseline
- * - Has repo config + force-repo-config → use repo
- * - Has repo config + ask-user → call askUser callback, default to repo if no callback
+ * Always merges agent-env managed properties with repo config (if present).
+ * Writes the generated config to .agent-env/devcontainer.json and copies
+ * managed non-JSON assets (init-host.sh, status bar template).
+ *
+ * Returns repoConfigDetected (whether repo had its own config) or error.
  */
-async function resolveConfigChoice(
-  hasConfig: boolean,
-  baselineChoice: BaselineChoice,
-  askUser?: AskBaselineChoice
-): Promise<'baseline' | 'repo'> {
-  if (!hasConfig) {
-    return 'baseline';
-  }
-  if (baselineChoice === 'force-baseline') {
-    return 'baseline';
-  }
-  if (baselineChoice === 'force-repo-config') {
-    return 'repo';
-  }
-  // ask-user: call callback if available, default to repo config
-  if (askUser) {
-    return askUser();
-  }
-  return 'repo';
-}
-
-/**
- * Derive the BaselineChoice enum from the boolean options flag.
- * true = --baseline (force baseline), false = --no-baseline (force repo config), undefined = ask user
- */
-function deriveBaselineChoice(baseline: boolean | undefined): BaselineChoice {
-  if (baseline === true) return 'force-baseline';
-  if (baseline === false) return 'force-repo-config';
-  return 'ask-user';
-}
-
-/**
- * Set up the devcontainer configuration for the workspace.
- * Returns the config source ('baseline' or 'repo') on success, or a CreateResult error on failure.
- */
-async function setupDevcontainerConfig(
+async function setupMergedConfig(
   wsPath: WorkspacePath,
   containerName: string,
   repoName: string,
   purposeText: string,
-  deps: CreateInstanceDeps,
-  baselineChoice: BaselineChoice = 'ask-user',
-  askUser?: AskBaselineChoice
-): Promise<{ ok: true; configSource: 'baseline' | 'repo' } | (CreateResult & { ok: false })> {
-  const hasConfig = await hasDevcontainerConfig(wsPath.root, deps.devcontainerFsDeps);
-  const choice = await resolveConfigChoice(hasConfig, baselineChoice, askUser);
-
-  if (choice === 'repo') {
-    // Deploy status bar template to .agent-env/ even for repo-config instances.
-    // The .agent-env/ dir is bind-mounted to /etc/agent-env in the container,
-    // where `agent-env purpose` needs the template to generate statusBar.json.
-    // Non-fatal: template is optional — `agent-env purpose` will log a helpful
-    // TEMPLATE_NOT_FOUND warning but still succeed, and users can add one manually.
-    try {
-      await copyStatusBarTemplate(wsPath.root, deps.devcontainerFsDeps);
-    } catch (err) {
-      deps.logger?.warn(
-        `Warning: Failed to copy status bar template: ${err instanceof Error ? err.message : String(err)}`
-      );
-    }
-    return { ok: true, configSource: 'repo' };
-  }
-
-  // Use baseline config
+  deps: CreateInstanceDeps
+): Promise<{ ok: true; repoConfigDetected: boolean } | (CreateResult & { ok: false })> {
   try {
-    await copyBaselineConfig(wsPath.root, deps.devcontainerFsDeps);
-    await copyStatusBarTemplate(wsPath.root, deps.devcontainerFsDeps);
-  } catch (err) {
-    await safeRollback(wsPath.root, deps.rm, deps.logger);
-    return {
-      ok: false,
-      error: {
-        code: 'CONTAINER_ERROR',
-        message: `Failed to copy baseline devcontainer config: ${err instanceof Error ? err.message : String(err)}`,
-      },
-    };
-  }
+    // Load managed defaults from baseline config
+    const defaults = await loadManagedDefaults(deps.mergeDeps);
 
-  try {
-    await applyBaselinePatches(
-      wsPath.root,
+    // Build managed config from instance parameters
+    const managed = buildManagedConfig(defaults, {
+      instanceName: wsPath.name,
       containerName,
-      {
-        AGENT_ENV_INSTANCE: wsPath.name,
-        AGENT_ENV_REPO: repoName,
-        AGENT_ENV_PURPOSE: purposeText,
-      },
-      deps.devcontainerFsDeps,
-      AGENT_ENV_DIR
-    );
+      repoSlug: repoName,
+      purpose: purposeText,
+    });
+
+    // Read and validate repo config (if any)
+    const repoConfig = await readRepoConfig(wsPath.root, deps.mergeDeps, deps.logger);
+    if (repoConfig) {
+      validateRepoConfig(repoConfig, deps.logger);
+    }
+
+    // Deep merge managed + repo config
+    const merged = mergeDevcontainerConfigs(managed, repoConfig);
+
+    // Copy managed non-JSON assets (init-host.sh, status bar template)
+    await copyManagedAssets(wsPath.root, deps.devcontainerFsDeps);
+
+    // Write generated config to .agent-env/devcontainer.json
+    const configPath = join(wsPath.root, AGENT_ENV_DIR, 'devcontainer.json');
+    await writeGeneratedConfig(configPath, merged, deps.mergeDeps);
+
+    return { ok: true, repoConfigDetected: repoConfig !== undefined };
   } catch (err) {
     await safeRollback(wsPath.root, deps.rm, deps.logger);
     return {
       ok: false,
       error: {
         code: 'CONTAINER_ERROR',
-        message: `Failed to patch baseline devcontainer.json: ${err instanceof Error ? err.message : String(err)}`,
+        message: `Failed to set up devcontainer config: ${err instanceof Error ? err.message : String(err)}`,
       },
     };
   }
-
-  return { ok: true, configSource: 'baseline' };
 }
-
-/** Callback for asking the user which config to use when repo has .devcontainer/ */
-export type AskBaselineChoice = () => Promise<'baseline' | 'repo'>;
-
-export type BaselineChoice = 'force-baseline' | 'force-repo-config' | 'ask-user';
 
 export interface CreateInstanceOptions {
   purpose?: string;
-  /** true = --baseline (force baseline), false = --no-baseline (force repo config), undefined = ask user */
-  baseline?: boolean;
-  /** Callback to prompt user for baseline choice. Required when baseline is undefined and repo has config. */
-  askUser?: AskBaselineChoice;
 }
 
 /**
@@ -524,22 +466,12 @@ export async function createInstance(
   const prepResult = await cloneAndPrepareWorkspace(repoUrl, wsPath, deps);
   if (!prepResult.ok) return prepResult;
 
-  // Step 5: Determine config choice and set up devcontainer config
-  const baselineChoice = deriveBaselineChoice(options?.baseline);
-
-  const configResult = await setupDevcontainerConfig(
-    wsPath,
-    containerName,
-    repoName,
-    purposeText,
-    deps,
-    baselineChoice,
-    options?.askUser
-  );
+  // Step 5: Merge config and write generated devcontainer.json
+  const configResult = await setupMergedConfig(wsPath, containerName, repoName, purposeText, deps);
   if (!configResult.ok) {
     return configResult;
   }
-  const { configSource } = configResult;
+  const { repoConfigDetected } = configResult;
 
   // Step 5c: Pre-flight check for existing containers at this workspace path
   const existingContainer = await deps.container.findContainerByWorkspaceLabel(wsPath.root);
@@ -556,18 +488,14 @@ export async function createInstance(
   }
 
   // Step 6: Start container
-  // Pass AGENT_INSTANCE so the image's postCreateCommand can set up per-instance
-  // isolation (shared credentials + per-instance history/state).
-  // For baseline configs (in .agent-env/), pass --config so the devcontainer CLI
-  // finds the config instead of looking in the default .devcontainer/ location.
-  const baselineConfigPath =
-    configSource === 'baseline' ? join(wsPath.root, AGENT_ENV_DIR, 'devcontainer.json') : undefined;
+  // Always use --config pointing to .agent-env/devcontainer.json (the generated merged config)
+  const configPath = join(wsPath.root, AGENT_ENV_DIR, 'devcontainer.json');
   const containerResult = await deps.container.devcontainerUp(wsPath.root, containerName, {
     remoteEnv: {
       AGENT_INSTANCE: wsPath.name,
       AGENT_ENV_PURPOSE: purposeText,
     },
-    configPath: baselineConfigPath,
+    configPath,
   });
   if (!containerResult.ok) {
     return rollbackContainerFailure(containerName, wsPath, containerResult, deps);
@@ -583,7 +511,7 @@ export async function createInstance(
   // Step 7: Write initial state
   const state = createInitialState(instanceName, repoName, repoUrl, {
     containerName: actualContainerName,
-    configSource,
+    repoConfigDetected,
     purpose: purposeState,
   });
   await writeStateAtomic(wsPath, state, deps.stateFsDeps);

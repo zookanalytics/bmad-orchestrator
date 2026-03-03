@@ -8,11 +8,17 @@
  * is set to "true" in devcontainer.json containerEnv (Story 6.1/6.2).
  */
 
-/** Path to state.json when running inside a container (bind-mounted from host) */
-export const CONTAINER_STATE_PATH = '/etc/agent-env/state.json';
+/**
+ * Path to state.json when running inside a container (bind-mounted from host).
+ * Env var override is for CLI integration tests only — evaluated once at module load.
+ */
+export const CONTAINER_STATE_PATH = process.env.AGENT_ENV_STATE_PATH || '/etc/agent-env/state.json';
 
-/** Path to the agent-env directory inside the container */
-export const CONTAINER_AGENT_ENV_DIR = '/etc/agent-env';
+/**
+ * Path to the agent-env directory inside the container.
+ * Env var override is for CLI integration tests only — evaluated once at module load.
+ */
+export const CONTAINER_AGENT_ENV_DIR = process.env.AGENT_ENV_CONTAINER_DIR || '/etc/agent-env';
 
 // ─── Types for dependency injection ──────────────────────────────────────────
 

@@ -64,6 +64,7 @@ function createTestState(
     lastAttached: '2026-01-20T14:00:00.000Z',
     purpose: null,
     containerName: `ae-${workspaceName}`,
+    repoConfigDetected: false,
     ...overrides,
   };
 }
@@ -219,7 +220,7 @@ describe('attachInstance', () => {
     expect(mockContainer.devcontainerUp).toHaveBeenCalled();
   });
 
-  it('passes configPath for baseline config when starting stopped container', async () => {
+  it('always passes configPath to .agent-env/devcontainer.json when starting stopped container', async () => {
     const state = createTestState('repo-auth');
     await createTestWorkspace('repo-auth', state);
     const mockContainer = createMockContainer({
@@ -238,29 +239,6 @@ describe('attachInstance', () => {
       expect.any(String),
       expect.objectContaining({
         configPath: expect.stringContaining(join(AGENT_ENV_DIR, 'devcontainer.json')),
-      })
-    );
-  });
-
-  it('does not pass configPath for repo config when starting stopped container', async () => {
-    const state = createTestState('repo-auth', { configSource: 'repo' });
-    await createTestWorkspace('repo-auth', state);
-    const mockContainer = createMockContainer({
-      containerStatus: vi.fn().mockResolvedValue({
-        ok: true,
-        status: 'stopped',
-        containerId: 'abc123',
-      }),
-    });
-    const deps = createTestDeps({ container: mockContainer });
-
-    await attachInstance('auth', deps);
-
-    expect(mockContainer.devcontainerUp).toHaveBeenCalledWith(
-      expect.any(String),
-      expect.any(String),
-      expect.objectContaining({
-        configPath: undefined,
       })
     );
   });

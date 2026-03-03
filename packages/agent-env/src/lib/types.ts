@@ -80,7 +80,25 @@ export interface InstanceState {
   purpose: string | null;
   /** Container name (e.g., "ae-bmad-orchestrator-auth") */
   containerName: string;
-  /** How the devcontainer config was provisioned. Absent = 'baseline' for backwards compat. */
+  /** Whether the repo had its own .devcontainer/devcontainer.json at creation time */
+  repoConfigDetected: boolean;
+}
+
+/**
+ * Raw state shape before migrateConfigSource() post-processing.
+ * Identical to InstanceState but with repoConfigDetected optional
+ * and legacy configSource optional (for migration).
+ */
+export interface RawInstanceState {
+  instance: string;
+  repoSlug: string;
+  repoUrl: string;
+  createdAt: string;
+  lastAttached: string;
+  lastRebuilt?: string;
+  purpose: string | null;
+  containerName: string;
+  repoConfigDetected?: boolean;
   configSource?: 'baseline' | 'repo';
 }
 
@@ -171,5 +189,6 @@ export function createFallbackState(workspaceName: string): InstanceState {
     lastAttached: 'unknown',
     purpose: null,
     containerName: `${CONTAINER_PREFIX}${workspaceName}`,
+    repoConfigDetected: false,
   };
 }

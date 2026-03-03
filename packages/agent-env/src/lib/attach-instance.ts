@@ -172,15 +172,11 @@ export async function attachInstance(
   if (statusResult.status === 'stopped' || statusResult.status === 'not-found') {
     onContainerStarting?.();
 
-    // For baseline configs, pass --config to point at .agent-env/devcontainer.json
-    const configSource = state.configSource ?? 'baseline';
-    const baselineConfigPath =
-      configSource === 'baseline'
-        ? join(wsPath.root, AGENT_ENV_DIR, 'devcontainer.json')
-        : undefined;
+    // Always use --config pointing to .agent-env/devcontainer.json (generated merged config)
+    const configPath = join(wsPath.root, AGENT_ENV_DIR, 'devcontainer.json');
     const startResult = await deps.container.devcontainerUp(wsPath.root, containerName, {
       remoteEnv: { AGENT_INSTANCE: wsPath.name },
-      configPath: baselineConfigPath,
+      configPath,
     });
 
     if (!startResult.ok) {

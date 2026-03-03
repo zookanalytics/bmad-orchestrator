@@ -44,6 +44,7 @@ function makeState(overrides: Partial<InstanceState> = {}): InstanceState {
     lastAttached: '2026-02-03T08:30:00.000Z',
     purpose: null,
     containerName: 'ae-test-instance',
+    repoConfigDetected: false,
     ...overrides,
   };
 }
