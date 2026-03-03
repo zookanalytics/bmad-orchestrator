@@ -123,6 +123,36 @@ describe('create command — slug resolution', () => {
     });
   });
 
+  describe('removed --baseline / --no-baseline flags (AC: #14)', () => {
+    it('shows REMOVED_OPTION error when --baseline is passed', async () => {
+      setupMocksForSuccess('https://github.com/user/repo.git');
+
+      await createCommand.parseAsync(['test-instance', '--repo', 'repo', '--baseline'], {
+        from: 'user',
+      });
+
+      expect(processExitSpy).toHaveBeenCalledWith(1);
+      expect(consoleErrorSpy).toHaveBeenCalled();
+      const errorOutput = consoleErrorSpy.mock.calls[0][0] as string;
+      expect(errorOutput).toContain('REMOVED_OPTION');
+      expect(errorOutput).toContain('--baseline');
+    });
+
+    it('shows REMOVED_OPTION error when --no-baseline is passed', async () => {
+      setupMocksForSuccess('https://github.com/user/repo.git');
+
+      await createCommand.parseAsync(['test-instance', '--repo', 'repo', '--no-baseline'], {
+        from: 'user',
+      });
+
+      expect(processExitSpy).toHaveBeenCalledWith(1);
+      expect(consoleErrorSpy).toHaveBeenCalled();
+      const errorOutput = consoleErrorSpy.mock.calls[0][0] as string;
+      expect(errorOutput).toContain('REMOVED_OPTION');
+      expect(errorOutput).toContain('--baseline');
+    });
+  });
+
   describe('full URL bypass (AC: #3)', () => {
     it('passes full URL through without slug resolution', async () => {
       setupMocksForSuccess('https://github.com/user/new-repo.git', false);
