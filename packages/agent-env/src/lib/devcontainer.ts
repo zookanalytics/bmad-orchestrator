@@ -72,8 +72,9 @@ export function getPackageRoot(checkAccess = accessSync): string {
     } catch (err: unknown) {
       // If we hit a permission error, we should stop - walking up to a parent
       // we CAN access would yield a false positive (e.g. monorepo root).
-      if (err instanceof Error && (err as NodeJS.ErrnoException).code === 'EACCES') {
-        throw new Error(`Permission denied accessing package.json at ${dir}`);
+      const code = (err as NodeJS.ErrnoException | { code?: unknown })?.code;
+      if (code === 'EACCES' || code === 'EPERM') {
+        throw new Error(`Permission denied accessing ${join(dir, 'package.json')}`);
       }
 
       const parent = dirname(dir);

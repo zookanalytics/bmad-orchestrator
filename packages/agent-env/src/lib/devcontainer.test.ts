@@ -71,7 +71,7 @@ describe('getPackageRoot', () => {
 
   it('successfully finds package root in current dev environment', async () => {
     const root = getPackageRoot();
-    expect(root).toContain('packages/agent-env');
+    expect(root).toMatch(/(^|\/)agent-env$/);
     // Verify it's actually the directory containing our package.json
     await expect(readFile(join(root, 'package.json'), 'utf-8')).resolves.toBeDefined();
   });
@@ -100,7 +100,17 @@ describe('getPackageRoot', () => {
     };
 
     expect(() => getPackageRoot(mockAccess as typeof accessSync)).toThrow(
-      /Permission denied accessing package\.json/
+      /Permission denied accessing/
+    );
+  });
+
+  it('stops and throws when encountering EPERM (permission denied)', () => {
+    const mockAccess = () => {
+      throw Object.assign(new Error('EPERM'), { code: 'EPERM' });
+    };
+
+    expect(() => getPackageRoot(mockAccess as typeof accessSync)).toThrow(
+      /Permission denied accessing/
     );
   });
 });

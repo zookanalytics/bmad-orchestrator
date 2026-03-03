@@ -313,34 +313,18 @@ describe('agent-env CLI', () => {
     const isRealContainer = process.env.AGENT_ENV_CONTAINER === 'true';
 
     it.skipIf(isRealContainer)(
-      'purpose inside container reads from /etc/agent-env/state.json',
+      'purpose inside container returns STATE_NOT_FOUND when state file is missing',
       async () => {
-        // Create state file at temp location simulating container mount
-        const etcAgentEnv = join(tempRoot, 'etc-agent-env');
-        await mkdir(etcAgentEnv, { recursive: true });
-        const statePath = join(etcAgentEnv, 'state.json');
-        await writeFile(
-          statePath,
-          JSON.stringify({
-            name: 'test-instance',
-            repo: 'https://github.com/test/repo.git',
-            createdAt: '2026-01-01T00:00:00Z',
-            lastAttached: '2026-01-01T00:00:00Z',
-            purpose: 'JWT authentication',
-            containerName: 'ae-test-instance',
-          }),
-          'utf-8'
-        );
-
         // Run purpose in simulated container mode
         // Note: We can't easily redirect /etc/agent-env in the CLI test,
-        // but we can verify the container detection works with env var
+        // so we just verify that container detection works and that the CLI
+        // reports STATE_NOT_FOUND when the state file is absent.
         const result = await runCli(['purpose'], {
           AGENT_ENV_CONTAINER: 'true',
         });
 
         // Inside container mode, it tries to read /etc/agent-env/state.json
-        // which won't exist in test environment, so expect STATE_NOT_FOUND error
+        // which won't exist in the test environment, so expect STATE_NOT_FOUND.
         const stderrStripped = stripAnsiCodes(result.stderr);
         expect(result.exitCode).toBe(1);
         expect(stderrStripped).toMatch(/STATE_NOT_FOUND/);
