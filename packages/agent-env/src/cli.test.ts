@@ -215,6 +215,24 @@ describe('agent-env CLI', () => {
     });
   });
 
+  describe('unknown command', () => {
+    it('shows helpful error with suggestion for partial command match', async () => {
+      const result = await runCli(['a']);
+      const stderrStripped = stripAnsiCodes(result.stderr);
+      expect(result.exitCode).toBe(1);
+      expect(stderrStripped).toContain('Unknown command "a"');
+      expect(stderrStripped).toContain('attach');
+    });
+
+    it('shows available commands when no match found', async () => {
+      const result = await runCli(['xyz']);
+      const stderrStripped = stripAnsiCodes(result.stderr);
+      expect(result.exitCode).toBe(1);
+      expect(stderrStripped).toContain('Unknown command "xyz"');
+      expect(stderrStripped).toContain('Available commands:');
+    });
+  });
+
   describe('create command', () => {
     it('create without --repo shows missing option error', async () => {
       const result = await runCli(['create', 'test-instance']);

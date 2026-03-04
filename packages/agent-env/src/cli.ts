@@ -33,7 +33,8 @@ const version = packageJson.version + (isLinked ? '+local' : '');
 program
   .name('agent-env')
   .description('CLI for creating isolated, AI-ready development environments')
-  .version(version);
+  .version(version)
+  .allowExcessArguments(true);
 
 // Register commands
 program.addCommand(createCommand);
@@ -48,6 +49,23 @@ program.addCommand(completionCommand);
 
 // Default action: interactive menu (TTY) or help (non-TTY)
 program.action(async () => {
+  // Handle unknown commands passed as arguments
+  if (program.args.length > 0) {
+    const unknown = program.args[0];
+    const available = program.commands.map((c) => c.name());
+    const matches = available.filter((c) => c.startsWith(unknown));
+    const suggestion =
+      matches.length > 0
+        ? `Did you mean ${matches.map((m) => `"${m}"`).join(' or ')}?`
+        : `Available commands: ${available.join(', ')}`;
+
+    console.error(
+      formatError(createError('UNKNOWN_COMMAND', `Unknown command "${unknown}".`, suggestion))
+    );
+    process.exitCode = 1;
+    return;
+  }
+
   if (!process.stdin.isTTY) {
     program.help();
     return;
