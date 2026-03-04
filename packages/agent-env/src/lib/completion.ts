@@ -75,19 +75,30 @@ function generateBashCompletion(): string {
 
 _agent_env_repos() {
   local ws_dir=~/.agent-env/workspaces
+  local entry base repo
   if [[ -d "\${ws_dir}" ]]; then
-    ls "\${ws_dir}" 2>/dev/null
+    for entry in "\${ws_dir}"/*/; do
+      [[ -d "\${entry}" ]] || continue
+      base="\${entry%/}"
+      base="\${base##*/}"
+      repo="\${base%-*}"
+      [[ "\${repo}" != "\${base}" ]] && echo "\${repo}"
+    done | sort -u
   fi
 }
 
 _agent_env_instances() {
   local ws_dir=~/.agent-env/workspaces
-  local repo
-  for repo in $(_agent_env_repos); do
-    if [[ -d "\${ws_dir}/\${repo}" ]]; then
-      ls "\${ws_dir}/\${repo}" 2>/dev/null
-    fi
-  done
+  local entry base instance
+  if [[ -d "\${ws_dir}" ]]; then
+    for entry in "\${ws_dir}"/*/; do
+      [[ -d "\${entry}" ]] || continue
+      base="\${entry%/}"
+      base="\${base##*/}"
+      instance="\${base##*-}"
+      [[ "\${instance}" != "\${base}" ]] && echo "\${instance}"
+    done | sort -u
+  fi
 }
 
 _agent_env_completions() {
@@ -175,21 +186,34 @@ function generateZshCompletion(): string {
 _agent_env_repos() {
   local ws_dir=~/.agent-env/workspaces
   local -a repos
+  local entry base repo
   if [[ -d "\${ws_dir}" ]]; then
-    repos=(\${(f)"$(ls "\${ws_dir}" 2>/dev/null)"})
+    for entry in "\${ws_dir}"/*/; do
+      [[ -d "\${entry}" ]] || continue
+      base="\${entry%/}"
+      base="\${base##*/}"
+      repo="\${base%-*}"
+      [[ "\${repo}" != "\${base}" ]] && repos+=("\${repo}")
+    done
   fi
+  repos=(\${(u)repos})
   _describe 'repo' repos
 }
 
 _agent_env_instances() {
   local ws_dir=~/.agent-env/workspaces
   local -a instances
-  local repo
-  for repo in \${(f)"$(ls "\${ws_dir}" 2>/dev/null)"}; do
-    if [[ -d "\${ws_dir}/\${repo}" ]]; then
-      instances+=(\${(f)"$(ls "\${ws_dir}/\${repo}" 2>/dev/null)"})
-    fi
-  done
+  local entry base instance
+  if [[ -d "\${ws_dir}" ]]; then
+    for entry in "\${ws_dir}"/*/; do
+      [[ -d "\${entry}" ]] || continue
+      base="\${entry%/}"
+      base="\${base##*/}"
+      instance="\${base##*-}"
+      [[ "\${instance}" != "\${base}" ]] && instances+=("\${instance}")
+    done
+  fi
+  instances=(\${(u)instances})
   _describe 'instance' instances
 }
 

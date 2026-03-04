@@ -95,7 +95,14 @@ describe('completion', () => {
       it('uses portable commands instead of GNU find -printf', () => {
         const script = generateCompletionScript('bash');
         expect(script).not.toContain('-printf');
-        expect(script).toContain('ls');
+      });
+
+      it('parses flat workspace layout for repos and instances', () => {
+        const script = generateCompletionScript('bash');
+        // Repos: extract prefix before last hyphen
+        expect(script).toMatch(/_agent_env_repos\(\).*\$\{base%-\*\}/s);
+        // Instances: extract suffix after last hyphen
+        expect(script).toMatch(/_agent_env_instances\(\).*\$\{base##\*-\}/s);
       });
     });
 
@@ -179,7 +186,14 @@ describe('completion', () => {
       it('uses portable commands instead of GNU find -printf', () => {
         const script = generateCompletionScript('zsh');
         expect(script).not.toContain('-printf');
-        expect(script).toContain('ls');
+      });
+
+      it('parses flat workspace layout for repos and instances', () => {
+        const script = generateCompletionScript('zsh');
+        // Repos: extract prefix before last hyphen
+        expect(script).toMatch(/_agent_env_repos\(\).*\$\{base%-\*\}/s);
+        // Instances: extract suffix after last hyphen
+        expect(script).toMatch(/_agent_env_instances\(\).*\$\{base##\*-\}/s);
       });
     });
   });
