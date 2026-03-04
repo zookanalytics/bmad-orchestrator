@@ -2,18 +2,27 @@
  * Shell completion script generation for agent-env
  *
  * Generates bash and zsh completion scripts that provide:
- * - Command name completion (create, list, attach, remove, purpose, completion)
+ * - Command name completion for all registered commands
  * - Dynamic instance name completion for commands that accept instance names
+ * - Repo slug completion for --repo options
  */
 
 /** Supported shell types for completion */
 export type ShellType = 'bash' | 'zsh';
 
 /** All registered agent-env commands */
-const COMMANDS = ['create', 'list', 'ps', 'attach', 'remove', 'purpose', 'completion'];
-
-/** Commands that accept an instance name as their first argument */
-const INSTANCE_COMMANDS = ['attach', 'purpose'];
+const COMMANDS = [
+  'create',
+  'list',
+  'ps',
+  'attach',
+  'rebuild',
+  'remove',
+  'repos',
+  'purpose',
+  'tmux-status',
+  'completion',
+];
 
 /**
  * Generate a shell completion script for the specified shell
@@ -59,17 +68,26 @@ export function getInstallInstructions(): string {
 
 function generateBashCompletion(): string {
   const commandList = COMMANDS.join(' ');
-  const instanceCommandList = INSTANCE_COMMANDS.join('|');
 
   return `#!/usr/bin/env bash
 # agent-env bash completion script
 # Install: eval "$(agent-env completion bash)"
 
-_agent_env_instances() {
+_agent_env_repos() {
   local ws_dir=~/.agent-env/workspaces
   if [[ -d "\${ws_dir}" ]]; then
     ls "\${ws_dir}" 2>/dev/null
   fi
+}
+
+_agent_env_instances() {
+  local ws_dir=~/.agent-env/workspaces
+  local repo
+  for repo in $(_agent_env_repos); do
+    if [[ -d "\${ws_dir}/\${repo}" ]]; then
+      ls "\${ws_dir}/\${repo}" 2>/dev/null
+    fi
+  done
 }
 
 _agent_env_completions() {
@@ -86,26 +104,46 @@ _agent_env_completions() {
 
   # Complete based on command
   case "\${prev}" in
-    ${instanceCommandList})
-      COMPREPLY=($(compgen -W "$(_agent_env_instances)" -- "\${cur}"))
+    attach|purpose)
+      local instances
+      instances="$(_agent_env_instances)"
+      COMPREPLY=($(compgen -W "--repo \${instances}" -- "\${cur}"))
       return 0
       ;;
     create)
-      COMPREPLY=($(compgen -W "--repo --attach" -- "\${cur}"))
+      COMPREPLY=($(compgen -W "--repo --purpose --attach" -- "\${cur}"))
       return 0
       ;;
     list|ps)
-      COMPREPLY=($(compgen -W "--json" -- "\${cur}"))
+      COMPREPLY=($(compgen -W "--json --repo" -- "\${cur}"))
+      return 0
+      ;;
+    rebuild)
+      local instances
+      instances="$(_agent_env_instances)"
+      COMPREPLY=($(compgen -W "--force --yes --no-pull --use-cache --repo \${instances}" -- "\${cur}"))
       return 0
       ;;
     remove)
       local instances
       instances="$(_agent_env_instances)"
-      COMPREPLY=($(compgen -W "--force \${instances}" -- "\${cur}"))
+      COMPREPLY=($(compgen -W "--force --repo \${instances}" -- "\${cur}"))
+      return 0
+      ;;
+    repos)
+      COMPREPLY=($(compgen -W "--json" -- "\${cur}"))
+      return 0
+      ;;
+    tmux-status)
+      # no arguments or options
       return 0
       ;;
     completion)
       COMPREPLY=($(compgen -W "bash zsh" -- "\${cur}"))
+      return 0
+      ;;
+    --repo)
+      COMPREPLY=($(compgen -W "$(_agent_env_repos)" -- "\${cur}"))
       return 0
       ;;
   esac
@@ -122,8 +160,11 @@ function generateZshCompletion(): string {
     'list:List all instances',
     'ps:List all instances (alias)',
     'attach:Attach to an instance tmux session',
+    'rebuild:Rebuild an instance container',
     'remove:Remove an instance',
+    'repos:List tracked repositories',
     'purpose:Get or set instance purpose',
+    'tmux-status:Show tmux status bar info',
     'completion:Generate shell completion script',
   ];
 
@@ -131,12 +172,24 @@ function generateZshCompletion(): string {
 # agent-env zsh completion script
 # Install: eval "$(agent-env completion zsh)"
 
+_agent_env_repos() {
+  local ws_dir=~/.agent-env/workspaces
+  local -a repos
+  if [[ -d "\${ws_dir}" ]]; then
+    repos=(\${(f)"$(ls "\${ws_dir}" 2>/dev/null)"})
+  fi
+  _describe 'repo' repos
+}
+
 _agent_env_instances() {
   local ws_dir=~/.agent-env/workspaces
   local -a instances
-  if [[ -d "\${ws_dir}" ]]; then
-    instances=(\${(f)"$(ls "\${ws_dir}" 2>/dev/null)"})
-  fi
+  local repo
+  for repo in \${(f)"$(ls "\${ws_dir}" 2>/dev/null)"}; do
+    if [[ -d "\${ws_dir}/\${repo}" ]]; then
+      instances+=(\${(f)"$(ls "\${ws_dir}/\${repo}" 2>/dev/null)"})
+    fi
+  done
   _describe 'instance' instances
 }
 
@@ -159,21 +212,41 @@ ${commandDescriptions.map((desc) => `    '${desc}'`).join('\n')}
     args)
       case $words[1] in
         attach|purpose)
-          _agent_env_instances
+          _arguments \\
+            '--repo[Repo slug to scope lookup]:slug:_agent_env_repos' \\
+            '1:instance:_agent_env_instances'
           ;;
         create)
           _arguments \\
             '--repo[Repository URL]:url:' \\
+            '--purpose[Set instance purpose]:text:' \\
             '--attach[Attach after creation]'
           ;;
         list|ps)
           _arguments \\
-            '--json[Output as JSON]'
+            '--json[Output as JSON]' \\
+            '--repo[Filter by repo slug]:slug:_agent_env_repos'
+          ;;
+        rebuild)
+          _arguments \\
+            '--force[Rebuild running container]' \\
+            '--yes[Skip confirmation prompt]' \\
+            '--no-pull[Skip pulling fresh images]' \\
+            '--use-cache[Allow Docker layer cache]' \\
+            '--repo[Repo slug to scope lookup]:slug:_agent_env_repos' \\
+            '1:instance:_agent_env_instances'
           ;;
         remove)
           _arguments \\
             '--force[Force removal]' \\
+            '--repo[Repo slug to scope lookup]:slug:_agent_env_repos' \\
             '1:instance:_agent_env_instances'
+          ;;
+        repos)
+          _arguments \\
+            '--json[Output as JSON]'
+          ;;
+        tmux-status)
           ;;
         completion)
           _describe 'shell' '(bash zsh)'
@@ -183,5 +256,5 @@ ${commandDescriptions.map((desc) => `    '${desc}'`).join('\n')}
   esac
 }
 
-_agent_env`;
+compdef _agent_env agent-env`;
 }
