@@ -138,21 +138,23 @@ describe('InteractiveMenu', () => {
       stdin.write('\r'); // Enter key
 
       // Wait for action menu to render (polls to handle CI/parallel-test load)
-      const waitForFrame = async (match: string, timeoutMs = 2000) => {
+      const waitForFrame = async (match: string, timeoutMs = 5000) => {
         const start = Date.now();
         while (Date.now() - start < timeoutMs) {
-          if ((lastFrame() ?? '').includes(match)) return;
+          if ((lastFrame() ?? '').includes(match)) return true;
           await new Promise((resolve) => setTimeout(resolve, 20));
         }
+        return false;
       };
-      await waitForFrame('Manage alpha:');
+      const menuReady = await waitForFrame('Manage alpha:');
+      expect(menuReady).toBe(true);
 
       // Action menu is now visible, select 'rebuild' (down arrow once from 'attach')
       stdin.write('\x1B[B'); // Down arrow key
       stdin.write('\r'); // Enter key
 
       // Wait for onAction to be called
-      const waitForCall = async (fn: ReturnType<typeof vi.fn>, timeoutMs = 2000) => {
+      const waitForCall = async (fn: ReturnType<typeof vi.fn>, timeoutMs = 5000) => {
         const start = Date.now();
         while (Date.now() - start < timeoutMs) {
           if (fn.mock.calls.length > 0) return;

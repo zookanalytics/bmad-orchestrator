@@ -221,6 +221,7 @@ describe('agent-env CLI', () => {
       const stderrStripped = stripAnsiCodes(result.stderr);
       expect(result.exitCode).toBe(1);
       expect(stderrStripped).toContain('Unknown command "a"');
+      expect(stderrStripped).toContain('Did you mean');
       expect(stderrStripped).toContain('attach');
     });
 
