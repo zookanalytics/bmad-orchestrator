@@ -1,5 +1,11 @@
 # @zookanalytics/agent-env
 
+## 0.7.0
+
+### Minor Changes
+
+- [#49](https://github.com/zookanalytics/bmad-orchestrator/pull/49) [`48da277`](https://github.com/zookanalytics/bmad-orchestrator/commit/48da27721088fd355f66fb2836e0d3bf0b261a98) Thanks [@johnzook](https://github.com/johnzook)! - Update shell completion scripts for all registered commands with option and instance name completion, fix zsh completion crash, and show helpful suggestions for unknown commands
+
 ## 0.6.0
 
 ### Minor Changes
