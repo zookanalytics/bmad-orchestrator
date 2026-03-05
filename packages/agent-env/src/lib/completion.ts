@@ -3,7 +3,7 @@
  *
  * Generates bash and zsh completion scripts that provide:
  * - Command name completion for all registered commands
- * - Dynamic instance name completion for commands that accept instance names
+ * - Dynamic workspace name completion for commands that accept instance names
  * - Repo slug completion for --repo options
  */
 
@@ -89,14 +89,13 @@ _agent_env_repos() {
 
 _agent_env_instances() {
   local ws_dir=~/.agent-env/workspaces
-  local entry base instance
+  local entry base
   if [[ -d "\${ws_dir}" ]]; then
     for entry in "\${ws_dir}"/*/; do
       [[ -d "\${entry}" ]] || continue
       base="\${entry%/}"
       base="\${base##*/}"
-      instance="\${base##*-}"
-      [[ "\${instance}" != "\${base}" ]] && echo "\${instance}"
+      echo "\${base}"
     done | sort -u
   fi
 }
@@ -203,14 +202,13 @@ _agent_env_repos() {
 _agent_env_instances() {
   local ws_dir=~/.agent-env/workspaces
   local -a instances
-  local entry base instance
+  local entry base
   if [[ -d "\${ws_dir}" ]]; then
     for entry in "\${ws_dir}"/*/; do
       [[ -d "\${entry}" ]] || continue
       base="\${entry%/}"
       base="\${base##*/}"
-      instance="\${base##*-}"
-      [[ "\${instance}" != "\${base}" ]] && instances+=("\${instance}")
+      instances+=("\${base}")
     done
   fi
   instances=(\${(u)instances})
