@@ -97,12 +97,19 @@ describe('completion', () => {
         expect(script).not.toContain('-printf');
       });
 
-      it('parses flat workspace layout for repos and instances', () => {
+      it('parses flat workspace layout for repos', () => {
         const script = generateCompletionScript('bash');
         // Repos: extract prefix before last hyphen
         expect(script).toMatch(/_agent_env_repos\(\).*\$\{base%-\*\}/s);
-        // Instances: extract suffix after last hyphen
-        expect(script).toMatch(/_agent_env_instances\(\).*\$\{base##\*-\}/s);
+      });
+
+      it('uses full workspace name for instance completion', () => {
+        const script = generateCompletionScript('bash');
+        // Instances: echo full workspace directory name for exact match resolution
+        expect(script).toMatch(/_agent_env_instances\(\).*echo "\$\{base\}"/s);
+        // Should NOT extract suffix after last hyphen (old broken pattern)
+        const instanceFn = script.match(/_agent_env_instances\(\)\s*\{([\s\S]*?)\n\}/)?.[1] ?? '';
+        expect(instanceFn).not.toContain('${base##*-}');
       });
     });
 
@@ -188,12 +195,19 @@ describe('completion', () => {
         expect(script).not.toContain('-printf');
       });
 
-      it('parses flat workspace layout for repos and instances', () => {
+      it('parses flat workspace layout for repos', () => {
         const script = generateCompletionScript('zsh');
         // Repos: extract prefix before last hyphen
         expect(script).toMatch(/_agent_env_repos\(\).*\$\{base%-\*\}/s);
-        // Instances: extract suffix after last hyphen
-        expect(script).toMatch(/_agent_env_instances\(\).*\$\{base##\*-\}/s);
+      });
+
+      it('uses full workspace name for instance completion', () => {
+        const script = generateCompletionScript('zsh');
+        // Instances: add full workspace directory name for exact match resolution
+        const instanceFn = script.match(/_agent_env_instances\(\)\s*\{([\s\S]*?)\n\}/)?.[1] ?? '';
+        expect(instanceFn).toContain('instances+=("${base}")');
+        // Should NOT extract suffix after last hyphen (old broken pattern)
+        expect(instanceFn).not.toContain('${base##*-}');
       });
     });
   });
