@@ -149,6 +149,11 @@ describe('InteractiveMenu', () => {
       const menuReady = await waitForFrame('Manage alpha:');
       expect(menuReady).toBe(true);
 
+      // Allow useEffect to register the new Select's useInput handler.
+      // lastFrame() reflects committed render output, but useEffect (which
+      // wires up the keyboard listener) runs asynchronously after commit.
+      await new Promise((resolve) => setTimeout(resolve, 50));
+
       // Action menu is now visible, select 'rebuild' (down arrow once from 'attach')
       stdin.write('\x1B[B'); // Down arrow key
       stdin.write('\r'); // Enter key
