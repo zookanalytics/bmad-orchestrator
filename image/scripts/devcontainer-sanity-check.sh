@@ -33,6 +33,7 @@ check "keystone config exists" "test -f ~/.config/keystone/config.yaml"
 # AI CLIs
 check "claude cli" "command -v claude"
 check "gemini cli" "command -v gemini"
+check "skills cli" "npx --yes skills --version"
 
 # DevContainer tools
 check "git available" "git --version"

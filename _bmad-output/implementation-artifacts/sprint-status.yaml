@@ -175,6 +175,7 @@ development_status:
   env-8-2-create-from-registered-repo: done
   env-8-3-vs-code-purpose-visibility-via-better-status-bar: done
   tech-spec-status-bar-template-resolution: done
+  tech-spec-shared-agent-skills-local-install: in-progress
   env-epic-8-retrospective: done
 
 # ══════════════════════════════════════════════════════════════════════════════

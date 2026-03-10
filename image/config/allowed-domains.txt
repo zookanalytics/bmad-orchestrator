@@ -5,6 +5,9 @@
 www.npmjs.com
 registry.npmjs.org
 
+# skills.sh (Agent Skills CLI)
+skills.sh
+
 # Node.js
 nodejs.org
 
