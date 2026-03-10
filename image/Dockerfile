@@ -186,6 +186,7 @@ COPY image/scripts/devcontainer-sanity-check.sh /usr/local/bin/
 COPY image/scripts/fix-ssh-socket-permissions.sh /usr/local/bin/
 COPY image/scripts/start-sshd.sh /usr/local/bin/
 COPY image/scripts/install-ssh-host-keys.sh /usr/local/bin/
+COPY image/scripts/install-shared-skills.sh /usr/local/bin/
 
 # Make scripts executable and configure sudo
 RUN chmod 755 /usr/local/bin/init-firewall.sh && \
@@ -209,6 +210,7 @@ RUN chmod 755 /usr/local/bin/init-firewall.sh && \
   chmod 755 /usr/local/bin/fix-ssh-socket-permissions.sh && \
   chmod 755 /usr/local/bin/start-sshd.sh && \
   chmod 755 /usr/local/bin/install-ssh-host-keys.sh && \
+  chmod 755 /usr/local/bin/install-shared-skills.sh && \
   echo "node ALL=(root) NOPASSWD: /usr/local/bin/init-firewall.sh" > /etc/sudoers.d/node-commands && \
   echo "node ALL=(root) NOPASSWD: /usr/local/bin/assemble-managed-settings.sh" >> /etc/sudoers.d/node-commands && \
   echo "node ALL=(root) NOPASSWD: /usr/local/bin/fix-node-modules-ownership.sh" >> /etc/sudoers.d/node-commands && \
@@ -273,7 +275,7 @@ LABEL devcontainer.metadata='[ \
       "AGENT_ENV_CONTAINER": "true" \
     }, \
     "postCreateCommand": "/usr/local/bin/post-create.sh", \
-    "postStartCommand": "sudo /usr/local/bin/start-sshd.sh; tmux new-session -d -s main 2>/dev/null || true", \
+    "postStartCommand": "sudo /usr/local/bin/start-sshd.sh; tmux new-session -d -s main 2>/dev/null || true; : > /tmp/install-shared-skills.log; /usr/local/bin/install-shared-skills.sh >> /tmp/install-shared-skills.log 2>&1 || true", \
     "forwardPorts": [22], \
     "customizations": { \
       "vscode": { \
