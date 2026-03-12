@@ -1,5 +1,11 @@
 # @zookanalytics/agent-env
 
+## 0.7.1
+
+### Patch Changes
+
+- [#51](https://github.com/zookanalytics/bmad-orchestrator/pull/51) [`998d342`](https://github.com/zookanalytics/bmad-orchestrator/commit/998d342c1839f940597aff42505fc99320bf7477) Thanks [@johnzook](https://github.com/johnzook)! - Fix shell autocomplete to complete full workspace names instead of short instance names, resolving WORKSPACE_NOT_FOUND errors when using tab completion with remove and other instance commands
+
 ## 0.7.0
 
 ### Minor Changes
