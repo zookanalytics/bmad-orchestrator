@@ -24,6 +24,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
   jq \
   nano \
   vim \
+  xdg-utils \
   ripgrep \
   shellcheck \
   locales \
