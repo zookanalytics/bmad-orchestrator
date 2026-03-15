@@ -8,7 +8,7 @@ import type { ExecuteResult } from '@zookanalytics/shared';
 export type Execute = (
   command: string,
   args?: string[],
-  options?: object
+  options?: Record<string, unknown>
 ) => Promise<ExecuteResult>;
 
 /** Dependency injection for setup-audio (enables testing without real shell/fs) */
