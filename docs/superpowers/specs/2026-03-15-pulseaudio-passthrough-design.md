@@ -86,7 +86,7 @@ Runs on the macOS host (not in the container). Steps:
 1. **Platform check** -- verifies `process.platform === 'darwin'`. On Linux, exits with a message that audio passthrough is macOS-only.
 2. **PulseAudio check** -- verifies PulseAudio is installed via Homebrew (`brew --prefix pulseaudio`). Exits with install instructions if not found.
 3. **Load TCP module** -- runs `pactl load-module module-native-protocol-tcp auth-cookie-enabled=1 listen=127.0.0.1 port=4713`. Checks `pactl list short modules | grep module-native-protocol-tcp` first to skip if already loaded. The `listen=127.0.0.1` restricts the TCP listener to localhost only, preventing connections from other machines on the network.
-4. **Persist to default.pa** -- appends `load-module module-native-protocol-tcp auth-cookie-enabled=1 listen=127.0.0.1 port=4713` to `$(brew --prefix)/etc/pulse/default.pa` if the line is not already present. Uses `brew --prefix` to support both Apple Silicon (`/opt/homebrew`) and Intel (`/usr/local`) Macs. This ensures the TCP module survives PulseAudio restarts.
+4. **Persist to default.pa** -- appends `load-module module-native-protocol-tcp auth-cookie-enabled=1 listen=127.0.0.1 port=4713` to `$(brew --prefix pulseaudio)/etc/pulse/default.pa` if an uncommented load-module line is not already present. Uses the formula-specific prefix to locate the correct config directory. Creates the file and directory if they don't exist. This ensures the TCP module survives PulseAudio restarts.
 5. **Stage cookie** -- copies `~/.config/pulse/cookie` to `~/.agent-env/pulse/cookie` (creates directory if needed).
 6. **Success message** -- confirms setup is complete, instructs user that audio will be available on next container start or rebuild.
 

@@ -95,7 +95,15 @@ export async function setupAudio(deps: SetupAudioDeps): Promise<SetupAudioResult
       await deps.mkdir(`${paPrefix}/etc/pulse`, { recursive: true });
       paContent = '';
     }
-    if (!paContent.includes('module-native-protocol-tcp')) {
+    const hasActiveModule = paContent.split('\n').some((line) => {
+      const trimmed = line.trim();
+      return (
+        !trimmed.startsWith('#') &&
+        !trimmed.startsWith(';') &&
+        trimmed.includes('load-module module-native-protocol-tcp')
+      );
+    });
+    if (!hasActiveModule) {
       const newContent = paContent
         ? paContent.trimEnd() + '\n' + tcpModuleLine + '\n'
         : tcpModuleLine + '\n';

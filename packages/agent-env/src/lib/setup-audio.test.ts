@@ -167,6 +167,33 @@ describe('setupAudio', () => {
       expect(result.steps).toContain('TCP module persisted to default.pa');
     });
 
+    it('writes module line when existing line is commented out', async () => {
+      const mockExecute = vi
+        .fn()
+        .mockResolvedValueOnce({
+          ok: true,
+          stdout: '/opt/homebrew/opt/pulseaudio',
+          stderr: '',
+          exitCode: 0,
+        })
+        .mockResolvedValueOnce({
+          ok: true,
+          stdout: '25\tmodule-native-protocol-tcp',
+          stderr: '',
+          exitCode: 0,
+        });
+      const mockWriteFile = vi.fn().mockResolvedValue(undefined);
+      const deps = createMockDeps({
+        execute: mockExecute,
+        readFile: vi.fn().mockResolvedValue('# load-module module-native-protocol-tcp\n'),
+        writeFile: mockWriteFile,
+      });
+      const result = await setupAudio(deps);
+      expect(result.ok).toBe(true);
+      expect(mockWriteFile).toHaveBeenCalled();
+      expect(result.steps).toContain('TCP module persisted to default.pa');
+    });
+
     it('skips write when TCP module already in default.pa', async () => {
       const mockExecute = vi
         .fn()
