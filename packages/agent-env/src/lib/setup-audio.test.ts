@@ -131,6 +131,42 @@ describe('setupAudio', () => {
       expect(result.steps).toContain('TCP module persisted to default.pa');
     });
 
+    it('creates default.pa when file does not exist', async () => {
+      const mockExecute = vi
+        .fn()
+        .mockResolvedValueOnce({
+          ok: true,
+          stdout: '/opt/homebrew/opt/pulseaudio',
+          stderr: '',
+          exitCode: 0,
+        })
+        .mockResolvedValueOnce({
+          ok: true,
+          stdout: '25\tmodule-native-protocol-tcp',
+          stderr: '',
+          exitCode: 0,
+        });
+      const mockWriteFile = vi.fn().mockResolvedValue(undefined);
+      const mockMkdir = vi.fn().mockResolvedValue(undefined);
+      const deps = createMockDeps({
+        execute: mockExecute,
+        readFile: vi.fn().mockRejectedValue(new Error('ENOENT: no such file or directory')),
+        writeFile: mockWriteFile,
+        mkdir: mockMkdir,
+      });
+      const result = await setupAudio(deps);
+      expect(result.ok).toBe(true);
+      expect(mockMkdir).toHaveBeenCalledWith('/opt/homebrew/opt/pulseaudio/etc/pulse', {
+        recursive: true,
+      });
+      expect(mockWriteFile).toHaveBeenCalledWith(
+        '/opt/homebrew/opt/pulseaudio/etc/pulse/default.pa',
+        expect.stringContaining('module-native-protocol-tcp'),
+        'utf-8'
+      );
+      expect(result.steps).toContain('TCP module persisted to default.pa');
+    });
+
     it('skips write when TCP module already in default.pa', async () => {
       const mockExecute = vi
         .fn()

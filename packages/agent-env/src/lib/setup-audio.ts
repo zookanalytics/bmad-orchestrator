@@ -87,22 +87,29 @@ export async function setupAudio(deps: SetupAudioDeps): Promise<SetupAudioResult
   const tcpModuleLine =
     'load-module module-native-protocol-tcp auth-cookie-enabled=1 listen=127.0.0.1 port=4713';
   try {
-    const paContent = await deps.readFile(defaultPaPath, 'utf-8');
+    let paContent: string;
+    try {
+      paContent = await deps.readFile(defaultPaPath, 'utf-8');
+    } catch {
+      // File doesn't exist yet — create directory and start fresh
+      await deps.mkdir(`${paPrefix}/etc/pulse`, { recursive: true });
+      paContent = '';
+    }
     if (!paContent.includes('module-native-protocol-tcp')) {
-      await deps.writeFile(
-        defaultPaPath,
-        paContent.trimEnd() + '\n' + tcpModuleLine + '\n',
-        'utf-8'
-      );
+      const newContent = paContent
+        ? paContent.trimEnd() + '\n' + tcpModuleLine + '\n'
+        : tcpModuleLine + '\n';
+      await deps.writeFile(defaultPaPath, newContent, 'utf-8');
       steps.push('TCP module persisted to default.pa');
     } else {
       steps.push('TCP module already in default.pa');
     }
-  } catch {
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
     return {
       ok: false,
       steps,
-      error: `Failed to read or write ${defaultPaPath}. Check file permissions.`,
+      error: `Failed to write ${defaultPaPath}: ${msg}`,
     };
   }
 
