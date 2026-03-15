@@ -28,6 +28,15 @@ else
   echo "agent-env: Warning: No SSH public keys found in ~/.ssh. SSH access will require manual setup."
 fi
 
+# Stage PulseAudio cookie for audio passthrough (if setup-audio was run)
+PULSE_COOKIE_SRC="$HOME/.agent-env/pulse/cookie"
+PULSE_COOKIE_DST="$PWD/.agent-env/pulse"
+if [ -f "$PULSE_COOKIE_SRC" ]; then
+  mkdir -p "$PULSE_COOKIE_DST"
+  cp -p "$PULSE_COOKIE_SRC" "$PULSE_COOKIE_DST/cookie"
+  echo "agent-env: Staged PulseAudio cookie for audio passthrough"
+fi
+
 # Verify SSH agent socket exists (provided by Docker Desktop / OrbStack on macOS)
 if [ ! -S "$SSH_SOCKET" ]; then
   echo "agent-env: Warning: SSH agent socket not found at $SSH_SOCKET"

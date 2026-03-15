@@ -5,33 +5,36 @@ ENV TZ="$TZ"
 
 # Install basic development tools and firewall packages
 RUN apt-get update && apt-get install -y --no-install-recommends \
-  less \
-  git \
-  procps \
-  sudo \
-  fzf \
-  zsh \
-  man-db \
-  unzip \
-  gnupg2 \
+  aggregate \
+  alsa-utils \
   curl \
+  dnsmasq \
+  dnsutils \
+  fzf \
+  git \
+  gnupg2 \
   iptables \
   ipset \
   iproute2 \
-  dnsutils \
-  dnsmasq \
-  aggregate \
   jq \
-  nano \
-  vim \
-  xdg-utils \
-  ripgrep \
-  shellcheck \
+  less \
+  libasound2-plugins \
   locales \
   lsof \
-  ulogd2 \
-  tmux \
+  man-db \
+  nano \
   openssh-server \
+  procps \
+  pulseaudio-utils \
+  ripgrep \
+  shellcheck \
+  sudo \
+  tmux \
+  ulogd2 \
+  unzip \
+  vim \
+  xdg-utils \
+  zsh \
   && apt-get clean && rm -rf /var/lib/apt/lists/*
 
 # Install latest GitHub CLI from official repository
@@ -162,6 +165,7 @@ USER root
 
 # Copy configuration files
 COPY image/config/allowed-domains.txt /etc/allowed-domains.txt
+COPY image/config/asound.conf /etc/asound.conf
 COPY image/config/dnsmasq.conf /etc/dnsmasq.conf
 COPY image/config/ulogd.conf /etc/ulogd.conf
 
@@ -273,7 +277,9 @@ LABEL devcontainer.metadata='[ \
       "PNPM_HOME": "/pnpm", \
       "npm_config_store_dir": "/workspaces/.pnpm-store", \
       "CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC": "true", \
-      "AGENT_ENV_CONTAINER": "true" \
+      "AGENT_ENV_CONTAINER": "true", \
+      "PULSE_SERVER": "tcp:host.docker.internal:4713", \
+      "PULSE_COOKIE": "/shared-data/pulse/cookie" \
     }, \
     "postCreateCommand": "/usr/local/bin/post-create.sh", \
     "postStartCommand": "sudo /usr/local/bin/start-sshd.sh; tmux new-session -d -s main 2>/dev/null || true; : > /tmp/install-shared-skills.log; /usr/local/bin/install-shared-skills.sh >> /tmp/install-shared-skills.log 2>&1 || true", \
