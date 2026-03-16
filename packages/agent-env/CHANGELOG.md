@@ -1,5 +1,11 @@
 # @zookanalytics/agent-env
 
+## 0.8.0
+
+### Minor Changes
+
+- [#56](https://github.com/zookanalytics/bmad-orchestrator/pull/56) [`b151353`](https://github.com/zookanalytics/bmad-orchestrator/commit/b15135343956247e721f870cd66053105207f15c) Thanks [@johnzook](https://github.com/johnzook)! - Add PulseAudio audio passthrough for Claude voice mode in containers. New `setup-audio` CLI command configures macOS PulseAudio with TCP module and cookie-based auth, enabling ALSA audio routing from containers to the host.
+
 ## 0.7.1
 
 ### Patch Changes
