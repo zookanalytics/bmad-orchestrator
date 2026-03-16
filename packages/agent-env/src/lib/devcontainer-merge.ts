@@ -173,10 +173,11 @@ export async function readRepoConfig(
  * Validate a repo config for compatibility with agent-env.
  *
  * Rejects configs with build/compose properties.
- * Warns when repo specifies an image (silently overridden).
+ * Warns when repo specifies a different image than the managed image.
  */
 export function validateRepoConfig(
   config: ParsedDevcontainerConfig,
+  managedImage: string,
   logger?: { warn: (msg: string) => void }
 ): void {
   const rejectedProps = ['build', 'dockerFile', 'dockerfile', 'dockerComposeFile'];
@@ -191,9 +192,11 @@ export function validateRepoConfig(
 
   if ('image' in config && config.image !== undefined) {
     const repoImage = String(config.image);
-    logger?.warn(
-      `Repo config specifies image '${repoImage}' which will be overridden by agent-env managed image.`
-    );
+    if (repoImage !== managedImage) {
+      logger?.warn(
+        `Repo config specifies image '${repoImage}' which will be overridden by agent-env managed image.`
+      );
+    }
   }
 }
 

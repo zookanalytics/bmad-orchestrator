@@ -288,7 +288,7 @@ async function setupMergedConfig(
     // Read and validate repo config (if any)
     const repoConfig = await readRepoConfig(wsPath.root, deps.mergeDeps, deps.logger);
     if (repoConfig) {
-      validateRepoConfig(repoConfig, deps.logger);
+      validateRepoConfig(repoConfig, defaults.image, deps.logger);
     }
 
     // Deep merge managed + repo config

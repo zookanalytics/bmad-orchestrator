@@ -44,7 +44,7 @@ import {
 import { copyManagedAssets, parseDockerfileImages, resolveDockerfilePath } from './devcontainer.js';
 import { readState, writeStateAtomic } from './state.js';
 import { AGENT_ENV_DIR } from './types.js';
-import { getWorkspacePathByName, resolveInstance } from './workspace.js';
+import { deriveContainerName, getWorkspacePathByName, resolveInstance } from './workspace.js';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -160,7 +160,7 @@ async function refreshMergedConfig(
     }
 
     if (repoConfig) {
-      validateRepoConfig(repoConfig, deps.logger);
+      validateRepoConfig(repoConfig, defaults.image, deps.logger);
     }
 
     const merged = mergeDevcontainerConfigs(managed, repoConfig);
@@ -408,7 +408,11 @@ export async function rebuildInstance(
     return { ok: false, error: wsLookup.error };
   }
   const { wsPath, state } = wsLookup;
-  const containerName = state.containerName;
+  // Use state's container name for teardown (the old container), but always
+  // re-derive the canonical ae-* name for the new container's config.
+  // This self-heals legacy instances that stored a random Docker-assigned name.
+  const oldContainerName = state.containerName;
+  const containerName = deriveContainerName(wsPath.name);
 
   // Step 2: Check Docker availability
   const dockerAvailable = await deps.container.isDockerAvailable();
@@ -444,8 +448,8 @@ export async function rebuildInstance(
   }
   const { hasDockerfile } = pullStepResult;
 
-  // Step 5: Check container status
-  const statusResult = await deps.container.containerStatus(containerName);
+  // Step 5: Check container status (using old name — that's what's running)
+  const statusResult = await deps.container.containerStatus(oldContainerName);
   const wasRunning = statusResult.ok && statusResult.status === 'running';
 
   if (wasRunning && !force) {
@@ -453,7 +457,7 @@ export async function rebuildInstance(
       ok: false,
       error: {
         code: 'CONTAINER_RUNNING',
-        message: `Container '${containerName}' is currently running`,
+        message: `Container '${oldContainerName}' is currently running`,
         suggestion:
           'Stop any active sessions first, or use --force to rebuild a running container.',
       },
@@ -461,8 +465,8 @@ export async function rebuildInstance(
     };
   }
 
-  // Step 6-7: Stop and remove container
-  const teardownResult = await teardownContainer(containerName, deps.container, statusResult);
+  // Step 6-7: Stop and remove old container
+  const teardownResult = await teardownContainer(oldContainerName, deps.container, statusResult);
   if (!teardownResult.ok) {
     return { ok: false, error: teardownResult.error, wasRunning };
   }

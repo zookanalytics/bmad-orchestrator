@@ -786,6 +786,66 @@ describe('rebuildInstance', () => {
     expect(updatedState.containerName).toBe('custom-container-name');
   });
 
+  it('uses derived ae-* container name for new config even when state has legacy random name', async () => {
+    // Simulate a legacy instance created before the merge pipeline, where Docker
+    // assigned a random name (e.g., "musing_mclaren") that got persisted in state
+    const state = createTestState('repo-auth', {
+      repoConfigDetected: false,
+      containerName: 'musing_mclaren', // legacy random Docker name
+    });
+    await createTestWorkspace('repo-auth', state, {
+      devcontainerFiles: ['devcontainer.json', 'init-host.sh'],
+    });
+    const mockContainer = createMockContainer({
+      devcontainerUp: vi.fn().mockResolvedValue({
+        ok: true,
+        status: 'running',
+        containerId: 'new123',
+      }),
+      getContainerNameById: vi.fn().mockResolvedValue('ae-repo-auth'),
+    });
+    const deps = createTestDeps({ container: mockContainer });
+
+    const result = await rebuildInstance('auth', deps);
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) throw new Error('Expected success');
+    // Should use the derived ae-* name, not the legacy random name
+    expect(result.containerName).toBe('ae-repo-auth');
+
+    // Teardown should use the OLD name from state
+    expect(mockContainer.containerStop).toHaveBeenCalledWith('musing_mclaren');
+    expect(mockContainer.containerRemove).toHaveBeenCalledWith('musing_mclaren');
+
+    // The generated config should have the derived name in runArgs, not the legacy name
+    const generatedConfigPath = join(
+      tempDir,
+      AGENT_ENV_DIR,
+      WORKSPACES_DIR,
+      'repo-auth',
+      AGENT_ENV_DIR,
+      'devcontainer.json'
+    );
+    const generatedContent = await readFile(generatedConfigPath, 'utf-8');
+    // Skip the header comment line
+    const jsonContent = generatedContent.split('\n').slice(1).join('\n');
+    const generatedConfig = JSON.parse(jsonContent);
+    expect(generatedConfig.runArgs).toContain('--name=ae-repo-auth');
+    expect(generatedConfig.runArgs).not.toContain('--name=musing_mclaren');
+
+    // State should be updated with the derived name
+    const stateFile = join(
+      tempDir,
+      AGENT_ENV_DIR,
+      WORKSPACES_DIR,
+      'repo-auth',
+      AGENT_ENV_DIR,
+      STATE_FILE
+    );
+    const updatedState = JSON.parse(await readFile(stateFile, 'utf-8'));
+    expect(updatedState.containerName).toBe('ae-repo-auth');
+  });
+
   it('always updates state with lastRebuilt timestamp even if name unchanged', async () => {
     const state = createTestState('repo-auth', { repoConfigDetected: false });
     await createTestWorkspace('repo-auth', state, {
