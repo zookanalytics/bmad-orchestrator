@@ -107,6 +107,18 @@ else
   echo "  Skipping instance isolation (not in proper DevContainer)"
 fi
 
+# Step 4b: Promote PulseAudio cookie to shared-data (if available)
+PULSE_COOKIE_SRC="/etc/agent-env/pulse/cookie"
+PULSE_COOKIE_DST="${SHARED_DATA_DIR:-/shared-data}/pulse/cookie"
+if [ -f "$PULSE_COOKIE_SRC" ]; then
+  echo ""
+  echo "[Step 4b] Promoting PulseAudio cookie to shared-data..."
+  mkdir -p "$(dirname "$PULSE_COOKIE_DST")"
+  cp "$PULSE_COOKIE_SRC" "$PULSE_COOKIE_DST"
+  chmod 600 "$PULSE_COOKIE_DST"
+  echo "✓ PulseAudio cookie promoted"
+fi
+
 # Step 5: Check for package updates (daily)
 echo ""
 echo "[Step 5] Checking for package updates..."

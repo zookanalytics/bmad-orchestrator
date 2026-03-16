@@ -29,3 +29,6 @@ raw.githubusercontent.com
 # GPG keyservers (commit signing)
 keyserver.ubuntu.com
 keys.openpgp.org
+
+# Host access (PulseAudio audio passthrough, general host services)
+host.docker.internal
