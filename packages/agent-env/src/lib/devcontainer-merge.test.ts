@@ -416,44 +416,55 @@ describe('deepMergeCustomizations', () => {
 
 describe('validateRepoConfig', () => {
   it('accepts a clean config', () => {
-    expect(() => validateRepoConfig({ name: 'test' })).not.toThrow();
+    expect(() => validateRepoConfig({ name: 'test' }, 'ghcr.io/test/managed:latest')).not.toThrow();
   });
 
   it('rejects config with "build"', () => {
-    expect(() => validateRepoConfig({ build: { dockerfile: 'Dockerfile' } })).toThrow(
-      /agent-env requires the managed image.*build/
-    );
+    expect(() =>
+      validateRepoConfig({ build: { dockerfile: 'Dockerfile' } }, 'ghcr.io/test/managed:latest')
+    ).toThrow(/agent-env requires the managed image.*build/);
   });
 
   it('rejects config with "dockerFile"', () => {
-    expect(() => validateRepoConfig({ dockerFile: 'Dockerfile' })).toThrow(
-      /agent-env requires the managed image.*dockerFile/
-    );
+    expect(() =>
+      validateRepoConfig({ dockerFile: 'Dockerfile' }, 'ghcr.io/test/managed:latest')
+    ).toThrow(/agent-env requires the managed image.*dockerFile/);
   });
 
   it('rejects config with "dockerfile" (lowercase)', () => {
-    expect(() => validateRepoConfig({ dockerfile: 'Dockerfile' })).toThrow(
-      /agent-env requires the managed image.*dockerfile/
-    );
+    expect(() =>
+      validateRepoConfig({ dockerfile: 'Dockerfile' }, 'ghcr.io/test/managed:latest')
+    ).toThrow(/agent-env requires the managed image.*dockerfile/);
   });
 
   it('rejects config with "dockerComposeFile"', () => {
-    expect(() => validateRepoConfig({ dockerComposeFile: 'docker-compose.yml' })).toThrow(
-      /agent-env requires the managed image.*dockerComposeFile/
-    );
+    expect(() =>
+      validateRepoConfig({ dockerComposeFile: 'docker-compose.yml' }, 'ghcr.io/test/managed:latest')
+    ).toThrow(/agent-env requires the managed image.*dockerComposeFile/);
   });
 
-  it('logs warning when repo specifies image', () => {
+  it('logs warning when repo specifies a different image', () => {
     const logger = { warn: vi.fn() };
-    validateRepoConfig({ image: 'my-image:latest' }, logger);
+    validateRepoConfig({ image: 'my-image:latest' }, 'ghcr.io/test/managed:latest', logger);
     expect(logger.warn).toHaveBeenCalledWith(
       expect.stringContaining("Repo config specifies image 'my-image:latest'")
     );
+    expect(logger.warn).toHaveBeenCalledWith(expect.stringContaining('overridden'));
+  });
+
+  it('does not warn when repo specifies the same image as managed', () => {
+    const logger = { warn: vi.fn() };
+    validateRepoConfig(
+      { image: 'ghcr.io/test/managed:latest' },
+      'ghcr.io/test/managed:latest',
+      logger
+    );
+    expect(logger.warn).not.toHaveBeenCalled();
   });
 
   it('does not warn when no image in repo config', () => {
     const logger = { warn: vi.fn() };
-    validateRepoConfig({ name: 'test' }, logger);
+    validateRepoConfig({ name: 'test' }, 'ghcr.io/test/managed:latest', logger);
     expect(logger.warn).not.toHaveBeenCalled();
   });
 });
