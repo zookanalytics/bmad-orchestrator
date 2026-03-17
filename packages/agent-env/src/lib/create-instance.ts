@@ -203,14 +203,7 @@ export async function attachToInstance(
   // 2>/dev/null suppresses stderr noise when no existing session (normal first-attach)
   const result = await executor(
     'docker',
-    [
-      'exec',
-      '-it',
-      containerName,
-      'bash',
-      '-c',
-      'tmux attach-session -t agent-env 2>/dev/null || tmux new-session -s agent-env',
-    ],
+    ['exec', '-it', containerName, 'bash', '-c', '/home/node/.local/bin/tmux-session'],
     { stdio: 'inherit' }
   );
 

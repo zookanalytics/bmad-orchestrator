@@ -154,6 +154,10 @@ except: pass
   exec "$CLAUDE_REAL" "$@"
 fi
 
+# Known limitation: if the user runs /resume inside Claude to switch
+# conversations, we won't see the new session ID — the wrapper only
+# intercepts the initial launch, not in-session navigation.
+
 # Fresh launch: generate UUID and set session ID
 NEW_UUID=$(cat /proc/sys/kernel/random/uuid)
 write_pane_entry "$TMUX_PANE" "$NEW_UUID"

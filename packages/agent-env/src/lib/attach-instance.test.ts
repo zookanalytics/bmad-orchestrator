@@ -190,14 +190,7 @@ describe('attachInstance', () => {
 
     expect(deps.executor).toHaveBeenCalledWith(
       'docker',
-      [
-        'exec',
-        '-it',
-        'ae-repo-auth',
-        'bash',
-        '-c',
-        'tmux attach-session -t agent-env 2>/dev/null || tmux new-session -s agent-env',
-      ],
+      ['exec', '-it', 'ae-repo-auth', 'bash', '-c', '/home/node/.local/bin/tmux-session'],
       { stdio: 'inherit' }
     );
   });
