@@ -71,6 +71,9 @@ export async function executeTmuxRestore(): Promise<void> {
 
   const quotedSession = shellQuote(sessionName);
 
+  // No-op if session state has no windows to restore.
+  if (sessionState.windows.length === 0) return;
+
   // Create all windows fresh with -c (sets cwd silently, no echoed cd command).
   // The default window from session creation will be killed afterwards.
   for (const win of sessionState.windows) {

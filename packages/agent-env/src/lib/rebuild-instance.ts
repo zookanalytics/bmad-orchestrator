@@ -303,10 +303,16 @@ async function saveTmuxState(
   containerName: string,
   deps: Pick<RebuildInstanceDeps, 'executor' | 'logger'>
 ): Promise<void> {
-  try {
-    await deps.executor('docker', ['exec', containerName, 'bash', '-lc', 'agent-env tmux-save']);
+  const result = await deps.executor('docker', [
+    'exec',
+    containerName,
+    'bash',
+    '-lc',
+    'agent-env tmux-save',
+  ]);
+  if (result.ok) {
     deps.logger?.info('Saved tmux session state');
-  } catch {
+  } else {
     deps.logger?.warn('Could not save tmux session state (non-fatal)');
   }
 }
