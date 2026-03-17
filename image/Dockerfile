@@ -125,7 +125,23 @@ COPY --chown=node:node image/config/tmux.conf /home/node/.tmux.conf
 COPY --chown=node:node image/scripts/tmux-session.sh /home/node/.local/bin/tmux-session
 COPY --chown=node:node image/scripts/tmux-purpose.sh /home/node/.local/bin/tmux-purpose
 COPY --chown=node:node image/scripts/pbcopy.sh /home/node/.local/bin/pbcopy
-RUN chmod +x /home/node/.local/bin/tmux-session /home/node/.local/bin/tmux-purpose /home/node/.local/bin/pbcopy
+COPY --chown=node:node image/scripts/tmux-autosave-loop.sh /home/node/.local/bin/tmux-autosave-loop
+
+# Claude session persistence wrapper and shell function
+COPY --chown=node:node image/scripts/claude-wrapper.sh /home/node/.local/bin/claude-wrapper
+COPY --chown=node:node image/config/claude-fn.sh /home/node/.config/agent-env/claude-fn.sh
+RUN chmod +x /home/node/.local/bin/tmux-session /home/node/.local/bin/tmux-purpose /home/node/.local/bin/pbcopy /home/node/.local/bin/tmux-autosave-loop /home/node/.local/bin/claude-wrapper
+
+# Bake agent-env CLI from local build so containers always use the version
+# that matches the image. post-create.sh detects /opt/agent-env-dev and runs
+# pnpm link --global from there instead of installing from npm.
+COPY --chown=node:node packages/agent-env/package.json /opt/agent-env-dev/package.json
+COPY --chown=node:node packages/agent-env/bin/ /opt/agent-env-dev/bin/
+COPY --chown=node:node packages/agent-env/dist/ /opt/agent-env-dev/dist/
+# Strip workspace:* deps (already bundled by tsup) then install runtime deps
+RUN cd /opt/agent-env-dev && \
+    node -e "const p=require('./package.json'); delete p.devDependencies; p.pnpm={onlyBuiltDependencies:[]}; require('fs').writeFileSync('package.json',JSON.stringify(p,null,2))" && \
+    pnpm install --prod --ignore-scripts
 
 # Set default shell and editor
 ENV SHELL=/bin/zsh
@@ -282,7 +298,7 @@ LABEL devcontainer.metadata='[ \
       "PULSE_COOKIE": "/shared-data/pulse/cookie" \
     }, \
     "postCreateCommand": "/usr/local/bin/post-create.sh", \
-    "postStartCommand": "sudo /usr/local/bin/start-sshd.sh; tmux new-session -d -s main 2>/dev/null || true; : > /tmp/install-shared-skills.log; /usr/local/bin/install-shared-skills.sh >> /tmp/install-shared-skills.log 2>&1 || true", \
+    "postStartCommand": "sudo /usr/local/bin/start-sshd.sh; tmux new-session -d -s agent-env 2>/dev/null || true; agent-env tmux-restore 2>/dev/null || true; : > /tmp/install-shared-skills.log; /usr/local/bin/install-shared-skills.sh >> /tmp/install-shared-skills.log 2>&1 || true", \
     "forwardPorts": [22], \
     "customizations": { \
       "vscode": { \

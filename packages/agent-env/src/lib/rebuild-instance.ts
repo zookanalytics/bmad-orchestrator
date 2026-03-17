@@ -297,6 +297,26 @@ async function executePullStep(
   return { ok: true, hasDockerfile };
 }
 
+// ─── Pre-teardown State Save ─────────────────────────────────────────────
+
+async function saveTmuxState(
+  containerName: string,
+  deps: Pick<RebuildInstanceDeps, 'executor' | 'logger'>
+): Promise<void> {
+  const result = await deps.executor('docker', [
+    'exec',
+    containerName,
+    'bash',
+    '-lc',
+    'agent-env tmux-save',
+  ]);
+  if (result.ok) {
+    deps.logger?.info('Saved tmux session state');
+  } else {
+    deps.logger?.warn('Could not save tmux session state (non-fatal)');
+  }
+}
+
 // ─── Container Teardown ──────────────────────────────────────────────────
 
 type TeardownResult =
@@ -463,6 +483,11 @@ export async function rebuildInstance(
       },
       wasRunning: true,
     };
+  }
+
+  // Step 5.5: Save tmux session state before teardown (best-effort)
+  if (wasRunning) {
+    await saveTmuxState(oldContainerName, deps);
   }
 
   // Step 6-7: Stop and remove old container

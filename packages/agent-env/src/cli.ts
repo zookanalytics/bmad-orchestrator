@@ -18,6 +18,8 @@ import { rebuildCommand } from './commands/rebuild.js';
 import { removeCommand } from './commands/remove.js';
 import { reposCommand } from './commands/repos.js';
 import { setupAudioCommand } from './commands/setup-audio.js';
+import { tmuxRestoreCommand } from './commands/tmux-restore.js';
+import { tmuxSaveCommand } from './commands/tmux-save.js';
 import { tmuxStatusCommand } from './commands/tmux-status.js';
 import { InteractiveMenu } from './components/InteractiveMenu.js';
 import { attachInstance, createAttachDefaultDeps } from './lib/attach-instance.js';
@@ -26,10 +28,11 @@ import { listInstances } from './lib/list-instances.js';
 import { rebuildInstance, createRebuildDefaultDeps } from './lib/rebuild-instance.js';
 import { removeInstance, createRemoveDefaultDeps } from './lib/remove-instance.js';
 
-// Detect local link: when linked from monorepo, workspace root is 3 levels up from dist/
+// Detect local/dev build: linked from monorepo or baked into image at /opt/agent-env-dev
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const isLinked = existsSync(resolve(__dirname, '..', '..', '..', 'pnpm-workspace.yaml'));
-const version = packageJson.version + (isLinked ? '+local' : '');
+const isBakedDev = resolve(__dirname, '..').startsWith('/opt/agent-env-dev');
+const version = packageJson.version + (isLinked ? '+local' : isBakedDev ? '+dev' : '');
 
 program
   .name('agent-env')
@@ -46,6 +49,8 @@ program.addCommand(removeCommand);
 program.addCommand(purposeCommand);
 program.addCommand(reposCommand);
 program.addCommand(tmuxStatusCommand);
+program.addCommand(tmuxSaveCommand);
+program.addCommand(tmuxRestoreCommand);
 program.addCommand(completionCommand);
 program.addCommand(setupAudioCommand);
 

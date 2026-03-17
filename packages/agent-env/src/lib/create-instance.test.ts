@@ -927,14 +927,7 @@ describe('attachToInstance', () => {
     expect(result.ok).toBe(true);
     expect(executor).toHaveBeenCalledWith(
       'docker',
-      [
-        'exec',
-        '-it',
-        'ae-bmad-orch-auth',
-        'bash',
-        '-c',
-        'tmux attach-session -t main 2>/dev/null || tmux new-session -s main',
-      ],
+      ['exec', '-it', 'ae-bmad-orch-auth', 'bash', '-c', '/home/node/.local/bin/tmux-session'],
       { stdio: 'inherit' }
     );
   });

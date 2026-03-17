@@ -161,6 +161,16 @@ else
   echo "  ⚠ Claude Code binary not found in PATH after installation"
 fi
 
+# Set up Claude wrapper shell function for tmux session persistence
+# The wrapper script itself is installed by the Dockerfile at ~/.local/bin/claude-wrapper.
+# We just need to source the shell function from .zshrc so `claude` invocations go through the wrapper.
+MARKER="[agent-env:claude-wrapper]"
+SOURCE_LINE="source \"\$HOME/.config/agent-env/claude-fn.sh\" # $MARKER"
+if ! grep -qF "$MARKER" "$HOME/.zshrc" 2>/dev/null; then
+  echo "$SOURCE_LINE" >> "$HOME/.zshrc"
+  echo "  ✓ Claude session persistence wrapper configured"
+fi
+
 # Install Gemini CLI via pnpm
 # Pre-approve build/postinstall scripts to avoid interactive prompts during global install
 GEMINI_CLI_VERSION="${GEMINI_CLI_VERSION:-latest}"
