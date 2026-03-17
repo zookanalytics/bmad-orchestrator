@@ -1,11 +1,13 @@
 #!/usr/bin/env bash
 # claude-wrapper: Intercepts claude invocations to track session IDs per tmux pane.
-# Installed to /usr/local/bin/claude-wrapper; invoked via shell function in .zshrc.
-# Real claude binary path is baked in at install time by post-create.sh.
+# Installed to ~/.local/bin/claude-wrapper; invoked via shell function in .zshrc.
 
 set -euo pipefail
 
-CLAUDE_REAL="__CLAUDE_REAL_PATH__"
+# Resolve real claude binary — the symlink at ~/.local/bin/claude points to the
+# installed version. We use this fixed path rather than `command -v claude` because
+# the shell function overriding `claude` would cause infinite recursion.
+CLAUDE_REAL="$HOME/.local/bin/claude"
 PANES_DIR="/shared-data/instance/${AGENT_INSTANCE}/tmux"
 PANES_FILE="$PANES_DIR/panes.json"
 

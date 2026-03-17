@@ -1031,9 +1031,10 @@ CLAUDE_BIN=$(command -v claude 2>/dev/null || echo "")
 if [ -n "$CLAUDE_BIN" ]; then
   echo "  - Setting up Claude session persistence wrapper..."
   # Bake the real binary path into the wrapper script
-  sudo sed "s|__CLAUDE_REAL_PATH__|$CLAUDE_BIN|g" \
-    /usr/local/share/agent-env/claude-wrapper.sh > /usr/local/bin/claude-wrapper
-  sudo chmod +x /usr/local/bin/claude-wrapper
+  mkdir -p "$HOME/.local/bin"
+  sed "s|__CLAUDE_REAL_PATH__|$CLAUDE_BIN|g" \
+    /usr/local/share/agent-env/claude-wrapper.sh > "$HOME/.local/bin/claude-wrapper"
+  chmod +x "$HOME/.local/bin/claude-wrapper"
   # Install shell function (sourced by .zshrc)
   mkdir -p "$HOME/.config/agent-env"
   cp /usr/local/share/agent-env/claude-fn.sh "$HOME/.config/agent-env/claude-fn.sh"

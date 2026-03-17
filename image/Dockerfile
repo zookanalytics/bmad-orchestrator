@@ -125,11 +125,11 @@ COPY --chown=node:node image/config/tmux.conf /home/node/.tmux.conf
 COPY --chown=node:node image/scripts/tmux-session.sh /home/node/.local/bin/tmux-session
 COPY --chown=node:node image/scripts/tmux-purpose.sh /home/node/.local/bin/tmux-purpose
 COPY --chown=node:node image/scripts/pbcopy.sh /home/node/.local/bin/pbcopy
-RUN chmod +x /home/node/.local/bin/tmux-session /home/node/.local/bin/tmux-purpose /home/node/.local/bin/pbcopy
 
-# Claude session persistence wrapper (real path baked in at post-create time)
-COPY --chown=node:node image/scripts/claude-wrapper.sh /usr/local/share/agent-env/claude-wrapper.sh
-COPY --chown=node:node image/config/claude-fn.sh /usr/local/share/agent-env/claude-fn.sh
+# Claude session persistence wrapper and shell function
+COPY --chown=node:node image/scripts/claude-wrapper.sh /home/node/.local/bin/claude-wrapper
+COPY --chown=node:node image/config/claude-fn.sh /home/node/.config/agent-env/claude-fn.sh
+RUN chmod +x /home/node/.local/bin/tmux-session /home/node/.local/bin/tmux-purpose /home/node/.local/bin/pbcopy /home/node/.local/bin/claude-wrapper
 
 # Set default shell and editor
 ENV SHELL=/bin/zsh
