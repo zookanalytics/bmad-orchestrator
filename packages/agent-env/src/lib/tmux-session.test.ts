@@ -37,14 +37,14 @@ describe('readPanesState', () => {
       version: 1,
       '%0': { session_id: 'aaa-bbb', window_name: 'test', cwd: '/tmp' },
     };
-    await writeFile(join(tempDir, 'panes.json'), JSON.stringify(state));
-    const result = await readPanesState(join(tempDir, 'panes.json'));
+    await writeFile(join(tempDir, 'claude-sessions.json'), JSON.stringify(state));
+    const result = await readPanesState(join(tempDir, 'claude-sessions.json'));
     expect(result['%0']?.session_id).toBe('aaa-bbb');
   });
 
   it('returns empty state for corrupted JSON', async () => {
-    await writeFile(join(tempDir, 'panes.json'), 'not json');
-    const result = await readPanesState(join(tempDir, 'panes.json'));
+    await writeFile(join(tempDir, 'claude-sessions.json'), 'not json');
+    const result = await readPanesState(join(tempDir, 'claude-sessions.json'));
     expect(result).toEqual({ version: 1 });
   });
 });

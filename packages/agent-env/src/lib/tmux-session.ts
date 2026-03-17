@@ -1,7 +1,7 @@
 /**
  * Tmux session state management for agent-env
  *
- * Handles reading/writing panes.json and session.json files that track
+ * Handles reading/writing claude-sessions.json and session.json files that track
  * tmux window state for persistence across container rebuilds.
  *
  * State files live at: /shared-data/instance/<id>/tmux/

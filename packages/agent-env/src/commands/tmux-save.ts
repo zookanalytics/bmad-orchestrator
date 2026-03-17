@@ -52,8 +52,8 @@ export async function executeTmuxSave(): Promise<void> {
 
   if (panes.length === 0) return;
 
-  // Read panes.json to get claude session IDs
-  const panesPath = join(stateDir, 'panes.json');
+  // Read claude-sessions.json to get claude session IDs
+  const panesPath = join(stateDir, 'claude-sessions.json');
   const panesState = await readPanesState(panesPath);
 
   // Get active window

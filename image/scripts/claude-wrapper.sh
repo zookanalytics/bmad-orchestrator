@@ -8,8 +8,8 @@ set -euo pipefail
 # installed version. We use this fixed path rather than `command -v claude` because
 # the shell function overriding `claude` would cause infinite recursion.
 CLAUDE_REAL="$HOME/.local/bin/claude"
-PANES_DIR="/shared-data/instance/${AGENT_INSTANCE}/tmux"
-PANES_FILE="$PANES_DIR/panes.json"
+STATE_DIR="/shared-data/instance/${AGENT_INSTANCE}/tmux"
+SESSIONS_FILE="$STATE_DIR/claude-sessions.json"
 
 # --- Passthrough conditions: skip tracking ---
 
@@ -33,8 +33,8 @@ done
 # --- JSON helpers (using flock for concurrency) ---
 
 read_panes() {
-  if [ -f "$PANES_FILE" ]; then
-    cat "$PANES_FILE"
+  if [ -f "$SESSIONS_FILE" ]; then
+    cat "$SESSIONS_FILE"
   else
     echo '{"version":1}'
   fi
@@ -42,7 +42,7 @@ read_panes() {
 
 write_pane_entry() {
   local pane_id="$1" session_id="$2"
-  mkdir -p "$PANES_DIR"
+  mkdir -p "$STATE_DIR"
   (
     flock 200
     local current
@@ -63,13 +63,13 @@ data[os.environ['PANE_ID']] = {
   'cwd': os.environ['CWD']
 }
 json.dump(data, sys.stdout)
-" > "$PANES_FILE.tmp"
-    mv "$PANES_FILE.tmp" "$PANES_FILE"
-  ) 200>"$PANES_DIR/.panes.lock"
+" > "$SESSIONS_FILE.tmp"
+    mv "$SESSIONS_FILE.tmp" "$SESSIONS_FILE"
+  ) 200>"$STATE_DIR/.claude-sessions.lock"
 }
 
 remove_pane_entry() {
-  if [ ! -f "$PANES_FILE" ]; then return; fi
+  if [ ! -f "$SESSIONS_FILE" ]; then return; fi
   (
     flock 200
     local current
@@ -79,9 +79,9 @@ import sys, json, os
 data = json.load(sys.stdin)
 data.pop(os.environ['PANE_ID'], None)
 json.dump(data, sys.stdout)
-" > "$PANES_FILE.tmp"
-    mv "$PANES_FILE.tmp" "$PANES_FILE"
-  ) 200>"$PANES_DIR/.panes.lock"
+" > "$SESSIONS_FILE.tmp"
+    mv "$SESSIONS_FILE.tmp" "$SESSIONS_FILE"
+  ) 200>"$STATE_DIR/.claude-sessions.lock"
 }
 
 # Clean up pane entry on exit
@@ -136,11 +136,11 @@ fi
 
 # Bare --resume (no UUID): look up pane state
 if [ -n "$RESUME_FLAG" ] && [ -z "$RESUME_VALUE" ]; then
-  if [ -f "$PANES_FILE" ]; then
-    STORED_ID=$(PANES_FILE="$PANES_FILE" PANE_ID="$TMUX_PANE" python3 -c "
+  if [ -f "$SESSIONS_FILE" ]; then
+    STORED_ID=$(SESSIONS_FILE="$SESSIONS_FILE" PANE_ID="$TMUX_PANE" python3 -c "
 import json, os
 try:
-  data = json.load(open(os.environ['PANES_FILE']))
+  data = json.load(open(os.environ['SESSIONS_FILE']))
   entry = data.get(os.environ['PANE_ID'], {})
   print(entry.get('session_id', ''))
 except: pass

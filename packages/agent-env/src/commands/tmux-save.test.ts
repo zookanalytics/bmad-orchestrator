@@ -72,7 +72,7 @@ describe('executeTmuxSave', () => {
     expect(savedState.windows[1].claude_session_id).toBe('aaa-bbb');
   });
 
-  it('detects claude from tmux command even without panes.json entry', async () => {
+  it('detects claude from tmux command even without claude-sessions.json entry', async () => {
     mockExecSync.mockReturnValue('%0\t1\twin\t/tmp\tclaude\tbugs\n');
     mockReadPanesState.mockResolvedValue({ version: 1 }); // no entry for %0
 
