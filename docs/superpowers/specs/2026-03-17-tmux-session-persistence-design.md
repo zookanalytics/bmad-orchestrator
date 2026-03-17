@@ -19,7 +19,7 @@ After a container rebuild, tmux windows are automatically restored with the same
 Four components work together:
 
 ```
-claude-wrapper ──records──▶ panes.json ◀──reads── tmux-save
+claude-wrapper ──records──▶ claude-sessions.json ◀──reads── tmux-save
                                                       │
                                         tmux list-panes ──▶
                                                       │
@@ -32,24 +32,24 @@ claude-wrapper ──records──▶ panes.json ◀──reads── tmux-save
 
 ### 1. Claude Wrapper
 
-A shell script at `/usr/local/bin/claude-wrapper`, invoked via a shell function in `.zshrc` that overrides the `claude` command.
+A shell script at `~/.local/bin/claude-wrapper`, invoked via a shell function in `.zshrc` that overrides the `claude` command.
 
-**Real binary path:** At install time (post-create), the real claude path is resolved via `command -v claude` (before the shell function is sourced) and written as `CLAUDE_REAL="/home/node/.claude/bin/claude"` into the wrapper script.
+**Real binary path:** Hardcoded as `CLAUDE_REAL="$HOME/.local/bin/claude"` in the wrapper script. This is the standard install location for Claude Code's symlink.
 
 **Behavior:**
 
 - **Fresh launch** (`claude` or `claude <args>` without `--resume` or `--session-id`):
   1. Generate a UUID via `cat /proc/sys/kernel/random/uuid`
-  2. Record `{ session_id, window_name, cwd }` to `panes.json` keyed by `$TMUX_PANE` (atomic write via temp file + `mv`)
+  2. Record `{ session_id, window_name, cwd }` to `claude-sessions.json` keyed by `$TMUX_PANE` (atomic write via temp file + `mv`)
   3. `exec` real claude with `--session-id <uuid>` plus any original args
 
 - **Bare `--resume`** (`claude --resume` where `--resume` is the last argument or next argument starts with `-`):
-  1. Look up `$TMUX_PANE` in `panes.json`
+  1. Look up `$TMUX_PANE` in `claude-sessions.json`
   2. If found: `exec` real claude with `--resume <stored-session-id>`
   3. If not found: pass through to real claude (opens native session picker)
 
 - **Explicit resume/session-id** (`claude --resume <uuid>` or `claude --session-id <uuid>`):
-  - Record the provided session ID in `panes.json` for this `$TMUX_PANE`
+  - Record the provided session ID in `claude-sessions.json` for this `$TMUX_PANE`
   - Pass through to real claude directly
 
 - **Non-interactive** (`claude --print ...`):
@@ -58,20 +58,20 @@ A shell script at `/usr/local/bin/claude-wrapper`, invoked via a shell function 
 - **Outside tmux** (`$TMUX_PANE` is unset):
   - Pass through to real claude directly, no tracking
 
-- **On exit**: trap EXIT to remove own `$TMUX_PANE` entry from `panes.json`
+- **On exit**: trap EXIT to remove own `$TMUX_PANE` entry from `claude-sessions.json`
 
 **Shell function** (sourced from `/home/node/.config/agent-env/claude-fn.sh`):
 ```sh
-claude() { /usr/local/bin/claude-wrapper "$@"; }
+claude() { "$HOME/.local/bin/claude-wrapper" "$@"; }
 ```
 
 Sourced by `.zshrc`. Functions take priority over PATH, so the real claude binary is never shadowed — it can still be called directly by full path if needed.
 
 **Argument parsing for `--resume`:** The wrapper checks if `--resume` is present in args. If the token immediately following `--resume` is missing, starts with `-`, or is not a valid UUID pattern, it's treated as bare `--resume` (wrapper resolves from pane state). Otherwise it's an explicit session ID and passes through.
 
-### 2. Pane State File
+### 2. Claude Sessions State File
 
-**Location:** `/shared-data/instance/<instance-id>/tmux/panes.json`
+**Location:** `/shared-data/instance/<instance-id>/tmux/claude-sessions.json`
 
 ```json
 {
@@ -92,20 +92,20 @@ Sourced by `.zshrc`. Functions take priority over PATH, so the real claude binar
 - Keyed by tmux pane ID (`$TMUX_PANE`), which is stable for the life of the tmux server
 - Written by the claude wrapper on session start, cleaned up on session exit
 - Read by `tmux-save` to associate panes with claude session IDs
-- **Concurrency:** All writes use atomic temp-file-then-rename pattern. The wrapper reads the current file, updates its entry, writes to `panes.json.tmp`, then `mv` to `panes.json`. Shell-level file locking (`flock`) is used to serialize concurrent writes from multiple claude launches.
-- **Stale entry cleanup:** `tmux-save` prunes entries from `panes.json` whose pane IDs no longer appear in `tmux list-panes` output
+- **Concurrency:** All writes use atomic temp-file-then-rename pattern. The wrapper reads the current file, updates its entry, writes to `claude-sessions.json.tmp`, then `mv` to `claude-sessions.json`. Shell-level file locking (`flock`) is used to serialize concurrent writes from multiple claude launches.
+- **Stale entry cleanup:** `tmux-save` prunes entries from `claude-sessions.json` whose pane IDs no longer appear in `tmux list-panes` output
 
 ### 3. `agent-env tmux-save`
 
 New CLI command that captures the full tmux state.
 
-**Process detection:** The command needs to identify which panes are running Claude. `tmux list-panes` reports `#{pane_current_command}` which reflects the foreground process name. The wrapper `exec`s the real claude binary, so this will report the actual process name. During implementation, verify the reported value and match accordingly (may be `claude`, `node`, or the binary name). As a fallback, cross-reference against `panes.json` — if a pane has an entry in `panes.json`, it's running (or was running) a claude session regardless of what `pane_current_command` reports.
+**Process detection:** The command needs to identify which panes are running Claude. `tmux list-panes` reports `#{pane_current_command}` which reflects the foreground process name. The wrapper `exec`s the real claude binary, so this will report the actual process name. During implementation, verify the reported value and match accordingly (may be `claude`, `node`, or the binary name). As a fallback, cross-reference against `claude-sessions.json` — if a pane has an entry in `claude-sessions.json`, it's running (or was running) a claude session regardless of what `pane_current_command` reports.
 
 **Logic:**
 1. Run `tmux list-panes -a -F "#{pane_id} #{window_index} #{window_name} #{pane_current_path} #{pane_current_command} #{session_name}"`
-2. For each pane, check `panes.json` for a matching pane ID to get the claude session ID
+2. For each pane, check `claude-sessions.json` for a matching pane ID to get the claude session ID
 3. Record the active window index
-4. Prune `panes.json` of stale entries (pane IDs not in `tmux list-panes` output)
+4. Prune `claude-sessions.json` of stale entries (pane IDs not in `tmux list-panes` output)
 5. Write state to `session.json` using atomic write pattern
 
 **Tmux session targeting:** There is a single tmux session per container. Save captures whichever session exists (typically named after `$AGENT_INSTANCE`). Restore creates windows in that same session.
@@ -153,8 +153,8 @@ New CLI command that reconstructs tmux state from `session.json`.
 3. For each saved window:
    - Create tmux window with saved name and working directory
    - If `program` is `claude` and `claude_session_id` is present:
-     - Send `claude --resume <claude_session_id>` directly to the pane via `tmux send-keys` (uses the session ID from `session.json`, does NOT rely on `panes.json` lookup — pane IDs are different after rebuild)
-     - The wrapper intercepts this, sees an explicit session ID, records it in `panes.json` for the new pane ID, and passes through
+     - Send `claude --resume <claude_session_id>` directly to the pane via `tmux send-keys` (uses the session ID from `session.json`, does NOT rely on `claude-sessions.json` lookup — pane IDs are different after rebuild)
+     - The wrapper intercepts this, sees an explicit session ID, records it in `claude-sessions.json` for the new pane ID, and passes through
    - If `program` is null, leave pane at shell prompt
 3. Select the previously active window
 4. Remove the initial empty window if restore created new ones
@@ -200,8 +200,8 @@ Restore runs before the user attaches. Windows appear pre-populated in the singl
 ### post-create.sh
 
 After Claude Code installation (step 7):
-1. Resolve real claude binary path: `CLAUDE_REAL=$(command -v claude)`
-2. Install wrapper script to `/usr/local/bin/claude-wrapper` with `CLAUDE_REAL` baked in
+1. The wrapper is pre-installed to `~/.local/bin/claude-wrapper` via the Dockerfile
+2. The wrapper hardcodes `CLAUDE_REAL="$HOME/.local/bin/claude"`
 3. Write shell function file to `/home/node/.config/agent-env/claude-fn.sh`
 4. Source the function file from `.zshrc`
 
@@ -224,8 +224,8 @@ set-hook -g session-created 'run-shell -b "while true; do sleep 300; /home/node/
 | Multiple claude sessions in same window (pane splits) | Out of scope for v1. Only the primary pane is tracked. |
 | `claude --print` in scripts | Passes through directly, no UUID overhead. |
 | Container crash (no graceful shutdown) | Periodic auto-save provides last state within 5-minute window. Conversation data is always safe. |
-| User exits claude then runs other commands before save | `panes.json` entry is cleaned up on claude exit (EXIT trap). `tmux-save` sees no `panes.json` entry for that pane, records `program: null`. On restore, pane opens as a shell. The claude session is still resumable manually via `claude --resume`. |
-| Claude session in mid-startup when save runs | Pane shows claude but wrapper hasn't written `panes.json` yet. `tmux-save` records `program: null` for that pane. Safe — minor data loss limited to one window's program state. |
+| User exits claude then runs other commands before save | `claude-sessions.json` entry is cleaned up on claude exit (EXIT trap). `tmux-save` sees no `claude-sessions.json` entry for that pane, records `program: null`. On restore, pane opens as a shell. The claude session is still resumable manually via `claude --resume`. |
+| Claude session in mid-startup when save runs | Pane shows claude but wrapper hasn't written `claude-sessions.json` yet. `tmux-save` records `program: null` for that pane. Safe — minor data loss limited to one window's program state. |
 | Container stop (not rebuild) then restart | tmux server dies. `postStartCommand` creates fresh tmux, `tmux-restore` reads last saved `session.json` and reconstructs windows. |
 | Two instances sharing `/shared-data` | Each instance has its own directory at `/shared-data/instance/<id>/tmux/`. No conflict. |
 
@@ -233,7 +233,7 @@ set-hook -g session-created 'run-shell -b "while true; do sleep 300; /home/node/
 
 | Component | Location | Est. Size |
 |-----------|----------|-----------|
-| `claude-wrapper` | `/usr/local/bin/claude-wrapper` | ~35 lines shell |
+| `claude-wrapper` | `~/.local/bin/claude-wrapper` | ~35 lines shell |
 | Shell function | `/home/node/.config/agent-env/claude-fn.sh` | ~3 lines |
 | `agent-env tmux-save` | `packages/agent-env/src/commands/` | ~70 lines TS |
 | `agent-env tmux-restore` | `packages/agent-env/src/commands/` | ~90 lines TS |

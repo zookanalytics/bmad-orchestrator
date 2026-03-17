@@ -19,7 +19,7 @@
 **Files:**
 - Create: `image/scripts/claude-wrapper.sh`
 
-The wrapper intercepts `claude` invocations to track session IDs per tmux pane. It writes to `panes.json` in the shared-data tmux directory.
+The wrapper intercepts `claude` invocations to track session IDs per tmux pane. It writes to `claude-sessions.json` in the shared-data tmux directory.
 
 - [ ] **Step 1: Create the wrapper script**
 
@@ -33,7 +33,7 @@ set -euo pipefail
 
 CLAUDE_REAL="__CLAUDE_REAL_PATH__"
 PANES_DIR="/shared-data/instance/${AGENT_INSTANCE:-unknown}/tmux"
-PANES_FILE="$PANES_DIR/panes.json"
+PANES_FILE="$PANES_DIR/claude-sessions.json"
 
 # --- Passthrough conditions: skip tracking ---
 
@@ -269,14 +269,14 @@ describe('readPanesState', () => {
       version: 1,
       '%0': { session_id: 'aaa-bbb', window_name: 'test', cwd: '/tmp' },
     };
-    await writeFile(join(tempDir, 'panes.json'), JSON.stringify(state));
-    const result = await readPanesState(join(tempDir, 'panes.json'));
+    await writeFile(join(tempDir, 'claude-sessions.json'), JSON.stringify(state));
+    const result = await readPanesState(join(tempDir, 'claude-sessions.json'));
     expect(result['%0']?.session_id).toBe('aaa-bbb');
   });
 
   it('returns empty state for corrupted JSON', async () => {
-    await writeFile(join(tempDir, 'panes.json'), 'not json');
-    const result = await readPanesState(join(tempDir, 'panes.json'));
+    await writeFile(join(tempDir, 'claude-sessions.json'), 'not json');
+    const result = await readPanesState(join(tempDir, 'claude-sessions.json'));
     expect(result).toEqual({ version: 1 });
   });
 });
@@ -363,7 +363,7 @@ Create `packages/agent-env/src/lib/tmux-session.ts`:
 /**
  * Tmux session state management for agent-env
  *
- * Handles reading/writing panes.json and session.json files that track
+ * Handles reading/writing claude-sessions.json and session.json files that track
  * tmux window state for persistence across container rebuilds.
  *
  * State files live at: /shared-data/instance/<id>/tmux/
@@ -569,7 +569,7 @@ describe('executeTmuxSave', () => {
     expect(savedState.windows[1].claude_session_id).toBe('aaa-bbb');
   });
 
-  it('records window as shell when no panes.json entry exists', async () => {
+  it('records window as shell when no claude-sessions.json entry exists', async () => {
     mockExecSync.mockReturnValue('%0\t1\twin\t/tmp\tclaude\tbugs\n');
     mockReadPanesState.mockResolvedValue({ version: 1 }); // no entry for %0
 
@@ -646,8 +646,8 @@ export async function executeTmuxSave(): Promise<void> {
 
   if (panes.length === 0) return;
 
-  // Read panes.json to get claude session IDs
-  const panesPath = join(stateDir, 'panes.json');
+  // Read claude-sessions.json to get claude session IDs
+  const panesPath = join(stateDir, 'claude-sessions.json');
   const panesState = await readPanesState(panesPath);
 
   // Get active window
@@ -1212,7 +1212,7 @@ Expected: Windows are recreated from saved state
 
 (After a container rebuild that includes the wrapper):
 1. Open a tmux window and run `claude`
-2. Check that `panes.json` has an entry for the pane
+2. Check that `claude-sessions.json` has an entry for the pane
 3. Exit claude and verify the entry is cleaned up
 4. Run `claude` again, then run `agent-env tmux-save`
 5. Verify `session.json` captures the claude session ID
