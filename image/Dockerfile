@@ -127,6 +127,10 @@ COPY --chown=node:node image/scripts/tmux-purpose.sh /home/node/.local/bin/tmux-
 COPY --chown=node:node image/scripts/pbcopy.sh /home/node/.local/bin/pbcopy
 RUN chmod +x /home/node/.local/bin/tmux-session /home/node/.local/bin/tmux-purpose /home/node/.local/bin/pbcopy
 
+# Claude session persistence wrapper (real path baked in at post-create time)
+COPY --chown=node:node image/scripts/claude-wrapper.sh /usr/local/share/agent-env/claude-wrapper.sh
+COPY --chown=node:node image/config/claude-fn.sh /usr/local/share/agent-env/claude-fn.sh
+
 # Set default shell and editor
 ENV SHELL=/bin/zsh
 ENV EDITOR=vim
@@ -282,7 +286,7 @@ LABEL devcontainer.metadata='[ \
       "PULSE_COOKIE": "/shared-data/pulse/cookie" \
     }, \
     "postCreateCommand": "/usr/local/bin/post-create.sh", \
-    "postStartCommand": "sudo /usr/local/bin/start-sshd.sh; tmux new-session -d -s main 2>/dev/null || true; : > /tmp/install-shared-skills.log; /usr/local/bin/install-shared-skills.sh >> /tmp/install-shared-skills.log 2>&1 || true", \
+    "postStartCommand": "sudo /usr/local/bin/start-sshd.sh; tmux new-session -d -s main 2>/dev/null || true; agent-env tmux-restore 2>/dev/null || true; : > /tmp/install-shared-skills.log; /usr/local/bin/install-shared-skills.sh >> /tmp/install-shared-skills.log 2>&1 || true", \
     "forwardPorts": [22], \
     "customizations": { \
       "vscode": { \

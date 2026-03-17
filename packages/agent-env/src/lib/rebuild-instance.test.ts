@@ -703,6 +703,51 @@ describe('rebuildInstance', () => {
     expect(mockContainer.devcontainerUp).toHaveBeenCalled();
   });
 
+  it('saves tmux session state before teardown when container is running', async () => {
+    const state = createTestState('repo-auth', { repoConfigDetected: false });
+    await createTestWorkspace('repo-auth', state, {
+      devcontainerFiles: ['devcontainer.json', 'init-host.sh'],
+    });
+
+    const callOrder: string[] = [];
+    const mockContainer = createMockContainer({
+      containerStatus: vi.fn().mockResolvedValue({
+        ok: true,
+        status: 'running',
+        containerId: 'abc123',
+      }),
+      containerStop: vi.fn().mockImplementation(async () => {
+        callOrder.push('containerStop');
+        return { ok: true };
+      }),
+    });
+
+    const mockExecutor = vi.fn().mockImplementation(async (cmd: string, args?: string[]) => {
+      if (cmd === 'docker' && args?.[0] === 'exec') {
+        callOrder.push('tmux-save');
+      }
+      return { ok: true, stdout: '', stderr: '', exitCode: 0 };
+    });
+
+    const deps = createTestDeps({
+      container: mockContainer,
+      executor: mockExecutor,
+    });
+
+    await rebuildInstance('auth', deps, { force: true });
+
+    // Verify tmux-save was called with correct args
+    expect(mockExecutor).toHaveBeenCalledWith('docker', [
+      'exec',
+      'ae-repo-auth',
+      'agent-env',
+      'tmux-save',
+    ]);
+
+    // Verify tmux-save ran before container stop
+    expect(callOrder.indexOf('tmux-save')).toBeLessThan(callOrder.indexOf('containerStop'));
+  });
+
   // ─── Container not-found case ──────────────────────────────────────────────
 
   it('skips stop and remove when container is not found', async () => {
