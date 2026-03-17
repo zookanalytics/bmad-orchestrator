@@ -84,8 +84,13 @@ json.dump(data, sys.stdout)
   ) 200>"$STATE_DIR/.claude-sessions.lock"
 }
 
-# Clean up pane entry on exit
-cleanup() { remove_pane_entry; }
+# Clean up pane entry and save session state on exit.
+# Without this, session.json keeps stale "program": "claude" until the
+# next autosave or pane-exited hook.
+cleanup() {
+  remove_pane_entry
+  agent-env tmux-save 2>/dev/null || true
+}
 trap cleanup EXIT
 
 # --- Argument parsing ---
@@ -120,18 +125,22 @@ for i in "${!ARGS[@]}"; do
   esac
 done
 
-# --- Dispatch ---
+# --- Dispatch (tracked paths) ---
+# These paths record state and run claude WITHOUT exec so the EXIT trap
+# fires when claude exits, triggering cleanup → remove entry + tmux-save.
 
 # Explicit --session-id: record it and pass through
 if [ -n "$SESSION_ID_FLAG" ] && [ -n "$SESSION_ID_VALUE" ]; then
   write_pane_entry "$TMUX_PANE" "$SESSION_ID_VALUE"
-  exec "$CLAUDE_REAL" "$@"
+  "$CLAUDE_REAL" "$@"
+  exit $?
 fi
 
 # Explicit --resume <uuid>: record it and pass through
 if [ -n "$RESUME_FLAG" ] && [ -n "$RESUME_VALUE" ]; then
   write_pane_entry "$TMUX_PANE" "$RESUME_VALUE"
-  exec "$CLAUDE_REAL" "$@"
+  "$CLAUDE_REAL" "$@"
+  exit $?
 fi
 
 # Bare --resume (no UUID): look up pane state
@@ -147,11 +156,13 @@ except: pass
 " 2>/dev/null)
     if [ -n "$STORED_ID" ]; then
       write_pane_entry "$TMUX_PANE" "$STORED_ID"
-      exec "$CLAUDE_REAL" --resume "$STORED_ID"
+      "$CLAUDE_REAL" --resume "$STORED_ID"
+      exit $?
     fi
   fi
   # No stored ID — fall through to real claude (opens picker)
-  exec "$CLAUDE_REAL" "$@"
+  "$CLAUDE_REAL" "$@"
+  exit $?
 fi
 
 # Known limitation: if the user runs /resume inside Claude to switch
@@ -161,4 +172,4 @@ fi
 # Fresh launch: generate UUID and set session ID
 NEW_UUID=$(cat /proc/sys/kernel/random/uuid)
 write_pane_entry "$TMUX_PANE" "$NEW_UUID"
-exec "$CLAUDE_REAL" --session-id "$NEW_UUID" "$@"
+"$CLAUDE_REAL" --session-id "$NEW_UUID" "$@"
