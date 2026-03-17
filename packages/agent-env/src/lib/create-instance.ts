@@ -209,7 +209,7 @@ export async function attachToInstance(
       containerName,
       'bash',
       '-c',
-      'tmux attach-session -t main 2>/dev/null || tmux new-session -s main',
+      'tmux attach-session -t agent-env 2>/dev/null || tmux new-session -s agent-env',
     ],
     { stdio: 'inherit' }
   );

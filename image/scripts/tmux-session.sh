@@ -8,5 +8,14 @@
 [[ "$TERM" == "xterm" ]] && export TERM=xterm-256color
 export COLORTERM="${COLORTERM:-truecolor}"
 
-session_name="${AGENT_INSTANCE:-$(hostname)}"
-exec /usr/bin/tmux new-session -A -s "$session_name"
+# Fixed name — one managed session per container, matches postStartCommand LABEL
+session_name="agent-env"
+
+# If no tmux session exists yet, create one and attempt to restore saved state.
+# This handles plain Docker restarts where postStartCommand doesn't run.
+if ! /usr/bin/tmux has-session -t "$session_name" 2>/dev/null; then
+  /usr/bin/tmux new-session -d -s "$session_name"
+  bash -lc "agent-env tmux-restore" 2>/dev/null || true
+fi
+
+exec /usr/bin/tmux attach-session -t "$session_name"

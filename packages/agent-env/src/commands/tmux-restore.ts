@@ -47,7 +47,7 @@ function ensureTmuxSession(savedName: string): string {
   }
 
   // Create session with the saved name
-  const name = savedName || process.env.AGENT_INSTANCE || 'main';
+  const name = savedName || 'agent-env';
   tmuxExecSafe(`tmux new-session -d -s "${name}"`);
   return name;
 }
