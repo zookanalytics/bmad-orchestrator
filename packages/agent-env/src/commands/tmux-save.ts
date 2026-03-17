@@ -80,16 +80,18 @@ export async function executeTmuxSave(): Promise<void> {
     const paneEntry = panesState[pane.paneId];
     const hasClaudeEntry =
       typeof paneEntry === 'object' && paneEntry !== null && 'session_id' in paneEntry;
-    const isClaudeCommand = pane.command === 'claude';
+    // Only trust the actual running command — claude-sessions.json entries
+    // can be stale if the user exited claude but kept the window open.
+    const isClaudeRunning = pane.command === 'claude';
 
     const window: WindowEntry = {
       index: pane.windowIndex,
       name: pane.windowName,
       cwd: pane.cwd,
-      program: hasClaudeEntry || isClaudeCommand ? 'claude' : null,
+      program: isClaudeRunning ? 'claude' : null,
     };
 
-    if (hasClaudeEntry) {
+    if (isClaudeRunning && hasClaudeEntry) {
       window.claude_session_id = paneEntry.session_id;
     }
 
