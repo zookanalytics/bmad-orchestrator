@@ -4,6 +4,7 @@ import type { SessionState } from '../lib/tmux-session.js';
 
 // Mock dependencies
 const mockExecSync = vi.fn();
+const mockUnlink = vi.fn().mockResolvedValue(undefined);
 const mockReadPanesState = vi.fn();
 const mockWritePanesState = vi.fn();
 const mockWriteSessionState = vi.fn();
@@ -11,6 +12,10 @@ const mockResolveTmuxStateDir = vi.fn();
 
 vi.mock('node:child_process', () => ({
   execSync: (...args: unknown[]) => mockExecSync(...args),
+}));
+
+vi.mock('node:fs/promises', () => ({
+  unlink: (...args: unknown[]) => mockUnlink(...args),
 }));
 
 // Mock pruneStaleEntries as a passthrough that returns pruned state
@@ -70,6 +75,26 @@ describe('executeTmuxSave', () => {
     expect(savedState.windows[0].program).toBeNull();
     expect(savedState.windows[1].program).toBe('claude');
     expect(savedState.windows[1].claude_session_id).toBe('aaa-bbb');
+  });
+
+  it('deletes session.json when tmux list-panes fails (session destroyed)', async () => {
+    mockExecSync.mockImplementation(() => {
+      throw new Error('no server running');
+    });
+
+    await executeTmuxSave();
+
+    expect(mockUnlink).toHaveBeenCalledWith('/shared-data/instance/test/tmux/session.json');
+    expect(mockWriteSessionState).not.toHaveBeenCalled();
+  });
+
+  it('deletes session.json when tmux returns empty panes', async () => {
+    mockExecSync.mockReturnValue('\n');
+
+    await executeTmuxSave();
+
+    expect(mockUnlink).toHaveBeenCalledWith('/shared-data/instance/test/tmux/session.json');
+    expect(mockWriteSessionState).not.toHaveBeenCalled();
   });
 
   it('detects claude from tmux command even without claude-sessions.json entry', async () => {

@@ -7,6 +7,7 @@
 
 import { Command } from 'commander';
 import { execSync } from 'node:child_process';
+import { unlink } from 'node:fs/promises';
 import { join } from 'node:path';
 
 import {
@@ -23,6 +24,8 @@ export async function executeTmuxSave(): Promise<void> {
   const stateDir = resolveTmuxStateDir();
   if (!stateDir) return;
 
+  const sessionPath = join(stateDir, 'session.json');
+
   // Get tmux pane information using tab separator for reliable parsing
   let tmuxOutput: string;
   try {
@@ -31,7 +34,10 @@ export async function executeTmuxSave(): Promise<void> {
       { encoding: 'utf-8', timeout: 5000 }
     );
   } catch {
-    return; // tmux not running or no panes
+    // tmux not running or session destroyed (e.g. last pane exited).
+    // Remove stale session.json so restore won't replay old state.
+    await unlink(sessionPath).catch(() => {});
+    return;
   }
 
   const panes = tmuxOutput
@@ -50,7 +56,10 @@ export async function executeTmuxSave(): Promise<void> {
       };
     });
 
-  if (panes.length === 0) return;
+  if (panes.length === 0) {
+    await unlink(sessionPath).catch(() => {});
+    return;
+  }
 
   // Read claude-sessions.json to get claude session IDs
   const panesPath = join(stateDir, 'claude-sessions.json');
@@ -107,7 +116,7 @@ export async function executeTmuxSave(): Promise<void> {
     windows,
   };
 
-  await writeSessionState(join(stateDir, 'session.json'), sessionState);
+  await writeSessionState(sessionPath, sessionState);
 
   // Prune stale pane entries
   const activePaneIds = panes.map((p) => p.paneId);
