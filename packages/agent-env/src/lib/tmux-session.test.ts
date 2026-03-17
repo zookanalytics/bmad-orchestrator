@@ -8,6 +8,7 @@ import {
   readSessionState,
   writeSessionState,
   pruneStaleEntries,
+  type PaneEntry,
   type PanesState,
   type SessionState,
 } from './tmux-session.js';
@@ -39,7 +40,9 @@ describe('readPanesState', () => {
     };
     await writeFile(join(tempDir, 'claude-sessions.json'), JSON.stringify(state));
     const result = await readPanesState(join(tempDir, 'claude-sessions.json'));
-    expect(result['%0']?.session_id).toBe('aaa-bbb');
+    const entry = result['%0'];
+    expect(entry).not.toBe(1);
+    expect((entry as PaneEntry).session_id).toBe('aaa-bbb');
   });
 
   it('returns empty state for corrupted JSON', async () => {
