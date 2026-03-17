@@ -28,10 +28,11 @@ import { listInstances } from './lib/list-instances.js';
 import { rebuildInstance, createRebuildDefaultDeps } from './lib/rebuild-instance.js';
 import { removeInstance, createRemoveDefaultDeps } from './lib/remove-instance.js';
 
-// Detect local link: when linked from monorepo, workspace root is 3 levels up from dist/
+// Detect local/dev build: linked from monorepo or baked into image at /opt/agent-env-dev
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const isLinked = existsSync(resolve(__dirname, '..', '..', '..', 'pnpm-workspace.yaml'));
-const version = packageJson.version + (isLinked ? '+local' : '');
+const isBakedDev = resolve(__dirname, '..').startsWith('/opt/agent-env-dev');
+const version = packageJson.version + (isLinked ? '+local' : isBakedDev ? '+dev' : '');
 
 program
   .name('agent-env')

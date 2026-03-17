@@ -11,7 +11,7 @@
   "scripts": {
     "build": "pnpm -r build",
     "pretest": "pnpm --filter @zookanalytics/shared build",
-    "build:image": "docker build -f image/Dockerfile -t agent-devcontainer:local .",
+    "build:image": "pnpm --filter @zookanalytics/agent-env build && docker build -f image/Dockerfile -t agent-devcontainer:local .",
     "build:image:use-local": "pnpm build:image && docker tag agent-devcontainer:local ghcr.io/zookanalytics/bmad-orchestrator/devcontainer:latest",
     "build:image:use-remote": "docker pull ghcr.io/zookanalytics/bmad-orchestrator/devcontainer:latest",
     "test": "pnpm -r test",

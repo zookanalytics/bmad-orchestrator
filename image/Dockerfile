@@ -132,6 +132,17 @@ COPY --chown=node:node image/scripts/claude-wrapper.sh /home/node/.local/bin/cla
 COPY --chown=node:node image/config/claude-fn.sh /home/node/.config/agent-env/claude-fn.sh
 RUN chmod +x /home/node/.local/bin/tmux-session /home/node/.local/bin/tmux-purpose /home/node/.local/bin/pbcopy /home/node/.local/bin/tmux-autosave-loop /home/node/.local/bin/claude-wrapper
 
+# Bake agent-env CLI from local build so containers always use the version
+# that matches the image. post-create.sh detects /opt/agent-env-dev and runs
+# pnpm link --global from there instead of installing from npm.
+COPY --chown=node:node packages/agent-env/package.json /opt/agent-env-dev/package.json
+COPY --chown=node:node packages/agent-env/bin/ /opt/agent-env-dev/bin/
+COPY --chown=node:node packages/agent-env/dist/ /opt/agent-env-dev/dist/
+# Strip workspace:* deps (already bundled by tsup) then install runtime deps
+RUN cd /opt/agent-env-dev && \
+    node -e "const p=require('./package.json'); delete p.devDependencies; p.pnpm={onlyBuiltDependencies:[]}; require('fs').writeFileSync('package.json',JSON.stringify(p,null,2))" && \
+    pnpm install --prod --ignore-scripts
+
 # Set default shell and editor
 ENV SHELL=/bin/zsh
 ENV EDITOR=vim
