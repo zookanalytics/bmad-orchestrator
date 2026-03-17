@@ -61,25 +61,24 @@ export async function executeTmuxRestore(): Promise<void> {
 
   const sessionName = ensureTmuxSession(sessionState.tmux_session);
 
+  // Create all windows fresh with -c (sets cwd silently, no echoed cd command).
+  // The default window from session creation will be killed afterwards.
+  for (const win of sessionState.windows) {
+    tmuxExecSafe(`tmux new-window -t "${sessionName}" -n "${win.name}" -c "${win.cwd}"`);
+  }
+
+  // Kill the original default window. With renumber-windows on, the new
+  // windows shift down to start at 1 automatically.
+  tmuxExecSafe(`tmux kill-window -t "${sessionName}:1"`);
+
+  // Launch claude in windows that had active sessions.
+  // After renumbering, windows are indexed 1..N matching their creation order.
   for (let i = 0; i < sessionState.windows.length; i++) {
     const win = sessionState.windows[i];
-
-    if (i === 0) {
-      // Reuse the existing first window — rename it and set its working directory
-      tmuxExecSafe(`tmux rename-window -t "${sessionName}:1" "${win.name}"`);
-      tmuxExecSafe(
-        `tmux send-keys -t "${sessionName}:1" "cd '${win.cwd.replace(/'/g, "'\\''")}'" Enter`
-      );
-    } else {
-      // Create a new window
-      tmuxExecSafe(`tmux new-window -t "${sessionName}" -n "${win.name}" -c "${win.cwd}"`);
-    }
-
-    // Launch claude if this window had an active session
-    // Target by window index (more reliable than name which may have special chars)
     if (win.program === 'claude' && win.claude_session_id) {
+      const windowIndex = i + 1;
       tmuxExecSafe(
-        `tmux send-keys -t "${sessionName}:${win.index}" "claude --resume ${win.claude_session_id}" Enter`
+        `tmux send-keys -t "${sessionName}:${windowIndex}" "claude --resume ${win.claude_session_id} || claude" Enter`
       );
     }
   }
