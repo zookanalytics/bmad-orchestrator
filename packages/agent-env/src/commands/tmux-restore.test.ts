@@ -68,6 +68,35 @@ describe('executeTmuxRestore', () => {
     const calls = mockExecSync.mock.calls.map((c) => c[0] as string);
     expect(calls.some((c) => c.includes('new-window'))).toBe(true);
     expect(calls.some((c) => c.includes('claude --resume aaa-bbb'))).toBe(true);
+    expect(calls.some((c) => c.includes('kill-window'))).toBe(true);
+    expect(calls.some((c) => c.includes('select-window'))).toBe(true);
+  });
+
+  it('remaps active_window index after renumbering', async () => {
+    const state: SessionState = {
+      version: 1,
+      saved_at: '2026-03-17T00:00:00Z',
+      tmux_session: 'bugs',
+      active_window: 3,
+      windows: [
+        { index: 1, name: 'shell', cwd: '/tmp', program: null },
+        { index: 2, name: 'edit', cwd: '/tmp', program: null },
+        { index: 3, name: 'test', cwd: '/tmp', program: null },
+      ],
+    };
+    mockReadSessionState.mockResolvedValue(state);
+    mockExecSync.mockImplementation((cmd: string) => {
+      if (cmd.includes('list-sessions')) return 'bugs\n';
+      return '';
+    });
+
+    await executeTmuxRestore();
+
+    // active_window: 3 is the third window (index 2 in array), so after
+    // renumbering it becomes window 3 (activeIdx=2, +1=3)
+    const calls = mockExecSync.mock.calls.map((c) => c[0] as string);
+    const selectCall = calls.find((c) => c.includes('select-window'));
+    expect(selectCall).toContain(':3');
   });
 
   it('creates tmux session if none exists', async () => {

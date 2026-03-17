@@ -740,8 +740,9 @@ describe('rebuildInstance', () => {
     expect(mockExecutor).toHaveBeenCalledWith('docker', [
       'exec',
       'ae-repo-auth',
-      'agent-env',
-      'tmux-save',
+      'bash',
+      '-lc',
+      'agent-env tmux-save',
     ]);
 
     // Verify tmux-save ran before container stop

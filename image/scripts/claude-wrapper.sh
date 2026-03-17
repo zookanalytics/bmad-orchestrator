@@ -173,3 +173,4 @@ fi
 NEW_UUID=$(cat /proc/sys/kernel/random/uuid)
 write_pane_entry "$TMUX_PANE" "$NEW_UUID"
 "$CLAUDE_REAL" --session-id "$NEW_UUID" "$@"
+exit $?
