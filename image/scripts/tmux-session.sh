@@ -11,10 +11,22 @@ export COLORTERM="${COLORTERM:-truecolor}"
 # Fixed name — one managed session per container, matches postStartCommand LABEL
 session_name="agent-env"
 
+# Resolve workspace directory — the repo mount under /workspaces/.
+# Dockerfile WORKDIR is /workspaces but the actual repo lives one level deeper.
+# Find the first real directory that isn't .pnpm-store.
+workspace_dir="/workspaces"
+for d in /workspaces/*/; do
+  case "$d" in
+    */\*/) break ;;            # glob didn't match anything
+    */.pnpm-store/) continue ;;
+    *) workspace_dir="${d%/}"; break ;;
+  esac
+done
+
 # If no tmux session exists yet, create one and attempt to restore saved state.
 # This handles plain Docker restarts where postStartCommand doesn't run.
 if ! /usr/bin/tmux has-session -t "$session_name" 2>/dev/null; then
-  /usr/bin/tmux new-session -d -s "$session_name"
+  /usr/bin/tmux new-session -d -s "$session_name" -c "$workspace_dir"
   bash -lc "agent-env tmux-restore" 2>/dev/null || true
 fi
 
