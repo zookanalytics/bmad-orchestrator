@@ -1,5 +1,11 @@
 # @zookanalytics/agent-env
 
+## 0.9.1
+
+### Patch Changes
+
+- [#63](https://github.com/zookanalytics/bmad-orchestrator/pull/63) [`893a128`](https://github.com/zookanalytics/bmad-orchestrator/commit/893a128fed966ff4f14e481799132218ed69c235) Thanks [@johnzook](https://github.com/johnzook)! - Fix devcontainer config feedback loop that caused init-host.sh to run twice in parallel during rebuild, crashing on SSH pub key staging. The persistent `.devcontainer/devcontainer.json` symlink was being read back as a repo config by readRepoConfig. Now uses an ephemeral `.devcontainer.json` symlink at workspace root (created before `devcontainer open`, removed after), adds symlink detection in readRepoConfig as defense-in-depth, and makes init-host.sh robust with non-fatal SSH key staging.
+
 ## 0.9.0
 
 ### Minor Changes
