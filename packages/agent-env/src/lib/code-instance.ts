@@ -144,7 +144,7 @@ export async function removeConfigSymlink(wsRoot: string, deps: CodeFsDeps): Pro
  * 2. Read state to get container name
  * 3. Check Docker availability
  * 4. Check container status; start container if stopped
- * 5. Create ephemeral .devcontainer symlink (repos without own config)
+ * 5. Create ephemeral workspace-root .devcontainer.json symlink (repos without own config)
  * 6. Run `devcontainer open` to launch VS Code
  * 7. Remove ephemeral symlink (always, via finally)
  * 8. Update lastAttached timestamp

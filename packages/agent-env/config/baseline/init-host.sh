@@ -3,7 +3,7 @@
 # Ensures mount sources exist to prevent devcontainer up failures.
 # The .gitconfig and SSH socket mounts are provided by the image LABEL metadata.
 
-set -uo pipefail
+set -euo pipefail
 
 GITCONFIG="$HOME/.gitconfig"
 SSH_SOCKET="/run/host-services/ssh-auth.sock"
@@ -30,11 +30,13 @@ if ls "$HOME/.ssh/"*.pub &>/dev/null; then
       [ -f "$f" ] && echo "  - $(basename "$f")"
     done
   else
-    echo "agent-env: Warning: Failed to stage SSH public keys (non-fatal)"
+    rm -f "$SSH_PUB_DIR"/*.pub 2>/dev/null || true
+    echo "agent-env: Warning: Failed to stage SSH public keys — cleared stale keys (non-fatal)"
   fi
   rm -rf "$STAGING_TMP" 2>/dev/null || true
 else
-  echo "agent-env: Warning: No SSH public keys found in ~/.ssh. SSH access will require manual setup."
+  rm -f "$SSH_PUB_DIR"/*.pub 2>/dev/null || true
+  echo "agent-env: Warning: No SSH public keys found in ~/.ssh — cleared stale keys. SSH access will require manual setup."
 fi
 
 # Stage PulseAudio cookie for audio passthrough (if setup-audio was run)

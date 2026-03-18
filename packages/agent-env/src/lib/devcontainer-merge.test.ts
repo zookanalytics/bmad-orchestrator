@@ -541,7 +541,9 @@ describe('readRepoConfig', () => {
   });
 
   it('skips symlink pointing into .agent-env/ (stale ephemeral symlink guard)', async () => {
-    // Simulate the symlink that code-instance creates: .devcontainer/devcontainer.json → ../.agent-env/devcontainer.json
+    // Simulate a symlink inside .devcontainer/ pointing into .agent-env/ — tests the
+    // symlink guard in readRepoConfig. (code-instance creates a workspace-root .devcontainer.json
+    // symlink, but readRepoConfig must guard against any symlink resolving into .agent-env/.)
     const agentEnvDir = join(tempDir, '.agent-env');
     await mkdir(agentEnvDir, { recursive: true });
     await writeFile(
