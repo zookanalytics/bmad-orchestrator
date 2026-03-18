@@ -28,6 +28,12 @@ export function createProgressLine(
   stream: NodeJS.WriteStream = process.stderr,
   columns?: number
 ): ProgressLine {
+  // When stderr is not a TTY (piped, CI, redirected), return a no-op to
+  // avoid emitting raw ANSI escape codes into non-interactive output.
+  if (!stream.isTTY) {
+    return { update() {}, clear() {} };
+  }
+
   const maxWidth = columns ?? stream.columns ?? 80;
   // Reserve space for the prefix "⏳ " (3 chars)
   const PREFIX = '⏳ ';

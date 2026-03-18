@@ -4,7 +4,10 @@ import { describe, expect, it } from 'vitest';
 import { createProgressLine } from './progress-line.js';
 
 /** Create a fake writable stream that collects written chunks. */
-function createMockStream(columns = 80): { stream: NodeJS.WriteStream; chunks: string[] } {
+function createMockStream(
+  columns = 80,
+  isTTY = true
+): { stream: NodeJS.WriteStream; chunks: string[] } {
   const chunks: string[] = [];
   const stream = new Writable({
     write(chunk, _encoding, callback) {
@@ -13,6 +16,7 @@ function createMockStream(columns = 80): { stream: NodeJS.WriteStream; chunks: s
     },
   }) as unknown as NodeJS.WriteStream;
   stream.columns = columns;
+  stream.isTTY = isTTY;
   return { stream, chunks };
 }
 
@@ -76,5 +80,16 @@ describe('createProgressLine', () => {
 
     // Should not be truncated since visible text (10 chars) + prefix (3) = 13 < 30
     expect(chunks[0]).not.toContain('…');
+  });
+
+  it('returns no-op when stream is not a TTY', () => {
+    const { stream, chunks } = createMockStream(80, false);
+    const progress = createProgressLine(stream);
+
+    progress.update('should not appear');
+    progress.update('still nothing');
+    progress.clear();
+
+    expect(chunks).toHaveLength(0);
   });
 });
