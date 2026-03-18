@@ -309,6 +309,7 @@ async function setupMergedConfig(
 
 export interface CreateInstanceOptions {
   purpose?: string;
+  onProgress?: (line: string) => void;
 }
 
 /**
@@ -489,6 +490,7 @@ export async function createInstance(
       AGENT_ENV_PURPOSE: purposeText,
     },
     configPath,
+    onProgress: options?.onProgress,
   });
   if (!containerResult.ok) {
     return rollbackContainerFailure(containerName, wsPath, containerResult, deps);

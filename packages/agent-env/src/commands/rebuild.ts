@@ -6,6 +6,7 @@ import { createInterface } from 'node:readline';
 import type { RebuildOptions } from '../lib/rebuild-instance.js';
 
 import { resolveRepoOrExit } from '../lib/command-helpers.js';
+import { createProgressLine } from '../lib/progress-line.js';
 import { createRebuildDefaultDeps, rebuildInstance } from '../lib/rebuild-instance.js';
 
 /**
@@ -63,10 +64,12 @@ export const rebuildCommand = new Command('rebuild')
 
       const force = options.force || options.yes || confirmed;
 
+      const progress = createProgressLine();
       const rebuildOptions: RebuildOptions = {
         force,
         pull: options.pull,
         noCache: !options.useCache,
+        onProgress: progress.update,
       };
 
       if (force) {
@@ -75,26 +78,31 @@ export const rebuildCommand = new Command('rebuild')
         console.log(`Rebuilding instance '${name}'...`);
       }
 
-      const result = await rebuildInstance(name, deps, rebuildOptions, repoSlug);
+      try {
+        const result = await rebuildInstance(name, deps, rebuildOptions, repoSlug);
+        progress.clear();
 
-      if (!result.ok) {
-        if (result.error.code === 'CONTAINER_RUNNING') {
-          console.error('');
-          console.error(
-            chalk.yellow('Container is currently running.') +
-              ' Active sessions will be terminated during rebuild.'
-          );
-          console.error('');
-          console.error(`Use ${chalk.bold('--force')} to rebuild anyway.`);
-        } else {
-          const { code, message, suggestion } = result.error;
-          console.error(formatError(createError(code, message, suggestion)));
+        if (!result.ok) {
+          if (result.error.code === 'CONTAINER_RUNNING') {
+            console.error('');
+            console.error(
+              chalk.yellow('Container is currently running.') +
+                ' Active sessions will be terminated during rebuild.'
+            );
+            console.error('');
+            console.error(`Use ${chalk.bold('--force')} to rebuild anyway.`);
+          } else {
+            const { code, message, suggestion } = result.error;
+            console.error(formatError(createError(code, message, suggestion)));
+          }
+          process.exit(1);
+          return;
         }
-        process.exit(1);
-        return;
-      }
 
-      console.log(`\x1b[32m✓\x1b[0m Instance '${name}' rebuilt successfully`);
-      console.log(`  Container: ${result.containerName}`);
+        console.log(`\x1b[32m✓\x1b[0m Instance '${name}' rebuilt successfully`);
+        console.log(`  Container: ${result.containerName}`);
+      } finally {
+        progress.clear();
+      }
     }
   );
