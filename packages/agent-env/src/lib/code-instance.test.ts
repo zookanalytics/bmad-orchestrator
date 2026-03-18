@@ -450,6 +450,27 @@ describe('codeInstance', () => {
     const symlinkPath = join(wsRoot, '.devcontainer', 'devcontainer.json');
     await expect(lstat(symlinkPath)).rejects.toThrow();
   });
+
+  it('returns SYMLINK_FAILED with underlying error when symlink creation throws', async () => {
+    const state = createTestState('repo-auth', { repoConfigDetected: false });
+    await createTestWorkspace('repo-auth', state);
+    const deps = createTestDeps({
+      codeFsDeps: {
+        mkdir: vi.fn().mockRejectedValue(new Error('EPERM: operation not permitted')),
+        lstat,
+        symlink,
+        readlink,
+        unlink,
+      },
+    });
+
+    const result = await codeInstance('auth', deps);
+
+    expect(result.ok).toBe(false);
+    if (result.ok) throw new Error('Expected failure');
+    expect(result.error.code).toBe('SYMLINK_FAILED');
+    expect(result.error.message).toContain('EPERM');
+  });
 });
 
 // ─── ensureDevcontainerSymlink tests ─────────────────────────────────────────

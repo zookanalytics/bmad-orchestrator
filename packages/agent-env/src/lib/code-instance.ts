@@ -218,12 +218,13 @@ export async function codeInstance(
   if (!state.repoConfigDetected) {
     try {
       await ensureDevcontainerSymlink(wsPath.root, deps.codeFsDeps);
-    } catch {
+    } catch (err) {
+      const detail = err instanceof Error ? err.message : String(err);
       return {
         ok: false,
         error: {
           code: 'SYMLINK_FAILED',
-          message: `Failed to create .devcontainer symlink in '${wsPath.root}'.`,
+          message: `Failed to create .devcontainer symlink in '${wsPath.root}': ${detail}`,
           suggestion: 'Check file permissions in the workspace directory.',
         },
       };
