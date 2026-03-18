@@ -14,18 +14,29 @@ if [ ! -f "$GITCONFIG" ]; then
   touch "$GITCONFIG"
 fi
 
-# Stage only SSH public keys for container mount (never expose private keys)
+# Stage only SSH public keys for container mount (never expose private keys).
+# Non-fatal — SSH agent socket provides auth; pub keys are only for sshd authorized_keys.
 SSH_PUB_DIR="$HOME/.agent-env/ssh-pub-keys"
 mkdir -p "$SSH_PUB_DIR"
-rm -f "$SSH_PUB_DIR"/*.pub 2>/dev/null || true
 if ls "$HOME/.ssh/"*.pub &>/dev/null; then
-  cp -p "$HOME/.ssh/"*.pub "$SSH_PUB_DIR/"
-  echo "agent-env: Staged SSH public keys:"
-  for f in "$SSH_PUB_DIR"/*.pub; do
-    echo "  - $(basename "$f")"
-  done
+  # Atomic replace: copy to temp dir, then swap
+  STAGING_TMP="$SSH_PUB_DIR/.staging.$$"
+  mkdir -p "$STAGING_TMP"
+  if cp -p "$HOME/.ssh/"*.pub "$STAGING_TMP/" 2>/dev/null; then
+    rm -f "$SSH_PUB_DIR"/*.pub 2>/dev/null || true
+    mv "$STAGING_TMP"/*.pub "$SSH_PUB_DIR/" 2>/dev/null || true
+    echo "agent-env: Staged SSH public keys:"
+    for f in "$SSH_PUB_DIR"/*.pub; do
+      [ -f "$f" ] && echo "  - $(basename "$f")"
+    done
+  else
+    rm -f "$SSH_PUB_DIR"/*.pub 2>/dev/null || true
+    echo "agent-env: Warning: Failed to stage SSH public keys — cleared stale keys (non-fatal)"
+  fi
+  rm -rf "$STAGING_TMP" 2>/dev/null || true
 else
-  echo "agent-env: Warning: No SSH public keys found in ~/.ssh. SSH access will require manual setup."
+  rm -f "$SSH_PUB_DIR"/*.pub 2>/dev/null || true
+  echo "agent-env: Warning: No SSH public keys found in ~/.ssh — cleared stale keys. SSH access will require manual setup."
 fi
 
 # Stage PulseAudio cookie for audio passthrough (if setup-audio was run)

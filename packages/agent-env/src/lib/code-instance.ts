@@ -22,7 +22,7 @@ import {
   writeFile,
 } from 'node:fs/promises';
 import { homedir } from 'node:os';
-import { join, relative } from 'node:path';
+import { join } from 'node:path';
 
 import type { ContainerLifecycle } from './container.js';
 import type { StateFsDeps } from './state.js';
@@ -46,7 +46,6 @@ export type CodeResult =
   | { ok: false; error: { code: string; message: string; suggestion?: string } };
 
 export interface CodeFsDeps {
-  mkdir: typeof mkdir;
   lstat: typeof lstat;
   symlink: typeof symlink;
   readlink: typeof readlink;
@@ -74,7 +73,7 @@ export function createCodeDefaultDeps(): CodeInstanceDeps {
     container: createContainerLifecycle(executor),
     workspaceFsDeps: { mkdir, readdir, stat, homedir },
     stateFsDeps: { readFile, writeFile, rename, mkdir, appendFile },
-    codeFsDeps: { mkdir, lstat, symlink, readlink, unlink },
+    codeFsDeps: { lstat, symlink, readlink, unlink },
   };
 }
 
@@ -83,43 +82,56 @@ export function createCodeDefaultDeps(): CodeInstanceDeps {
 /** Timeout for devcontainer open (30 seconds — may need to launch VS Code) */
 const DEVCONTAINER_OPEN_TIMEOUT = 30_000;
 
-// ─── Symlink Helper ─────────────────────────────────────────────────────────
+// ─── Symlink Helpers ─────────────────────────────────────────────────────────
 
 /**
- * Ensure .devcontainer/devcontainer.json exists as a symlink to .agent-env/devcontainer.json.
+ * Create a root-level .devcontainer.json symlink to .agent-env/devcontainer.json.
  *
- * The `devcontainer open` CLI ignores `--config` for its gate check — it requires
- * `.devcontainer/devcontainer.json` to exist in the workspace folder. This symlink
- * satisfies that check while keeping the real config in `.agent-env/`.
+ * The `devcontainer open` CLI requires a devcontainer config at a standard location.
+ * Using .devcontainer.json at the workspace root avoids creating/deleting a directory.
  *
- * Only creates the symlink for repos without their own .devcontainer config
- * (repoConfigDetected: false). Idempotent — skips if symlink already exists and
- * points to the right target.
+ * The symlink is EPHEMERAL — created before `devcontainer open` and removed
+ * immediately after by `removeConfigSymlink`. This prevents readRepoConfig
+ * from finding the auto-generated config through the symlink on subsequent rebuilds.
+ *
+ * Idempotent — skips if symlink already correct. Never overwrites real files.
  */
-export async function ensureDevcontainerSymlink(wsRoot: string, deps: CodeFsDeps): Promise<void> {
-  const devcontainerDir = join(wsRoot, '.devcontainer');
-  const symlinkPath = join(devcontainerDir, 'devcontainer.json');
-  const target = relative(devcontainerDir, join(wsRoot, AGENT_ENV_DIR, 'devcontainer.json'));
+export async function ensureConfigSymlink(wsRoot: string, deps: CodeFsDeps): Promise<void> {
+  const symlinkPath = join(wsRoot, '.devcontainer.json');
+  const target = join(AGENT_ENV_DIR, 'devcontainer.json');
 
-  // Check if symlink already exists and points to the right place
   try {
     const linkStat = await deps.lstat(symlinkPath);
     if (linkStat.isSymbolicLink()) {
       const existing = await deps.readlink(symlinkPath);
-      if (existing === target) return; // Already correct
-      // Stale symlink pointing to wrong target — remove and re-create
+      if (existing === target) return;
       await deps.unlink(symlinkPath);
     } else {
-      // Exists but is not a symlink (user's real file) — don't touch it
+      // Real file — don't touch
       return;
     }
   } catch (err) {
     if ((err as NodeJS.ErrnoException).code !== 'ENOENT') throw err;
-    // Doesn't exist — create it below
   }
 
-  await deps.mkdir(devcontainerDir, { recursive: true });
   await deps.symlink(target, symlinkPath);
+}
+
+/**
+ * Remove the ephemeral .devcontainer.json symlink.
+ *
+ * Only removes symlinks (never real files). Best-effort.
+ */
+export async function removeConfigSymlink(wsRoot: string, deps: CodeFsDeps): Promise<void> {
+  const symlinkPath = join(wsRoot, '.devcontainer.json');
+
+  try {
+    const linkStat = await deps.lstat(symlinkPath);
+    if (!linkStat.isSymbolicLink()) return;
+    await deps.unlink(symlinkPath);
+  } catch {
+    // Already gone or inaccessible
+  }
 }
 
 // ─── Code Orchestration ─────────────────────────────────────────────────────
@@ -132,16 +144,10 @@ export async function ensureDevcontainerSymlink(wsRoot: string, deps: CodeFsDeps
  * 2. Read state to get container name
  * 3. Check Docker availability
  * 4. Check container status; start container if stopped
- * 5. Ensure .devcontainer symlink (for repos without their own config)
+ * 5. Create ephemeral workspace-root .devcontainer.json symlink (repos without own config)
  * 6. Run `devcontainer open` to launch VS Code
- * 7. Update lastAttached timestamp
- *
- * @param instanceName - User-provided instance name (e.g., "auth")
- * @param deps - Injectable dependencies
- * @param onContainerStarting - Optional callback for progress output
- * @param onOpening - Optional callback when opening VS Code
- * @param repoSlug - Optional repo slug from --repo flag or cwd inference
- * @returns CodeResult with success/failure info
+ * 7. Remove ephemeral symlink (always, via finally)
+ * 8. Update lastAttached timestamp
  */
 export async function codeInstance(
   instanceName: string,
@@ -150,7 +156,7 @@ export async function codeInstance(
   onOpening?: () => void,
   repoSlug?: string
 ): Promise<CodeResult> {
-  // Step 1: Resolve instance using two-phase resolution
+  // Step 1: Resolve instance
   const lookup = await resolveInstance(instanceName, repoSlug, {
     fsDeps: deps.workspaceFsDeps,
     readFile: deps.stateFsDeps.readFile,
@@ -213,11 +219,12 @@ export async function codeInstance(
     }
   }
 
-  // Step 5: Ensure .devcontainer/devcontainer.json symlink for repos without their own config.
-  // devcontainer open ignores --config for its gate check and requires this file to exist.
-  if (!state.repoConfigDetected) {
+  // Step 5-7: Ephemeral symlink + devcontainer open + cleanup
+  const needsSymlink = !state.repoConfigDetected;
+
+  if (needsSymlink) {
     try {
-      await ensureDevcontainerSymlink(wsPath.root, deps.codeFsDeps);
+      await ensureConfigSymlink(wsPath.root, deps.codeFsDeps);
     } catch (err) {
       const detail = err instanceof Error ? err.message : String(err);
       return {
@@ -231,13 +238,19 @@ export async function codeInstance(
     }
   }
 
-  // Step 6: Open VS Code
-  onOpening?.();
-  const openResult = await deps.executor(
-    'devcontainer',
-    ['open', wsPath.root, '--config', configPath],
-    { stdio: 'inherit', timeout: DEVCONTAINER_OPEN_TIMEOUT }
-  );
+  let openResult: ExecuteResult;
+  try {
+    onOpening?.();
+    openResult = await deps.executor(
+      'devcontainer',
+      ['open', wsPath.root, '--config', configPath],
+      { stdio: 'inherit', timeout: DEVCONTAINER_OPEN_TIMEOUT }
+    );
+  } finally {
+    if (needsSymlink) {
+      await removeConfigSymlink(wsPath.root, deps.codeFsDeps);
+    }
+  }
 
   if (!openResult.ok) {
     return {
@@ -250,7 +263,7 @@ export async function codeInstance(
     };
   }
 
-  // Step 7: Update lastAttached timestamp
+  // Step 8: Update lastAttached timestamp
   const updatedState = {
     ...state,
     lastAttached: new Date().toISOString(),
