@@ -195,6 +195,9 @@ RUN cargo install --git https://github.com/Dicklesworthstone/meta_skill.git --re
 ARG CASS_COMMIT=c97553c50aa4ca77b6cd914bd08491140de63abe
 RUN cargo install --git https://github.com/Dicklesworthstone/coding_agent_session_search.git --rev ${CASS_COMMIT}
 
+# Clean up Rust build caches (only compiled binaries needed at runtime)
+RUN rm -rf "$CARGO_HOME/registry" "$CARGO_HOME/git"
+
 USER root
 
 # Copy configuration files

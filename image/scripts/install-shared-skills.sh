@@ -97,17 +97,13 @@ fi
 # Step 3: Index skills into ms for search/feedback/evolution
 if command -v ms &>/dev/null && [ -d "$SKILLS_REPO_DIR" ]; then
   echo "  Indexing skills into ms..."
-  cd "$SKILLS_REPO_DIR"
-  ms init 2>/dev/null || true
-  if ! ms index "$SKILLS_REPO_DIR/skills"; then
-    echo "  ⚠ ms index failed"
-  else
-    echo "  ✓ Skills indexed in ms"
-  fi
+  (cd "$SKILLS_REPO_DIR" && ms init 2>/dev/null || true && ms index "$SKILLS_REPO_DIR/skills") \
+    && echo "  ✓ Skills indexed in ms" \
+    || echo "  ⚠ ms index failed"
 fi
 
-# Step 4: Index session history into CASS
-if command -v cass &>/dev/null; then
+# Step 4: Index session history into CASS (opt-in via env var)
+if [ "${CASS_INDEX_ENABLED:-false}" = "true" ] && command -v cass &>/dev/null; then
   echo "  Indexing session history into CASS..."
   if ! cass index --full 2>/dev/null; then
     echo "  ⚠ CASS index failed"
