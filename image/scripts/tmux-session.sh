@@ -1,5 +1,5 @@
 #!/bin/bash
-# Wrapper script to start/attach tmux with session named after the instance
+# Wrapper script to start/attach the managed tmux session (fixed name: agent-env)
 # Used by: VS Code terminal profile, postStartCommand (--detached), agent-env attach
 #
 # Usage:
