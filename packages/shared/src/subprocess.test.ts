@@ -143,6 +143,76 @@ describe('subprocess', () => {
     });
   });
 
+  describe('onLine streaming', () => {
+    it('does not pass onLine to the underlying executor', async () => {
+      const mockExecutor = vi.fn().mockResolvedValue({
+        failed: false,
+        stdout: '',
+        stderr: '',
+        exitCode: 0,
+      }) as unknown as Executor;
+
+      const exec = createExecutor(mockExecutor);
+      const onLine = vi.fn();
+      await exec('test', [], { timeout: 5000, onLine });
+
+      // onLine should be destructured out, not passed to executor
+      expect(mockExecutor).toHaveBeenCalledWith('test', [], {
+        reject: false,
+        timeout: 5000,
+      });
+    });
+
+    it('gracefully handles mock executors that lack readable streams', async () => {
+      // Plain Promise mock — no .stdout/.stderr stream properties
+      const mockExecutor = vi.fn().mockResolvedValue({
+        failed: false,
+        stdout: 'output',
+        stderr: '',
+        exitCode: 0,
+      }) as unknown as Executor;
+
+      const exec = createExecutor(mockExecutor);
+      const onLine = vi.fn();
+
+      // Should not throw even though the subprocess lacks streams
+      const result = await exec('test', [], { onLine });
+      expect(result.ok).toBe(true);
+      expect(result.stdout).toBe('output');
+      // onLine is not called because mock has no streams to listen on
+      expect(onLine).not.toHaveBeenCalled();
+    });
+
+    it('invokes onLine for each non-empty line when streams are available', async () => {
+      const { EventEmitter } = await import('node:events');
+      const mockStdout = new EventEmitter();
+      const mockStderr = new EventEmitter();
+
+      // Create a mock subprocess that is both a Promise and has stream properties
+      const resultData = { failed: false, stdout: 'full output', stderr: '', exitCode: 0 };
+      const subprocess = Object.assign(Promise.resolve(resultData), {
+        stdout: mockStdout,
+        stderr: mockStderr,
+      });
+      const mockExecutor = vi.fn().mockReturnValue(subprocess) as unknown as Executor;
+
+      const exec = createExecutor(mockExecutor);
+      const lines: string[] = [];
+      const onLine = vi.fn((line: string) => lines.push(line));
+
+      // Start execution (but don't await yet so we can emit)
+      const execPromise = exec('test', [], { onLine });
+
+      // Simulate stream output
+      mockStdout.emit('data', 'line one\nline two\n');
+      mockStderr.emit('data', '  \nerror line\n');
+
+      const result = await execPromise;
+      expect(result.ok).toBe(true);
+      expect(lines).toEqual(['line one', 'line two', 'error line']);
+    });
+  });
+
   describe('default execute export', () => {
     it('is pre-configured with default execa', () => {
       // The default execute function should be a function

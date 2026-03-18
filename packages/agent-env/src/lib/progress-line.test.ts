@@ -66,7 +66,7 @@ describe('createProgressLine', () => {
     expect(chunks).toHaveLength(0);
   });
 
-  it('strips ANSI codes for length calculation', () => {
+  it('strips ANSI codes from output to prevent garbled truncation', () => {
     const { stream, chunks } = createMockStream(30);
     const progress = createProgressLine(stream, 30);
 

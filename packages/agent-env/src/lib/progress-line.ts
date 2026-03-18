@@ -36,7 +36,8 @@ export function createProgressLine(
 
   return {
     update(line: string) {
-      // Strip ANSI escape codes for length calculation
+      // Strip ANSI escape codes — both for accurate length calculation and to
+      // avoid garbled output when truncation would split an escape sequence.
       // eslint-disable-next-line no-control-regex
       const clean = line.replace(/\x1b\[[0-9;]*m/g, '');
       const truncated =

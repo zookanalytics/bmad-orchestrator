@@ -78,32 +78,36 @@ export const createCommand = new Command('create')
     console.log(`Creating instance '${name}' from ${repoUrl}...`);
 
     const progress = createProgressLine();
-    const result = await createInstance(name, repoUrl, deps, {
-      purpose: options.purpose,
-      onProgress: progress.update,
-    });
-    progress.clear();
+    try {
+      const result = await createInstance(name, repoUrl, deps, {
+        purpose: options.purpose,
+        onProgress: progress.update,
+      });
+      progress.clear();
 
-    if (!result.ok) {
-      const { code, message, suggestion } = result.error;
-      console.error(formatError(createError(code, message, suggestion)));
-      process.exit(1);
-    }
-
-    const { workspacePath, containerName } = result;
-    console.log(`\x1b[32m✓\x1b[0m Instance '${name}' created successfully`);
-    console.log(`  Workspace: ${workspacePath.root}`);
-    console.log(`  Container: ${containerName}`);
-
-    if (options.attach) {
-      console.log();
-      console.log('Attaching to instance...');
-      const attachResult = await attachToInstance(containerName, deps.executor);
-
-      if (!attachResult.ok) {
-        const { code, message, suggestion } = attachResult.error;
+      if (!result.ok) {
+        const { code, message, suggestion } = result.error;
         console.error(formatError(createError(code, message, suggestion)));
         process.exit(1);
       }
+
+      const { workspacePath, containerName } = result;
+      console.log(`\x1b[32m✓\x1b[0m Instance '${name}' created successfully`);
+      console.log(`  Workspace: ${workspacePath.root}`);
+      console.log(`  Container: ${containerName}`);
+
+      if (options.attach) {
+        console.log();
+        console.log('Attaching to instance...');
+        const attachResult = await attachToInstance(containerName, deps.executor);
+
+        if (!attachResult.ok) {
+          const { code, message, suggestion } = attachResult.error;
+          console.error(formatError(createError(code, message, suggestion)));
+          process.exit(1);
+        }
+      }
+    } finally {
+      progress.clear();
     }
   });
