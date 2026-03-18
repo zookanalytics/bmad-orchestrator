@@ -97,7 +97,7 @@ fi
 # Step 3: Index skills into ms for search/feedback/evolution
 if command -v ms &>/dev/null && [ -d "$SKILLS_REPO_DIR" ]; then
   echo "  Indexing skills into ms..."
-  (cd "$SKILLS_REPO_DIR" && ms init 2>/dev/null || true && ms index "$SKILLS_REPO_DIR/skills") \
+  (cd "$SKILLS_REPO_DIR" && { ms init 2>/dev/null || true; } && ms index "$SKILLS_REPO_DIR/skills") \
     && echo "  ✓ Skills indexed in ms" \
     || echo "  ⚠ ms index failed"
 fi

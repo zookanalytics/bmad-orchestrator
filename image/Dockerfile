@@ -182,18 +182,19 @@ ENV PATH="$BUN_INSTALL/bin:$PATH"
 RUN bun install -g github:ZookAnalytics/keystone-cli
 
 # Install Rust toolchain via rustup (as node user, installs to ~/.cargo and ~/.rustup)
-RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
+ARG RUST_TOOLCHAIN=1.85.0
+RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain ${RUST_TOOLCHAIN}
 ENV RUSTUP_HOME="/home/node/.rustup"
 ENV CARGO_HOME="/home/node/.cargo"
 ENV PATH="$CARGO_HOME/bin:$PATH"
 
 # Install ms (Meta Skill) — skill indexing, search, feedback, evolution
 ARG MS_COMMIT=43281f08e0ee220cde6cb35d8b15cb45a89aa718
-RUN cargo install --git https://github.com/Dicklesworthstone/meta_skill.git --rev ${MS_COMMIT}
+RUN cargo install --locked --git https://github.com/Dicklesworthstone/meta_skill.git --rev ${MS_COMMIT}
 
 # Install CASS (Coding Agent Session Search) — session history indexing and search
 ARG CASS_COMMIT=c97553c50aa4ca77b6cd914bd08491140de63abe
-RUN cargo install --git https://github.com/Dicklesworthstone/coding_agent_session_search.git --rev ${CASS_COMMIT}
+RUN cargo install --locked --git https://github.com/Dicklesworthstone/coding_agent_session_search.git --rev ${CASS_COMMIT}
 
 # Clean up Rust build caches (only compiled binaries needed at runtime)
 RUN rm -rf "$CARGO_HOME/registry" "$CARGO_HOME/git"
