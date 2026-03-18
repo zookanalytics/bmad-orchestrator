@@ -1,4 +1,4 @@
-FROM node:22
+FROM node:22-trixie
 
 ARG TZ
 ENV TZ="$TZ"
@@ -35,6 +35,10 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
   vim \
   xdg-utils \
   zsh \
+  build-essential \
+  pkg-config \
+  libssl-dev \
+  libsqlite3-dev \
   && apt-get clean && rm -rf /var/lib/apt/lists/*
 
 # Install latest GitHub CLI from official repository
@@ -176,6 +180,20 @@ ENV PATH="$BUN_INSTALL/bin:$PATH"
 
 # Install keystone-cli globally via bun (must run as node user for PATH)
 RUN bun install -g github:ZookAnalytics/keystone-cli
+
+# Install Rust toolchain via rustup (as node user, installs to ~/.cargo and ~/.rustup)
+RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
+ENV RUSTUP_HOME="/home/node/.rustup"
+ENV CARGO_HOME="/home/node/.cargo"
+ENV PATH="$CARGO_HOME/bin:$PATH"
+
+# Install ms (Meta Skill) — skill indexing, search, feedback, evolution
+ARG MS_COMMIT=43281f08e0ee220cde6cb35d8b15cb45a89aa718
+RUN cargo install --git https://github.com/Dicklesworthstone/meta_skill.git --rev ${MS_COMMIT}
+
+# Install CASS (Coding Agent Session Search) — session history indexing and search
+ARG CASS_COMMIT=c97553c50aa4ca77b6cd914bd08491140de63abe
+RUN cargo install --git https://github.com/Dicklesworthstone/coding_agent_session_search.git --rev ${CASS_COMMIT}
 
 USER root
 

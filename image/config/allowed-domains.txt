@@ -1,15 +1,36 @@
 # Base allowed domains for Claude DevContainer
 # Projects can extend via .devcontainer/allowed-domains.txt
 
+
+# Host access (PulseAudio audio passthrough, general host services)
+host.docker.internal
+
+
+###########################################################
+# Node ecosystem
+###########################################################
 # NPM Registry
 www.npmjs.com
 registry.npmjs.org
 
-# skills.sh (Agent Skills CLI)
-skills.sh
-
 # Node.js
 nodejs.org
+
+
+###########################################################
+# Rust ecosystem
+###########################################################
+static.rust-lang.org
+crates.io
+static.crates.io
+index.crates.io
+
+
+###########################################################
+# AI Tooling
+###########################################################
+# skills.sh (Agent Skills CLI)
+skills.sh
 
 # Anthropic (Claude Code)
 claude.ai
@@ -23,6 +44,19 @@ oauth2.googleapis.com
 www.googleapis.com
 cloudcode-pa.googleapis.com
 
+# OpenAI
+api.openai.com
+
+
+###########################################################
+# ONNX Runtime (CASS embedding model)
+###########################################################
+cdn.pyke.io
+
+
+###########################################################
+# Other
+###########################################################
 # GitHub (additional to API ranges fetched dynamically)
 raw.githubusercontent.com
 
@@ -30,5 +64,6 @@ raw.githubusercontent.com
 keyserver.ubuntu.com
 keys.openpgp.org
 
-# Host access (PulseAudio audio passthrough, general host services)
-host.docker.internal
+# GitHub artifacts
+productionresultssa1.blob.core.windows.net
+
