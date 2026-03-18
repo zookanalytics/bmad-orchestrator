@@ -10,6 +10,7 @@ import React from 'react';
 
 import packageJson from '../package.json' with { type: 'json' };
 import { attachCommand } from './commands/attach.js';
+import { codeCommand } from './commands/code.js';
 import { completionCommand } from './commands/completion.js';
 import { createCommand } from './commands/create.js';
 import { listCommand } from './commands/list.js';
@@ -44,6 +45,7 @@ program
 program.addCommand(createCommand);
 program.addCommand(listCommand);
 program.addCommand(attachCommand);
+program.addCommand(codeCommand);
 program.addCommand(rebuildCommand);
 program.addCommand(removeCommand);
 program.addCommand(purposeCommand);
