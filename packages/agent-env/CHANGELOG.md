@@ -1,5 +1,15 @@
 # @zookanalytics/agent-env
 
+## 0.9.0
+
+### Minor Changes
+
+- [#60](https://github.com/zookanalytics/bmad-orchestrator/pull/60) [`e357aea`](https://github.com/zookanalytics/bmad-orchestrator/commit/e357aeaa3534e6b2fd8246af5cdec63734c24a69) Thanks [@johnzook](https://github.com/johnzook)! - Add tmux session persistence across container rebuilds. A claude-wrapper shell script tracks session IDs per tmux pane, and new `tmux-save`/`tmux-restore` CLI commands capture and reconstruct window state. Sessions auto-save periodically and before rebuilds, then restore automatically on container start.
+
+### Patch Changes
+
+- [#58](https://github.com/zookanalytics/bmad-orchestrator/pull/58) [`f4bb8de`](https://github.com/zookanalytics/bmad-orchestrator/commit/f4bb8de744ed1b72d9c826560b479de31a1b3fd2) Thanks [@johnzook](https://github.com/johnzook)! - Suppress misleading image override warning when repo uses the same image as agent-env managed image. Self-heal legacy container names on rebuild by re-deriving the canonical ae-\* name instead of perpetuating random Docker-assigned names from state.
+
 ## 0.8.0
 
 ### Minor Changes
