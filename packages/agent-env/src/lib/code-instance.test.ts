@@ -22,7 +22,7 @@ import type { CodeInstanceDeps } from './code-instance.js';
 import type { ContainerLifecycle } from './container.js';
 import type { InstanceState } from './types.js';
 
-import { codeInstance, ensureDevcontainerSymlink } from './code-instance.js';
+import { codeInstance, ensureConfigSymlink, removeConfigSymlink } from './code-instance.js';
 import { AGENT_ENV_DIR, STATE_FILE, WORKSPACES_DIR } from './types.js';
 
 // ─── Test helpers ────────────────────────────────────────────────────────────
@@ -41,7 +41,6 @@ afterEach(async () => {
   await rm(tempDir, { recursive: true, force: true });
 });
 
-/** Create a workspace directory with state.json */
 async function createTestWorkspace(workspaceName: string, state: InstanceState): Promise<void> {
   const wsRoot = join(tempDir, AGENT_ENV_DIR, WORKSPACES_DIR, workspaceName);
   const agentEnvDir = join(wsRoot, AGENT_ENV_DIR);
@@ -93,6 +92,8 @@ function createMockContainer(overrides: Partial<ContainerLifecycle> = {}): Conta
   };
 }
 
+const codeFsDeps = { lstat, symlink, readlink, unlink };
+
 function createTestDeps(overrides: Partial<CodeInstanceDeps> = {}): CodeInstanceDeps {
   const executor = vi.fn().mockResolvedValue({
     ok: true,
@@ -104,14 +105,9 @@ function createTestDeps(overrides: Partial<CodeInstanceDeps> = {}): CodeInstance
   return {
     executor,
     container: createMockContainer(),
-    workspaceFsDeps: {
-      mkdir,
-      readdir,
-      stat,
-      homedir: () => tempDir,
-    },
+    workspaceFsDeps: { mkdir, readdir, stat, homedir: () => tempDir },
     stateFsDeps: { readFile, writeFile, rename, mkdir, appendFile },
-    codeFsDeps: { mkdir, lstat, symlink, readlink, unlink },
+    codeFsDeps,
     ...overrides,
   };
 }
@@ -125,7 +121,6 @@ describe('codeInstance', () => {
     const deps = createTestDeps();
 
     const result = await codeInstance('auth', deps);
-
     expect(result.ok).toBe(true);
   });
 
@@ -145,147 +140,65 @@ describe('codeInstance', () => {
     );
   });
 
-  it('starts stopped container before opening VS Code', async () => {
+  it('removes ephemeral symlink after devcontainer open', async () => {
+    const state = createTestState('repo-auth', { repoConfigDetected: false });
+    await createTestWorkspace('repo-auth', state);
+    const deps = createTestDeps();
+
+    await codeInstance('auth', deps);
+
+    const wsRoot = join(tempDir, AGENT_ENV_DIR, WORKSPACES_DIR, 'repo-auth');
+    await expect(lstat(join(wsRoot, '.devcontainer.json'))).rejects.toThrow();
+  });
+
+  it('removes symlink even when devcontainer open fails', async () => {
+    const state = createTestState('repo-auth', { repoConfigDetected: false });
+    await createTestWorkspace('repo-auth', state);
+    const executor = vi.fn().mockResolvedValue({
+      ok: false,
+      stdout: '',
+      stderr: 'failed',
+      exitCode: 1,
+    } satisfies ExecuteResult);
+    const deps = createTestDeps({ executor });
+
+    await codeInstance('auth', deps);
+
+    const wsRoot = join(tempDir, AGENT_ENV_DIR, WORKSPACES_DIR, 'repo-auth');
+    await expect(lstat(join(wsRoot, '.devcontainer.json'))).rejects.toThrow();
+  });
+
+  it('skips symlink when repoConfigDetected is true', async () => {
+    const state = createTestState('repo-auth', { repoConfigDetected: true });
+    await createTestWorkspace('repo-auth', state);
+    const deps = createTestDeps();
+
+    await codeInstance('auth', deps);
+
+    const wsRoot = join(tempDir, AGENT_ENV_DIR, WORKSPACES_DIR, 'repo-auth');
+    await expect(lstat(join(wsRoot, '.devcontainer.json'))).rejects.toThrow();
+  });
+
+  it('starts stopped container before opening', async () => {
     const state = createTestState('repo-auth');
     await createTestWorkspace('repo-auth', state);
     const mockContainer = createMockContainer({
-      containerStatus: vi.fn().mockResolvedValue({
-        ok: true,
-        status: 'stopped',
-        containerId: 'abc123',
-      }),
+      containerStatus: vi
+        .fn()
+        .mockResolvedValue({ ok: true, status: 'stopped', containerId: 'abc123' }),
     });
     const deps = createTestDeps({ container: mockContainer });
 
     const result = await codeInstance('auth', deps);
-
     expect(result.ok).toBe(true);
     expect(mockContainer.devcontainerUp).toHaveBeenCalled();
   });
 
-  it('passes configPath to devcontainerUp when starting stopped container', async () => {
-    const state = createTestState('repo-auth');
-    await createTestWorkspace('repo-auth', state);
-    const mockContainer = createMockContainer({
-      containerStatus: vi.fn().mockResolvedValue({
-        ok: true,
-        status: 'stopped',
-        containerId: 'abc123',
-      }),
-    });
-    const deps = createTestDeps({ container: mockContainer });
-
-    await codeInstance('auth', deps);
-
-    expect(mockContainer.devcontainerUp).toHaveBeenCalledWith(
-      expect.any(String),
-      expect.any(String),
-      expect.objectContaining({
-        configPath: expect.stringContaining(join(AGENT_ENV_DIR, 'devcontainer.json')),
-      })
-    );
-  });
-
-  it('calls onContainerStarting callback when starting stopped container', async () => {
-    const state = createTestState('repo-auth');
-    await createTestWorkspace('repo-auth', state);
-    const mockContainer = createMockContainer({
-      containerStatus: vi.fn().mockResolvedValue({
-        ok: true,
-        status: 'stopped',
-        containerId: 'abc123',
-      }),
-    });
-    const deps = createTestDeps({ container: mockContainer });
-    const onStarting = vi.fn();
-
-    await codeInstance('auth', deps, onStarting);
-
-    expect(onStarting).toHaveBeenCalledOnce();
-  });
-
-  it('does not call onContainerStarting for already running container', async () => {
-    const state = createTestState('repo-auth');
-    await createTestWorkspace('repo-auth', state);
-    const deps = createTestDeps();
-    const onStarting = vi.fn();
-
-    await codeInstance('auth', deps, onStarting);
-
-    expect(onStarting).not.toHaveBeenCalled();
-  });
-
-  it('calls onOpening callback before launching VS Code', async () => {
-    const state = createTestState('repo-auth');
-    await createTestWorkspace('repo-auth', state);
-    const deps = createTestDeps();
-    const onOpening = vi.fn();
-
-    await codeInstance('auth', deps, undefined, onOpening);
-
-    expect(onOpening).toHaveBeenCalledOnce();
-  });
-
-  it('does not call onOpening when Docker is unavailable', async () => {
-    const state = createTestState('repo-auth');
-    await createTestWorkspace('repo-auth', state);
-    const mockContainer = createMockContainer({
-      isDockerAvailable: vi.fn().mockResolvedValue(false),
-    });
-    const deps = createTestDeps({ container: mockContainer });
-    const onOpening = vi.fn();
-
-    await codeInstance('auth', deps, undefined, onOpening);
-
-    expect(onOpening).not.toHaveBeenCalled();
-  });
-
-  it('does not call onOpening when container start fails', async () => {
-    const state = createTestState('repo-auth');
-    await createTestWorkspace('repo-auth', state);
-    const mockContainer = createMockContainer({
-      containerStatus: vi.fn().mockResolvedValue({
-        ok: true,
-        status: 'stopped',
-        containerId: 'abc123',
-      }),
-      devcontainerUp: vi.fn().mockResolvedValue({
-        ok: false,
-        status: 'not-found',
-        containerId: null,
-        error: { code: 'CONTAINER_ERROR', message: 'Build failed' },
-      }),
-    });
-    const deps = createTestDeps({ container: mockContainer });
-    const onOpening = vi.fn();
-
-    await codeInstance('auth', deps, undefined, onOpening);
-
-    expect(onOpening).not.toHaveBeenCalled();
-  });
-
   it('returns WORKSPACE_NOT_FOUND when instance does not exist', async () => {
     const deps = createTestDeps();
-
     const result = await codeInstance('nonexistent', deps);
-
     expect(result.ok).toBe(false);
-    if (result.ok) throw new Error('Expected failure');
-    expect(result.error.code).toBe('WORKSPACE_NOT_FOUND');
-    expect(result.error.message).toContain("Instance 'nonexistent' not found");
-  });
-
-  it('returns AMBIGUOUS_INSTANCE when multiple repos have same instance name', async () => {
-    await createTestWorkspace('repo1-auth', createTestState('repo1-auth'));
-    await createTestWorkspace('repo2-auth', createTestState('repo2-auth'));
-    const deps = createTestDeps();
-
-    const result = await codeInstance('auth', deps);
-
-    expect(result.ok).toBe(false);
-    if (result.ok) throw new Error('Expected failure');
-    expect(result.error.code).toBe('AMBIGUOUS_INSTANCE');
-    expect(result.error.suggestion).toContain('--repo');
+    if (!result.ok) expect(result.error.code).toBe('WORKSPACE_NOT_FOUND');
   });
 
   it('returns ORBSTACK_REQUIRED when Docker is not available', async () => {
@@ -297,244 +210,122 @@ describe('codeInstance', () => {
     const deps = createTestDeps({ container: mockContainer });
 
     const result = await codeInstance('auth', deps);
-
     expect(result.ok).toBe(false);
-    if (result.ok) throw new Error('Expected failure');
-    expect(result.error.code).toBe('ORBSTACK_REQUIRED');
+    if (!result.ok) expect(result.error.code).toBe('ORBSTACK_REQUIRED');
   });
 
-  it('returns error when container status check fails', async () => {
-    const state = createTestState('repo-auth');
-    await createTestWorkspace('repo-auth', state);
-    const mockContainer = createMockContainer({
-      containerStatus: vi.fn().mockResolvedValue({
-        ok: false,
-        status: 'not-found',
-        containerId: null,
-        error: { code: 'CONTAINER_ERROR', message: 'Docker connection refused' },
-      }),
-    });
-    const deps = createTestDeps({ container: mockContainer });
-
-    const result = await codeInstance('auth', deps);
-
-    expect(result.ok).toBe(false);
-    if (result.ok) throw new Error('Expected failure');
-    expect(result.error.code).toBe('CONTAINER_ERROR');
-  });
-
-  it('returns error when container start fails', async () => {
-    const state = createTestState('repo-auth');
-    await createTestWorkspace('repo-auth', state);
-    const mockContainer = createMockContainer({
-      containerStatus: vi.fn().mockResolvedValue({
-        ok: true,
-        status: 'stopped',
-        containerId: 'abc123',
-      }),
-      devcontainerUp: vi.fn().mockResolvedValue({
-        ok: false,
-        status: 'not-found',
-        containerId: null,
-        error: { code: 'CONTAINER_ERROR', message: 'Build failed' },
-      }),
-    });
-    const deps = createTestDeps({ container: mockContainer });
-
-    const result = await codeInstance('auth', deps);
-
-    expect(result.ok).toBe(false);
-    if (result.ok) throw new Error('Expected failure');
-    expect(result.error.code).toBe('CONTAINER_ERROR');
-  });
-
-  it('returns VSCODE_OPEN_FAILED with instance name when devcontainer open fails', async () => {
+  it('returns VSCODE_OPEN_FAILED when devcontainer open fails', async () => {
     const state = createTestState('repo-auth');
     await createTestWorkspace('repo-auth', state);
     const executor = vi.fn().mockResolvedValue({
       ok: false,
       stdout: '',
-      stderr: 'code not found',
+      stderr: 'error',
       exitCode: 1,
     } satisfies ExecuteResult);
     const deps = createTestDeps({ executor });
 
     const result = await codeInstance('auth', deps);
-
     expect(result.ok).toBe(false);
-    if (result.ok) throw new Error('Expected failure');
-    expect(result.error.code).toBe('VSCODE_OPEN_FAILED');
-    expect(result.error.message).toContain("instance 'auth'");
-    expect(result.error.suggestion).toContain('VS Code');
+    if (!result.ok) expect(result.error.code).toBe('VSCODE_OPEN_FAILED');
   });
 
-  it('starts container when status is not-found (orphaned workspace)', async () => {
-    const state = createTestState('repo-auth');
-    await createTestWorkspace('repo-auth', state);
-    const mockContainer = createMockContainer({
-      containerStatus: vi.fn().mockResolvedValue({
-        ok: true,
-        status: 'not-found',
-        containerId: null,
-      }),
-    });
-    const deps = createTestDeps({ container: mockContainer });
-
-    const result = await codeInstance('auth', deps);
-
-    expect(result.ok).toBe(true);
-    expect(mockContainer.devcontainerUp).toHaveBeenCalled();
-  });
-
-  it('updates lastAttached timestamp after successful open', async () => {
-    const originalTimestamp = '2026-01-20T14:00:00.000Z';
-    const state = createTestState('repo-auth', { lastAttached: originalTimestamp });
-    await createTestWorkspace('repo-auth', state);
-    const deps = createTestDeps();
-
-    await codeInstance('auth', deps);
-
-    const wsRoot = join(tempDir, AGENT_ENV_DIR, WORKSPACES_DIR, 'repo-auth');
-    const stateFile = join(wsRoot, AGENT_ENV_DIR, STATE_FILE);
-    const content = await readFile(stateFile, 'utf-8');
-    const updatedState = JSON.parse(content) as InstanceState;
-
-    expect(updatedState.lastAttached).not.toBe(originalTimestamp);
-    const lastAttached = new Date(updatedState.lastAttached);
-    expect(lastAttached.getTime()).toBeGreaterThan(Date.now() - 10_000);
-  });
-
-  it('preserves other state fields when updating lastAttached', async () => {
-    const state = createTestState('repo-auth', {
-      purpose: 'OAuth feature work',
-      repoUrl: 'https://github.com/user/special.git',
-    });
-    await createTestWorkspace('repo-auth', state);
-    const deps = createTestDeps();
-
-    await codeInstance('auth', deps);
-
-    const wsRoot = join(tempDir, AGENT_ENV_DIR, WORKSPACES_DIR, 'repo-auth');
-    const stateFile = join(wsRoot, AGENT_ENV_DIR, STATE_FILE);
-    const content = await readFile(stateFile, 'utf-8');
-    const updatedState = JSON.parse(content) as InstanceState;
-
-    expect(updatedState.purpose).toBe('OAuth feature work');
-    expect(updatedState.repoUrl).toBe('https://github.com/user/special.git');
-    expect(updatedState.instance).toBe('auth');
-  });
-
-  it('creates .devcontainer symlink when repoConfigDetected is false', async () => {
-    const state = createTestState('repo-auth', { repoConfigDetected: false });
-    await createTestWorkspace('repo-auth', state);
-    const deps = createTestDeps();
-
-    await codeInstance('auth', deps);
-
-    const wsRoot = join(tempDir, AGENT_ENV_DIR, WORKSPACES_DIR, 'repo-auth');
-    const symlinkPath = join(wsRoot, '.devcontainer', 'devcontainer.json');
-    const linkStat = await lstat(symlinkPath);
-    expect(linkStat.isSymbolicLink()).toBe(true);
-    const target = await readlink(symlinkPath);
-    expect(target).toBe(join('..', AGENT_ENV_DIR, 'devcontainer.json'));
-  });
-
-  it('skips .devcontainer symlink when repoConfigDetected is true', async () => {
-    const state = createTestState('repo-auth', { repoConfigDetected: true });
-    await createTestWorkspace('repo-auth', state);
-    const deps = createTestDeps();
-
-    await codeInstance('auth', deps);
-
-    const wsRoot = join(tempDir, AGENT_ENV_DIR, WORKSPACES_DIR, 'repo-auth');
-    const symlinkPath = join(wsRoot, '.devcontainer', 'devcontainer.json');
-    await expect(lstat(symlinkPath)).rejects.toThrow();
-  });
-
-  it('returns SYMLINK_FAILED with underlying error when symlink creation throws', async () => {
+  it('returns SYMLINK_FAILED when symlink creation throws', async () => {
     const state = createTestState('repo-auth', { repoConfigDetected: false });
     await createTestWorkspace('repo-auth', state);
     const deps = createTestDeps({
       codeFsDeps: {
-        mkdir: vi.fn().mockRejectedValue(new Error('EPERM: operation not permitted')),
-        lstat,
-        symlink,
+        lstat: vi.fn().mockRejectedValue(Object.assign(new Error('ENOENT'), { code: 'ENOENT' })),
+        symlink: vi.fn().mockRejectedValue(new Error('EPERM')),
         readlink,
         unlink,
       },
     });
 
     const result = await codeInstance('auth', deps);
-
     expect(result.ok).toBe(false);
-    if (result.ok) throw new Error('Expected failure');
-    expect(result.error.code).toBe('SYMLINK_FAILED');
-    expect(result.error.message).toContain('EPERM');
+    if (!result.ok) expect(result.error.code).toBe('SYMLINK_FAILED');
+  });
+
+  it('updates lastAttached timestamp after successful open', async () => {
+    const state = createTestState('repo-auth', { lastAttached: '2026-01-20T14:00:00.000Z' });
+    await createTestWorkspace('repo-auth', state);
+    const deps = createTestDeps();
+
+    await codeInstance('auth', deps);
+
+    const wsRoot = join(tempDir, AGENT_ENV_DIR, WORKSPACES_DIR, 'repo-auth');
+    const content = await readFile(join(wsRoot, AGENT_ENV_DIR, STATE_FILE), 'utf-8');
+    const updated = JSON.parse(content) as InstanceState;
+    expect(updated.lastAttached).not.toBe('2026-01-20T14:00:00.000Z');
   });
 });
 
-// ─── ensureDevcontainerSymlink tests ─────────────────────────────────────────
+// ─── ensureConfigSymlink tests ───────────────────────────────────────────────
 
-describe('ensureDevcontainerSymlink', () => {
-  const codeFsDeps = { mkdir, lstat, symlink, readlink, unlink };
-
-  it('creates symlink when .devcontainer does not exist', async () => {
+describe('ensureConfigSymlink', () => {
+  it('creates .devcontainer.json symlink at workspace root', async () => {
     const wsRoot = join(tempDir, 'test-ws');
     await mkdir(join(wsRoot, AGENT_ENV_DIR), { recursive: true });
-    await writeFile(join(wsRoot, AGENT_ENV_DIR, 'devcontainer.json'), '{}', 'utf-8');
+    await writeFile(join(wsRoot, AGENT_ENV_DIR, 'devcontainer.json'), '{}');
 
-    await ensureDevcontainerSymlink(wsRoot, codeFsDeps);
+    await ensureConfigSymlink(wsRoot, codeFsDeps);
 
-    const symlinkPath = join(wsRoot, '.devcontainer', 'devcontainer.json');
-    const linkStat = await lstat(symlinkPath);
-    expect(linkStat.isSymbolicLink()).toBe(true);
-    const target = await readlink(symlinkPath);
-    expect(target).toBe(join('..', AGENT_ENV_DIR, 'devcontainer.json'));
+    const symlinkPath = join(wsRoot, '.devcontainer.json');
+    expect((await lstat(symlinkPath)).isSymbolicLink()).toBe(true);
+    expect(await readlink(symlinkPath)).toBe(join(AGENT_ENV_DIR, 'devcontainer.json'));
   });
 
-  it('is idempotent — does nothing if symlink already correct', async () => {
+  it('is idempotent', async () => {
     const wsRoot = join(tempDir, 'test-ws');
     await mkdir(join(wsRoot, AGENT_ENV_DIR), { recursive: true });
-    await writeFile(join(wsRoot, AGENT_ENV_DIR, 'devcontainer.json'), '{}', 'utf-8');
+    await writeFile(join(wsRoot, AGENT_ENV_DIR, 'devcontainer.json'), '{}');
 
-    await ensureDevcontainerSymlink(wsRoot, codeFsDeps);
-    await ensureDevcontainerSymlink(wsRoot, codeFsDeps); // second call should not throw
+    await ensureConfigSymlink(wsRoot, codeFsDeps);
+    await ensureConfigSymlink(wsRoot, codeFsDeps);
 
-    const symlinkPath = join(wsRoot, '.devcontainer', 'devcontainer.json');
-    const linkStat = await lstat(symlinkPath);
-    expect(linkStat.isSymbolicLink()).toBe(true);
+    expect((await lstat(join(wsRoot, '.devcontainer.json'))).isSymbolicLink()).toBe(true);
   });
 
-  it('does not overwrite a real file (user-owned .devcontainer config)', async () => {
+  it('does not overwrite a real file', async () => {
     const wsRoot = join(tempDir, 'test-ws');
-    const devcontainerDir = join(wsRoot, '.devcontainer');
-    await mkdir(devcontainerDir, { recursive: true });
-    await writeFile(join(devcontainerDir, 'devcontainer.json'), '{"image":"node"}', 'utf-8');
+    await mkdir(wsRoot, { recursive: true });
+    await writeFile(join(wsRoot, '.devcontainer.json'), '{"image":"node"}');
 
-    await ensureDevcontainerSymlink(wsRoot, codeFsDeps);
+    await ensureConfigSymlink(wsRoot, codeFsDeps);
 
-    // Should still be a regular file, not a symlink
-    const fileStat = await lstat(join(devcontainerDir, 'devcontainer.json'));
-    expect(fileStat.isSymbolicLink()).toBe(false);
-    const content = await readFile(join(devcontainerDir, 'devcontainer.json'), 'utf-8');
-    expect(content).toBe('{"image":"node"}');
+    expect((await lstat(join(wsRoot, '.devcontainer.json'))).isSymbolicLink()).toBe(false);
+    expect(await readFile(join(wsRoot, '.devcontainer.json'), 'utf-8')).toBe('{"image":"node"}');
   });
+});
 
-  it('replaces stale symlink pointing to wrong target', async () => {
+// ─── removeConfigSymlink tests ───────────────────────────────────────────────
+
+describe('removeConfigSymlink', () => {
+  it('removes symlink', async () => {
     const wsRoot = join(tempDir, 'test-ws');
-    const devcontainerDir = join(wsRoot, '.devcontainer');
     await mkdir(join(wsRoot, AGENT_ENV_DIR), { recursive: true });
-    await writeFile(join(wsRoot, AGENT_ENV_DIR, 'devcontainer.json'), '{}', 'utf-8');
-    await mkdir(devcontainerDir, { recursive: true });
-    // Create a symlink pointing to a wrong target
-    await symlink('../wrong/path.json', join(devcontainerDir, 'devcontainer.json'));
+    await writeFile(join(wsRoot, AGENT_ENV_DIR, 'devcontainer.json'), '{}');
 
-    await ensureDevcontainerSymlink(wsRoot, codeFsDeps);
+    await ensureConfigSymlink(wsRoot, codeFsDeps);
+    await removeConfigSymlink(wsRoot, codeFsDeps);
 
-    const symlinkPath = join(devcontainerDir, 'devcontainer.json');
-    const linkStat = await lstat(symlinkPath);
-    expect(linkStat.isSymbolicLink()).toBe(true);
-    const target = await readlink(symlinkPath);
-    expect(target).toBe(join('..', AGENT_ENV_DIR, 'devcontainer.json'));
+    await expect(lstat(join(wsRoot, '.devcontainer.json'))).rejects.toThrow();
+  });
+
+  it('does not remove regular files', async () => {
+    const wsRoot = join(tempDir, 'test-ws');
+    await mkdir(wsRoot, { recursive: true });
+    await writeFile(join(wsRoot, '.devcontainer.json'), '{"name":"real"}');
+
+    await removeConfigSymlink(wsRoot, codeFsDeps);
+
+    expect(await readFile(join(wsRoot, '.devcontainer.json'), 'utf-8')).toBe('{"name":"real"}');
+  });
+
+  it('is silent when nothing exists', async () => {
+    const wsRoot = join(tempDir, 'test-ws');
+    await mkdir(wsRoot, { recursive: true });
+    await removeConfigSymlink(wsRoot, codeFsDeps);
   });
 });

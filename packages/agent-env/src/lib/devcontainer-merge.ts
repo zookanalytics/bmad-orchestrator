@@ -8,12 +8,13 @@
 
 import { parse as parseJsonc, type ParseError } from 'jsonc-parser';
 import { constants } from 'node:fs';
-import { access, readFile, rename, writeFile } from 'node:fs/promises';
+import { access, lstat, readFile, readlink, rename, writeFile } from 'node:fs/promises';
 import { createRequire } from 'node:module';
 import { join } from 'node:path';
 
 import { CONTAINER_AGENT_ENV_DIR } from './container-env.js';
 import { getBaselineConfigPath } from './devcontainer.js';
+import { AGENT_ENV_DIR } from './types.js';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -23,9 +24,18 @@ export interface DevcontainerMergeDeps {
   writeFile: typeof writeFile;
   rename: typeof rename;
   access: typeof access;
+  lstat?: typeof lstat;
+  readlink?: typeof readlink;
 }
 
-const defaultMergeDeps: DevcontainerMergeDeps = { readFile, writeFile, rename, access };
+const defaultMergeDeps: DevcontainerMergeDeps = {
+  readFile,
+  writeFile,
+  rename,
+  access,
+  lstat,
+  readlink,
+};
 
 /** Agent-env managed config properties injected during merge */
 export interface ManagedConfig {
@@ -127,6 +137,25 @@ export async function readRepoConfig(
   ];
 
   for (const candidate of candidates) {
+    // Defense-in-depth: skip symlinks pointing into .agent-env/ (ephemeral symlinks
+    // created by `agent-env code` should be cleaned up, but guard against stale ones)
+    if (deps.lstat && deps.readlink) {
+      try {
+        const linkStat = await deps.lstat(candidate);
+        if (linkStat.isSymbolicLink()) {
+          const target = await deps.readlink(candidate);
+          if (target.includes(AGENT_ENV_DIR)) {
+            logger?.warn(
+              `Skipping symlink to agent-env config at ${candidate} — not a repo config`
+            );
+            continue;
+          }
+        }
+      } catch {
+        // lstat failed (ENOENT etc.) — fall through to normal access/read path
+      }
+    }
+
     let content: string;
     try {
       await deps.access(candidate, constants.F_OK);
