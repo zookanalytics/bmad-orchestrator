@@ -97,7 +97,7 @@ const STATUS_BAR_JSON_FILENAME = 'statusBar.json';
 export const LABEL_LIFECYCLE_CMDS: Record<string, string> = {
   postCreateCommand: '/usr/local/bin/post-create.sh',
   postStartCommand:
-    'sudo /usr/local/bin/start-sshd.sh; tmux new-session -d -s agent-env 2>/dev/null || true; agent-env tmux-restore 2>/dev/null || true; : > /tmp/install-shared-skills.log; /usr/local/bin/install-shared-skills.sh >> /tmp/install-shared-skills.log 2>&1 || true',
+    'sudo /usr/local/bin/start-sshd.sh; /home/node/.local/bin/tmux-session --detached || true; : > /tmp/install-shared-skills.log; /usr/local/bin/install-shared-skills.sh >> /tmp/install-shared-skills.log 2>&1 || true',
 };
 
 /** Lifecycle command names handled by composeAllLifecycle (NOT initializeCommand, NOT waitFor) */
