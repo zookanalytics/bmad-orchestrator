@@ -6,6 +6,7 @@ import { createInterface } from 'node:readline';
 import type { RebuildOptions } from '../lib/rebuild-instance.js';
 
 import { resolveRepoOrExit } from '../lib/command-helpers.js';
+import { createProgressLine } from '../lib/progress-line.js';
 import { createRebuildDefaultDeps, rebuildInstance } from '../lib/rebuild-instance.js';
 
 /**
@@ -63,10 +64,12 @@ export const rebuildCommand = new Command('rebuild')
 
       const force = options.force || options.yes || confirmed;
 
+      const progress = createProgressLine();
       const rebuildOptions: RebuildOptions = {
         force,
         pull: options.pull,
         noCache: !options.useCache,
+        onProgress: progress.update,
       };
 
       if (force) {
@@ -76,6 +79,7 @@ export const rebuildCommand = new Command('rebuild')
       }
 
       const result = await rebuildInstance(name, deps, rebuildOptions, repoSlug);
+      progress.clear();
 
       if (!result.ok) {
         if (result.error.code === 'CONTAINER_RUNNING') {

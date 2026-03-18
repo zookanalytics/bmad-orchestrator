@@ -70,6 +70,7 @@ export interface RebuildOptions {
   force?: boolean;
   pull?: boolean;
   noCache?: boolean;
+  onProgress?: (line: string) => void;
 }
 
 export interface RebuildInstanceDeps {
@@ -365,13 +366,15 @@ async function startAndDiscoverContainer(
   containerName: string,
   purpose: string,
   buildNoCache: boolean,
-  container: ContainerLifecycle
+  container: ContainerLifecycle,
+  onProgress?: (line: string) => void
 ): Promise<ContainerStartResult> {
   const configPath = join(wsPath.root, AGENT_ENV_DIR, 'devcontainer.json');
   const containerResult = await container.devcontainerUp(wsPath.root, containerName, {
     buildNoCache,
     remoteEnv: { AGENT_INSTANCE: wsPath.name, AGENT_ENV_PURPOSE: purpose },
     configPath,
+    onProgress,
   });
   if (!containerResult.ok) {
     return { ok: false, error: containerResult.error };
@@ -420,7 +423,7 @@ export async function rebuildInstance(
   options?: RebuildOptions,
   repoSlug?: string
 ): Promise<RebuildResult> {
-  const { force = false, pull = true, noCache = true } = options ?? {};
+  const { force = false, pull = true, noCache = true, onProgress } = options ?? {};
 
   // Step 1: Find workspace
   const wsLookup = await lookupWorkspace(instanceName, deps, repoSlug);
@@ -503,7 +506,8 @@ export async function rebuildInstance(
     containerName,
     state.purpose ?? '',
     noCache && hasDockerfile,
-    deps.container
+    deps.container,
+    onProgress
   );
   if (!startResult.ok) {
     return { ok: false, error: startResult.error, wasRunning };

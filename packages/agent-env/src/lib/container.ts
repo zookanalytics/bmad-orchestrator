@@ -51,7 +51,12 @@ export interface ContainerLifecycle {
   devcontainerUp(
     workspacePath: string,
     containerName: string,
-    options?: { buildNoCache?: boolean; remoteEnv?: Record<string, string>; configPath?: string }
+    options?: {
+      buildNoCache?: boolean;
+      remoteEnv?: Record<string, string>;
+      configPath?: string;
+      onProgress?: (line: string) => void;
+    }
   ): Promise<ContainerResult>;
   dockerPull(image: string): Promise<DockerPullResult>;
   containerStop(containerName: string): Promise<ContainerStopResult>;
@@ -347,7 +352,12 @@ export function createContainerLifecycle(executor: Execute = createExecutor()): 
   async function devcontainerUp(
     workspacePath: string,
     containerName: string,
-    options?: { buildNoCache?: boolean; remoteEnv?: Record<string, string>; configPath?: string }
+    options?: {
+      buildNoCache?: boolean;
+      remoteEnv?: Record<string, string>;
+      configPath?: string;
+      onProgress?: (line: string) => void;
+    }
   ): Promise<ContainerResult> {
     // Check Docker availability first
     const dockerOk = await isDockerAvailable();
@@ -388,6 +398,7 @@ export function createContainerLifecycle(executor: Execute = createExecutor()): 
     ];
     const result = await executor('devcontainer', args, {
       timeout: buildNoCache ? DEVCONTAINER_UP_NO_CACHE_TIMEOUT : DEVCONTAINER_UP_TIMEOUT,
+      onLine: options?.onProgress,
     });
 
     // Parse devcontainer up JSON output (it outputs JSON with outcome and containerId)

@@ -7,6 +7,7 @@ import {
   resolveRepoUrl,
   attachToInstance,
 } from '../lib/create-instance.js';
+import { createProgressLine } from '../lib/progress-line.js';
 import { resolveRepoArg } from '../lib/resolve-repo-arg.js';
 
 interface CreateOptions {
@@ -76,9 +77,12 @@ export const createCommand = new Command('create')
     const repoUrl = resolved.url;
     console.log(`Creating instance '${name}' from ${repoUrl}...`);
 
+    const progress = createProgressLine();
     const result = await createInstance(name, repoUrl, deps, {
       purpose: options.purpose,
+      onProgress: progress.update,
     });
+    progress.clear();
 
     if (!result.ok) {
       const { code, message, suggestion } = result.error;
