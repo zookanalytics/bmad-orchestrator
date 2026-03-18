@@ -320,7 +320,7 @@ LABEL devcontainer.metadata='[ \
       "PULSE_COOKIE": "/shared-data/pulse/cookie" \
     }, \
     "postCreateCommand": "/usr/local/bin/post-create.sh", \
-    "postStartCommand": "sudo /usr/local/bin/start-sshd.sh; tmux new-session -d -s agent-env 2>/dev/null || true; agent-env tmux-restore 2>/dev/null || true; : > /tmp/install-shared-skills.log; /usr/local/bin/install-shared-skills.sh >> /tmp/install-shared-skills.log 2>&1 || true", \
+    "postStartCommand": "sudo /usr/local/bin/start-sshd.sh; /home/node/.local/bin/tmux-session --detached || true; : > /tmp/install-shared-skills.log; /usr/local/bin/install-shared-skills.sh >> /tmp/install-shared-skills.log 2>&1 || true", \
     "forwardPorts": [22], \
     "customizations": { \
       "vscode": { \
