@@ -11,6 +11,7 @@ import {
   rm,
   stat,
   symlink,
+  unlink,
   writeFile,
 } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -110,7 +111,7 @@ function createTestDeps(overrides: Partial<CodeInstanceDeps> = {}): CodeInstance
       homedir: () => tempDir,
     },
     stateFsDeps: { readFile, writeFile, rename, mkdir, appendFile },
-    codeFsDeps: { mkdir, lstat, symlink, readlink },
+    codeFsDeps: { mkdir, lstat, symlink, readlink, unlink },
     ...overrides,
   };
 }
@@ -454,7 +455,7 @@ describe('codeInstance', () => {
 // ─── ensureDevcontainerSymlink tests ─────────────────────────────────────────
 
 describe('ensureDevcontainerSymlink', () => {
-  const codeFsDeps = { mkdir, lstat, symlink, readlink };
+  const codeFsDeps = { mkdir, lstat, symlink, readlink, unlink };
 
   it('creates symlink when .devcontainer does not exist', async () => {
     const wsRoot = join(tempDir, 'test-ws');
@@ -496,5 +497,23 @@ describe('ensureDevcontainerSymlink', () => {
     expect(fileStat.isSymbolicLink()).toBe(false);
     const content = await readFile(join(devcontainerDir, 'devcontainer.json'), 'utf-8');
     expect(content).toBe('{"image":"node"}');
+  });
+
+  it('replaces stale symlink pointing to wrong target', async () => {
+    const wsRoot = join(tempDir, 'test-ws');
+    const devcontainerDir = join(wsRoot, '.devcontainer');
+    await mkdir(join(wsRoot, AGENT_ENV_DIR), { recursive: true });
+    await writeFile(join(wsRoot, AGENT_ENV_DIR, 'devcontainer.json'), '{}', 'utf-8');
+    await mkdir(devcontainerDir, { recursive: true });
+    // Create a symlink pointing to a wrong target
+    await symlink('../wrong/path.json', join(devcontainerDir, 'devcontainer.json'));
+
+    await ensureDevcontainerSymlink(wsRoot, codeFsDeps);
+
+    const symlinkPath = join(devcontainerDir, 'devcontainer.json');
+    const linkStat = await lstat(symlinkPath);
+    expect(linkStat.isSymbolicLink()).toBe(true);
+    const target = await readlink(symlinkPath);
+    expect(target).toBe(join('..', AGENT_ENV_DIR, 'devcontainer.json'));
   });
 });

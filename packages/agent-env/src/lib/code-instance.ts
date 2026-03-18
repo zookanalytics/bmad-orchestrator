@@ -18,6 +18,7 @@ import {
   rename,
   stat,
   symlink,
+  unlink,
   writeFile,
 } from 'node:fs/promises';
 import { homedir } from 'node:os';
@@ -49,6 +50,7 @@ export interface CodeFsDeps {
   lstat: typeof lstat;
   symlink: typeof symlink;
   readlink: typeof readlink;
+  unlink: typeof unlink;
 }
 
 export interface CodeInstanceDeps {
@@ -72,7 +74,7 @@ export function createCodeDefaultDeps(): CodeInstanceDeps {
     container: createContainerLifecycle(executor),
     workspaceFsDeps: { mkdir, readdir, stat, homedir },
     stateFsDeps: { readFile, writeFile, rename, mkdir, appendFile },
-    codeFsDeps: { mkdir, lstat, symlink, readlink },
+    codeFsDeps: { mkdir, lstat, symlink, readlink, unlink },
   };
 }
 
@@ -105,9 +107,12 @@ export async function ensureDevcontainerSymlink(wsRoot: string, deps: CodeFsDeps
     if (linkStat.isSymbolicLink()) {
       const existing = await deps.readlink(symlinkPath);
       if (existing === target) return; // Already correct
+      // Stale symlink pointing to wrong target — remove and re-create
+      await deps.unlink(symlinkPath);
+    } else {
+      // Exists but is not a symlink (user's real file) — don't touch it
+      return;
     }
-    // Exists but is not a symlink (user's real file) — don't touch it
-    if (!linkStat.isSymbolicLink()) return;
   } catch (err) {
     if ((err as NodeJS.ErrnoException).code !== 'ENOENT') throw err;
     // Doesn't exist — create it below
@@ -126,9 +131,10 @@ export async function ensureDevcontainerSymlink(wsRoot: string, deps: CodeFsDeps
  * 1. Resolve instance using two-phase resolution (repo-scoped → global)
  * 2. Read state to get container name
  * 3. Check Docker availability
- * 4. Check container status
- * 5. If stopped → start container via devcontainerUp
+ * 4. Check container status; start container if stopped
+ * 5. Ensure .devcontainer symlink (for repos without their own config)
  * 6. Run `devcontainer open` to launch VS Code
+ * 7. Update lastAttached timestamp
  *
  * @param instanceName - User-provided instance name (e.g., "auth")
  * @param deps - Injectable dependencies
@@ -210,10 +216,21 @@ export async function codeInstance(
   // Step 5: Ensure .devcontainer/devcontainer.json symlink for repos without their own config.
   // devcontainer open ignores --config for its gate check and requires this file to exist.
   if (!state.repoConfigDetected) {
-    await ensureDevcontainerSymlink(wsPath.root, deps.codeFsDeps);
+    try {
+      await ensureDevcontainerSymlink(wsPath.root, deps.codeFsDeps);
+    } catch {
+      return {
+        ok: false,
+        error: {
+          code: 'SYMLINK_FAILED',
+          message: `Failed to create .devcontainer symlink in '${wsPath.root}'.`,
+          suggestion: 'Check file permissions in the workspace directory.',
+        },
+      };
+    }
   }
 
-  // Step 6: Open VS Code via devcontainer open
+  // Step 6: Open VS Code
   onOpening?.();
   const openResult = await deps.executor(
     'devcontainer',
@@ -232,7 +249,7 @@ export async function codeInstance(
     };
   }
 
-  // Step 6: Update lastAttached timestamp
+  // Step 7: Update lastAttached timestamp
   const updatedState = {
     ...state,
     lastAttached: new Date().toISOString(),
