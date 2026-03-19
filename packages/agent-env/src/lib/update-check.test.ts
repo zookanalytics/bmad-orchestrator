@@ -134,6 +134,20 @@ describe('checkForUpdate — cache stale, fetch succeeds with newer version', ()
     expect(result).toContain('0.10.0');
   });
 
+  it('passes correctly encoded URL to fetchFn', async () => {
+    let calledUrl: string | URL | Request | undefined;
+    const opts = baseOpts({
+      currentVersion: '0.9.1',
+      readFile: makeReadFile(null),
+      fetchFn: async (url, init) => {
+        calledUrl = url;
+        return makeFetch('0.10.0')(url, init);
+      },
+    });
+    await checkForUpdate(opts);
+    expect(calledUrl).toBe(`https://registry.npmjs.org/${encodeURIComponent(PACKAGE_NAME)}/latest`);
+  });
+
   it('writes updated cache after successful fetch', async () => {
     const written: { path?: string; data?: string } = {};
     const opts = baseOpts({

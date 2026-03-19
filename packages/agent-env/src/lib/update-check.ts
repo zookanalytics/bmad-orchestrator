@@ -11,7 +11,7 @@ export interface UpdateCheckOpts {
   packageName: string;
   /** Absolute path to the cache file, e.g. ~/.agent-env/update-check.json */
   cachePath: string;
-  /** Cache TTL in milliseconds (default: 3_600_000 = 1 hour) */
+  /** Cache TTL in milliseconds; recommended value: 3_600_000 (1 hour) */
   cacheTtlMs: number;
   /** Injectable fetch for testing */
   fetchFn?: typeof fetch;
@@ -112,7 +112,7 @@ async function fetchLatestVersion(
   fetchFn: NonNullable<UpdateCheckOpts['fetchFn']>
 ): Promise<string | null> {
   try {
-    const url = `https://registry.npmjs.org/${packageName}/latest`;
+    const url = `https://registry.npmjs.org/${encodeURIComponent(packageName)}/latest`;
     const response = await fetchFn(url, {
       headers: { Accept: 'application/json' },
       signal: AbortSignal.timeout(5000),
