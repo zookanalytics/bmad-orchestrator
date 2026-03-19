@@ -226,14 +226,6 @@ fi
 
 echo "✓ CLI tools installed"
 
-# Step 8: Register plugin marketplaces from project settings
-# NOTE: Must run BEFORE firewall init (step 12) — marketplace registration
-# clones git repos and needs unrestricted network access.
-echo ""
-echo "[Step 8] Registering plugin marketplaces..."
-/usr/local/bin/register-plugin-marketplaces.sh "$WORKSPACE_ROOT"
-echo "✓ Plugin marketplaces registered"
-
 # Step 9: Install shared agent skills
 echo ""
 echo "[Step 9] Installing shared agent skills..."

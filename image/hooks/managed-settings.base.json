@@ -2,24 +2,8 @@
   "permissions": {
     "defaultMode": "bypassPermissions"
   },
-  "extraKnownMarketplaces": {
-    "claude-devcontainer": {
-      "source": {
-        "source": "git",
-        "url": "git@github.com:zookanalytics/claude-devcontainer.git"
-      }
-    },
-    "superpowers-dev": {
-      "source": {
-        "source": "git",
-        "url": "git@github.com:zookanalytics/superpowers.git"
-      }
-    }
-  },
-  "enabledPlugins": {
-    "git-workflow@claude-devcontainer": true,
-    "superpowers@superpowers-dev": true
-  },
+  "extraKnownMarketplaces": {},
+  "enabledPlugins": {},
   "hooks": {
     "PreToolUse": [
       {

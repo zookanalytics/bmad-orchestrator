@@ -59,7 +59,6 @@ Scopes are **encouraged** for most commit types but **optional** for inherently 
 | `deps`             | Package updates, dependency changes, version upgrades                   | `build(deps): upgrade typescript to 5.x`                 |
 | `devcontainer`     | Development container configuration, scripts, environment setup         | `feat(devcontainer): add DNS logging`                    |
 | `docs`             | Project documentation, guides, specifications                           | `docs: add pull request workflow guidelines`             |
-| `git-workflow`     | Git commands and skills package                                         | `feat(git-workflow): add branch cleanup command`         |
 | `tests`            | Test files, test configuration, test utilities (unit, integration, e2e) | `test(tests): add visual regression tests`               |
 
 #### Scope Selection Guidelines
@@ -71,7 +70,6 @@ Scopes are **encouraged** for most commit types but **optional** for inherently 
 | `packages/bmad-dashboard/`                | `bmad-dashboard`   |
 | `packages/bmad-orchestrator/`             | `bmad-orchestrator`|
 | `packages/claude-instance/`               | `claude-instance`  |
-| `packages/git-workflow/`                  | `git-workflow`     |
 | `.github/workflows/`                      | `ci`               |
 | `package.json`, `pnpm-lock.yaml`          | `deps`             |
 | `.devcontainer/`                          | `devcontainer`     |

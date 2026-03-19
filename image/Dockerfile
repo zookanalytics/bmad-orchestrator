@@ -232,7 +232,6 @@ COPY image/scripts/setup-instance-isolation.sh /usr/local/bin/
 COPY image/scripts/setup-claude-auth-sharing.sh /usr/local/bin/
 COPY image/scripts/search-history.sh /usr/local/bin/
 COPY image/scripts/fix-shared-data-permissions.sh /usr/local/bin/
-COPY image/scripts/register-plugin-marketplaces.sh /usr/local/bin/
 COPY image/scripts/devcontainer-sanity-check.sh /usr/local/bin/
 COPY image/scripts/fix-ssh-socket-permissions.sh /usr/local/bin/
 COPY image/scripts/start-sshd.sh /usr/local/bin/
@@ -256,7 +255,6 @@ RUN chmod 755 /usr/local/bin/init-firewall.sh && \
   chmod 755 /usr/local/bin/setup-claude-auth-sharing.sh && \
   chmod 755 /usr/local/bin/search-history.sh && \
   chmod 755 /usr/local/bin/fix-shared-data-permissions.sh && \
-  chmod 755 /usr/local/bin/register-plugin-marketplaces.sh && \
   chmod 755 /usr/local/bin/devcontainer-sanity-check.sh && \
   chmod 755 /usr/local/bin/fix-ssh-socket-permissions.sh && \
   chmod 755 /usr/local/bin/start-sshd.sh && \
