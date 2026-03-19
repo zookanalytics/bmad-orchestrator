@@ -9,16 +9,15 @@
 ## Architecture Overview
 
 ```
-HOST (~/.agent-env/repo)
-  └── bmad-orchestrator-ideation/     (mono-repo checkout)
-      └── skills/
-          ├── superpowers/            (consolidated from zookanalytics/superpowers fork)
-          │   ├── brainstorming/SKILL.md
-          │   ├── test-driven-development/SKILL.md
-          │   ├── systematic-debugging/SKILL.md
-          │   └── ...
-          └── bmad/
-              └── story-creation/SKILL.md
+HOST (~/.agent-env/repo — mono-repo checkout)
+  └── skills/
+      ├── superpowers/            (consolidated from zookanalytics/superpowers fork)
+      │   ├── brainstorming/SKILL.md
+      │   ├── test-driven-development/SKILL.md
+      │   ├── systematic-debugging/SKILL.md
+      │   └── ...
+      └── bmad/
+          └── story-creation/SKILL.md
 
 CONTAINER (any project)
   └── /agent-env-repo/               (bind mount of ~/.agent-env/repo)
@@ -84,7 +83,7 @@ fi
 
 ### Step 4: Add mount to Dockerfile LABEL metadata
 
-Add to the mounts array in the Dockerfile LABEL (line ~262):
+Add to the mounts array in the Dockerfile LABEL:
 
 ```
 "source=${localEnv:HOME}/.agent-env/repo,target=/agent-env-repo,type=bind"
