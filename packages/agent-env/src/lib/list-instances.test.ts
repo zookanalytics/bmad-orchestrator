@@ -1386,7 +1386,7 @@ describe('getInstanceInfo', () => {
   });
 
   it('throws when readState fails (e.g., workspace does not exist)', async () => {
-    const container = mockContainer({ dockerAvailable: true });
+    const container = mockContainer();
     const wsFsDeps = mockFsDeps([]);
     const stateFsDeps = {
       readFile: vi.fn().mockRejectedValue(new Error('ENOENT: no such file')),
