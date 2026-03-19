@@ -227,6 +227,8 @@ fi
 echo "✓ CLI tools installed"
 
 # Step 8: Install shared agent skills
+# NOTE: Must run BEFORE firewall init (step 11) — skills installation
+# clones git repos and needs unrestricted network access.
 echo ""
 echo "[Step 8] Installing shared agent skills..."
 if /usr/local/bin/install-shared-skills.sh; then
