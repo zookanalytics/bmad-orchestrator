@@ -4,10 +4,10 @@ import { describe, it, expect, vi } from 'vitest';
 
 import type { ContainerLifecycle } from './container.js';
 import type { GitStateDetector } from './git.js';
-import type { ListResult, ListSuccess } from './list-instances.js';
+import type { InstanceInfo, ListResult, ListSuccess } from './list-instances.js';
 import type { GitStateResult, InstanceState } from './types.js';
 
-import { listInstances } from './list-instances.js';
+import { getInstanceInfo, listInstances } from './list-instances.js';
 
 // ─── Test helpers ────────────────────────────────────────────────────────────
 
@@ -1157,5 +1157,247 @@ describe('listInstances', () => {
 
       expect(result.instances).toHaveLength(2);
     });
+  });
+});
+
+// ─── getInstanceInfo Tests ──────────────────────────────────────────────────
+
+describe('getInstanceInfo', () => {
+  it('returns running status for a running container', async () => {
+    const container = mockContainer({
+      containerStatus: vi.fn().mockResolvedValue({
+        ok: true,
+        status: 'running',
+        containerId: 'abc',
+        ports: {},
+        labels: {},
+      }),
+    });
+    const wsFsDeps = mockFsDeps(['my-instance']);
+    const stateFsDeps = mockStateFsDeps({
+      'my-instance': makeState({
+        instance: 'my-instance',
+        repoSlug: 'my-repo',
+        repoUrl: 'https://github.com/user/my-repo.git',
+        containerName: 'ae-my-instance',
+        purpose: 'Auth work',
+      }),
+    });
+
+    const result = await getInstanceInfo('my-instance', {
+      container,
+      workspaceFsDeps: wsFsDeps,
+      stateFsDeps,
+    });
+
+    expect(result).toEqual<InstanceInfo>({
+      name: 'my-instance',
+      repoSlug: 'my-repo',
+      purpose: 'Auth work',
+      status: 'running',
+    });
+  });
+
+  it('returns stopped status for a stopped container', async () => {
+    const container = mockContainer({
+      containerStatus: vi.fn().mockResolvedValue({
+        ok: true,
+        status: 'stopped',
+        containerId: 'abc',
+        ports: {},
+        labels: {},
+      }),
+    });
+    const wsFsDeps = mockFsDeps(['my-instance']);
+    const stateFsDeps = mockStateFsDeps({
+      'my-instance': makeState({
+        instance: 'my-instance',
+        repoSlug: 'my-repo',
+        repoUrl: 'https://github.com/user/my-repo.git',
+        containerName: 'ae-my-instance',
+      }),
+    });
+
+    const result = await getInstanceInfo('my-instance', {
+      container,
+      workspaceFsDeps: wsFsDeps,
+      stateFsDeps,
+    });
+
+    expect(result.status).toBe('stopped');
+  });
+
+  it('returns orphaned when container is not-found', async () => {
+    const container = mockContainer({
+      containerStatus: vi.fn().mockResolvedValue({
+        ok: true,
+        status: 'not-found',
+        containerId: null,
+      }),
+    });
+    const wsFsDeps = mockFsDeps(['my-instance']);
+    const stateFsDeps = mockStateFsDeps({
+      'my-instance': makeState({
+        instance: 'my-instance',
+        repoSlug: 'my-repo',
+        repoUrl: 'https://github.com/user/my-repo.git',
+        containerName: 'ae-my-instance',
+      }),
+    });
+
+    const result = await getInstanceInfo('my-instance', {
+      container,
+      workspaceFsDeps: wsFsDeps,
+      stateFsDeps,
+    });
+
+    expect(result.status).toBe('orphaned');
+  });
+
+  it('returns unknown when Docker is unavailable', async () => {
+    const container = mockContainer({
+      isDockerAvailable: vi.fn().mockResolvedValue(false),
+    });
+    const wsFsDeps = mockFsDeps(['my-instance']);
+    const stateFsDeps = mockStateFsDeps({
+      'my-instance': makeState({
+        instance: 'my-instance',
+        repoSlug: 'my-repo',
+        repoUrl: 'https://github.com/user/my-repo.git',
+        containerName: 'ae-my-instance',
+        purpose: 'Testing',
+      }),
+    });
+
+    const result = await getInstanceInfo('my-instance', {
+      container,
+      workspaceFsDeps: wsFsDeps,
+      stateFsDeps,
+    });
+
+    expect(result.status).toBe('unknown');
+    // Still returns name, repoSlug, purpose
+    expect(result.name).toBe('my-instance');
+    expect(result.repoSlug).toBe('my-repo');
+    expect(result.purpose).toBe('Testing');
+  });
+
+  it('returns unknown when container status check returns error', async () => {
+    const container = mockContainer({
+      containerStatus: vi.fn().mockResolvedValue({
+        ok: false,
+        status: 'not-found',
+        containerId: null,
+        error: { code: 'CONTAINER_ERROR', message: 'Something broke' },
+      }),
+    });
+    const wsFsDeps = mockFsDeps(['my-instance']);
+    const stateFsDeps = mockStateFsDeps({
+      'my-instance': makeState({
+        instance: 'my-instance',
+        repoSlug: 'my-repo',
+        repoUrl: 'https://github.com/user/my-repo.git',
+        containerName: 'ae-my-instance',
+      }),
+    });
+
+    const result = await getInstanceInfo('my-instance', {
+      container,
+      workspaceFsDeps: wsFsDeps,
+      stateFsDeps,
+    });
+
+    expect(result.status).toBe('unknown');
+  });
+
+  it('does not call containerStatus when Docker is unavailable', async () => {
+    const statusFn = vi.fn();
+    const container = mockContainer({
+      isDockerAvailable: vi.fn().mockResolvedValue(false),
+      containerStatus: statusFn,
+    });
+    const wsFsDeps = mockFsDeps(['my-instance']);
+    const stateFsDeps = mockStateFsDeps({
+      'my-instance': makeState({
+        instance: 'my-instance',
+        repoSlug: 'my-repo',
+        repoUrl: 'https://github.com/user/my-repo.git',
+        containerName: 'ae-my-instance',
+      }),
+    });
+
+    await getInstanceInfo('my-instance', {
+      container,
+      workspaceFsDeps: wsFsDeps,
+      stateFsDeps,
+    });
+
+    expect(statusFn).not.toHaveBeenCalled();
+  });
+
+  it('returns null purpose when not set', async () => {
+    const container = mockContainer();
+    const wsFsDeps = mockFsDeps(['my-instance']);
+    const stateFsDeps = mockStateFsDeps({
+      'my-instance': makeState({
+        instance: 'my-instance',
+        repoSlug: 'my-repo',
+        repoUrl: 'https://github.com/user/my-repo.git',
+        containerName: 'ae-my-instance',
+        purpose: null,
+      }),
+    });
+
+    const result = await getInstanceInfo('my-instance', {
+      container,
+      workspaceFsDeps: wsFsDeps,
+      stateFsDeps,
+    });
+
+    expect(result.purpose).toBeNull();
+  });
+
+  it('calls containerStatus with containerName from state', async () => {
+    const statusFn = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 'running',
+      containerId: 'abc',
+      ports: {},
+      labels: {},
+    });
+    const container = mockContainer({ containerStatus: statusFn });
+    const wsFsDeps = mockFsDeps(['my-instance']);
+    const stateFsDeps = mockStateFsDeps({
+      'my-instance': makeState({
+        instance: 'my-instance',
+        repoSlug: 'my-repo',
+        repoUrl: 'https://github.com/user/my-repo.git',
+        containerName: 'ae-my-repo-my-instance',
+      }),
+    });
+
+    await getInstanceInfo('my-instance', {
+      container,
+      workspaceFsDeps: wsFsDeps,
+      stateFsDeps,
+    });
+
+    expect(statusFn).toHaveBeenCalledWith('ae-my-repo-my-instance');
+  });
+
+  it('throws when readState fails (e.g., workspace does not exist)', async () => {
+    const container = mockContainer({ dockerAvailable: true });
+    const wsFsDeps = mockFsDeps([]);
+    const stateFsDeps = {
+      readFile: vi.fn().mockRejectedValue(new Error('ENOENT: no such file')),
+    };
+
+    await expect(
+      getInstanceInfo('nonexistent-workspace', {
+        container,
+        workspaceFsDeps: wsFsDeps,
+        stateFsDeps,
+      })
+    ).rejects.toThrow('ENOENT');
   });
 });
