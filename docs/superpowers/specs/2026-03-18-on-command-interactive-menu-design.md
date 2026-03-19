@@ -15,7 +15,7 @@ agent-env              → list instances → pick one → action loop
 agent-env on <name>    → resolve instance → action loop
 ```
 
-Both accept `--repo <slug>` for scoped instance lookup. For the no-arg flow, `--repo` filters the instance list to only that repo's instances.
+Both will accept `--repo <slug>` for scoped instance lookup (new behavior for both entry points — neither currently supports `--repo`). For the no-arg flow, `--repo` filters the instance list to only that repo's instances.
 
 ## Action Loop
 
@@ -26,10 +26,10 @@ The menu displays a header with instance context, then an action list. After any
 Shows instance name, container status, repo slug, and current purpose:
 
 ```
-myinstance  ▶  my-repo  "JWT authentication"
+myinstance · ▶ · my-repo · JWT authentication
 ```
 
-When purpose is null, the purpose segment is omitted entirely (no placeholder text). Purpose updates live after Set Purpose.
+Parts are joined with ` · `. When purpose is null, the purpose segment is omitted entirely (no placeholder text). Purpose updates live after Set Purpose.
 
 ### Actions
 
@@ -52,17 +52,12 @@ Remove is deliberately excluded — destroying the loop's target instance mid-se
 
 | File | Change |
 |------|--------|
-| `src/commands/on.ts` | New command. Takes `<name>` argument + `--repo`. Resolves instance via `resolveRepoOrExit` + `resolveInstance`. Launches action loop. TTY gate. |
-| `src/commands/on.test.ts` | New tests. Verifies option parsing, TTY gate, instance resolution, and action dispatch via mocked orchestration. |
-| `src/commands/attach.ts` | Revert `--rebuild` flag (restore to pre-feature state). |
-| `src/commands/code.ts` | Revert `--rebuild` flag (restore to pre-feature state). |
-| `src/commands/attach.test.ts` | Delete (tested `--rebuild` flag being removed). |
-| `src/commands/code.test.ts` | Delete (tested `--rebuild` flag being removed). |
-| `/.changeset/add-rebuild-to-attach-and-code.md` | Delete (changeset for removed feature, at monorepo root). |
-| `src/components/InteractiveMenu.tsx` | Replace with new component: instance header with purpose display, action Select list (Attach, VS Code, Rebuild, Set Purpose, Exit), inline TextInput for Set Purpose with Escape to cancel. Instance selection step removed (handled by orchestration). |
-| `src/lib/interactive-menu.ts` | Replace with new orchestration: persistent action loop, pre-selected instance support, all five actions, state refresh between iterations. |
-| `src/lib/interactive-menu.test.ts` | New tests. Mocks `renderMenu` to verify action dispatch, loop continuation, state refresh, and exit behavior. |
-| `src/cli.ts` | Register `on` command. Update default no-arg action to use new menu (instance picker → action loop). |
+| `packages/agent-env/src/commands/on.ts` | New command. Takes `<name>` argument + `--repo`. Resolves instance via `resolveRepoOrExit` + `resolveInstance`. Launches action loop. TTY gate. |
+| `packages/agent-env/src/commands/on.test.ts` | New tests. Verifies option parsing, TTY gate, instance resolution, and action dispatch via mocked orchestration. |
+| `packages/agent-env/src/components/InteractiveMenu.tsx` | Replace with new component: instance header with purpose display, action Select list (Attach, VS Code, Rebuild, Set Purpose, Exit), inline TextInput for Set Purpose with Escape to cancel. Instance selection step removed (handled by orchestration). |
+| `packages/agent-env/src/lib/interactive-menu.ts` | Replace with new orchestration: persistent action loop, pre-selected instance support, all five actions, state refresh between iterations. |
+| `packages/agent-env/src/lib/interactive-menu.test.ts` | New tests. Mocks `renderMenu` to verify action dispatch, loop continuation, state refresh, and exit behavior. |
+| `packages/agent-env/src/cli.ts` | Register `on` command. Update default no-arg action to use new menu (instance picker → action loop). |
 
 ## Dependency Injection
 
@@ -71,17 +66,25 @@ The orchestration layer (`interactive-menu.ts`) receives injected dependencies f
 ```typescript
 interface InteractiveMenuDeps {
   // Action executors (pre-bound with their sub-deps by the caller)
-  attachInstance: (name: string, repoSlug?: string) => Promise<AttachResult>;
-  codeInstance: (name: string, repoSlug?: string) => Promise<CodeResult>;
-  rebuildInstance: (name: string, repoSlug?: string) => Promise<RebuildResult>;
-  setPurpose: (name: string, value: string, repoSlug?: string) => Promise<PurposeSetResult>;
+  attachInstance: (name: string, repoSlug?: string) => Promise<ActionResult>;
+  codeInstance: (name: string, repoSlug?: string) => Promise<ActionResult>;
+  rebuildInstance: (name: string, repoSlug?: string) => Promise<ActionResult>;
+  setPurpose: (name: string, value: string, repoSlug?: string) => Promise<ActionResult>;
 
   // Instance data
-  listInstances: () => Promise<ListResult>;
   getInstanceInfo: (workspaceName: string) => Promise<InstanceInfo>;
 
   // Rendering
-  renderMenu: (props: MenuProps) => Promise<MenuSelection>;
+  renderMenu: (instanceInfo: InstanceInfo) => Promise<{ action: MenuAction; purposeValue?: string }>;
+}
+```
+
+Instance selection for the no-arg flow uses a separate `InstancePickerDeps` interface:
+
+```typescript
+interface InstancePickerDeps {
+  listInstances: () => Promise<ListResult>;
+  renderPicker: (instances: Instance[]) => Promise<string | null>;
 }
 ```
 
@@ -114,12 +117,11 @@ setPurpose: (name, value, repoSlug) => {
   const deps = createPurposeDefaultDeps();
   return setPurposeLib(name, value, deps, repoSlug);
 },
-listInstances: () => listInstancesLib({ repoFilter }),
 ```
 
 Progress lifecycle and callbacks are owned by the wrappers, not the orchestration layer. This keeps the orchestration interface clean — it doesn't need to know about `AttachInstanceDeps`, `PurposeInstanceDeps`, `createProgressLine`, etc.
 
-Note: `listInstances` receives the resolved `repoFilter` via closure. For the no-arg flow with `--repo`, the filter is captured at startup and bound into the wrapper. For `on <name>`, `listInstances` is unused (instance already resolved).
+Note: For the no-arg flow, `listInstances` in `InstancePickerDeps` receives the resolved `repoFilter` via closure. The filter is captured at startup and bound into the wrapper. For `on <name>`, the picker is not used (instance already resolved).
 
 ## Instance State Refresh
 
@@ -163,10 +165,10 @@ The orchestration layer handles the loop:
 
 - Action errors display formatted error message, then return to menu (non-fatal to the loop).
 - Instance resolution failure at startup exits with error (fatal).
-- Docker unavailable errors display once, return to menu.
+- Docker unavailable: `getInstanceInfo` maps this to container status `unknown` (`?` in header). The loop continues without printing a dedicated error message.
 
 ## Testing Strategy
 
-- `src/commands/on.test.ts`: Unit tests with vi.mock for orchestration layer. Tests option parsing (`--repo`), TTY gate (exits with error when not TTY), and delegation to orchestration.
-- `src/lib/interactive-menu.test.ts`: Unit tests with mocked dependencies. Tests action dispatch (each action calls correct function), loop continuation (menu re-renders after action), state refresh (getInstanceInfo called between iterations), exit behavior, and error recovery (action failure returns to menu).
-- `src/components/InteractiveMenu.test.tsx`: Component tests with ink-testing-library. Tests header rendering, action selection callbacks, Set Purpose text input flow, and Escape cancellation.
+- `packages/agent-env/src/commands/on.test.ts`: Unit tests with vi.mock for orchestration layer. Tests option parsing (`--repo`), TTY gate (exits with error when not TTY), and delegation to orchestration.
+- `packages/agent-env/src/lib/interactive-menu.test.ts`: Unit tests with mocked dependencies. Tests action dispatch (each action calls correct function), loop continuation (menu re-renders after action), state refresh (getInstanceInfo called between iterations), exit behavior, and error recovery (action failure returns to menu).
+- `packages/agent-env/src/components/InteractiveMenu.test.tsx`: Component tests with ink-testing-library. Tests header rendering, action selection callbacks, Set Purpose text input flow, and Escape cancellation.
