@@ -182,7 +182,7 @@ ENV PATH="$BUN_INSTALL/bin:$PATH"
 RUN bun install -g github:ZookAnalytics/keystone-cli
 
 # Install Rust toolchain via rustup (as node user, installs to ~/.cargo and ~/.rustup)
-ARG RUST_TOOLCHAIN=1.90.0
+ARG RUST_TOOLCHAIN=1.94.0
 RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain ${RUST_TOOLCHAIN}
 ENV RUSTUP_HOME="/home/node/.rustup"
 ENV CARGO_HOME="/home/node/.cargo"
