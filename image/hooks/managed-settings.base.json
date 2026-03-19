@@ -49,6 +49,11 @@
             "type": "command",
             "command": "/etc/claude-code/hooks/prevent-bash-sensitive-args.py",
             "timeout": 10
+          },
+          {
+            "type": "command",
+            "command": "/etc/claude-code/hooks/enforce-commit-skill.sh",
+            "timeout": 10
           }
         ]
       },

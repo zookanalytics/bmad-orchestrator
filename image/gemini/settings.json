@@ -54,6 +54,13 @@
             "command": "/etc/gemini-code/hooks/prevent-bash-sensitive-args.py",
             "description": "Prevents shell commands from accessing sensitive files",
             "timeout": 10000
+          },
+          {
+            "name": "enforce-commit-skill",
+            "type": "command",
+            "command": "/etc/gemini-code/hooks/enforce-commit-skill.sh",
+            "description": "Enforces git-commit skill workflow before committing",
+            "timeout": 10000
           }
         ]
       },
