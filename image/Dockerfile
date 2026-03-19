@@ -182,7 +182,7 @@ ENV PATH="$BUN_INSTALL/bin:$PATH"
 RUN bun install -g github:ZookAnalytics/keystone-cli
 
 # Install Rust toolchain via rustup (as node user, installs to ~/.cargo and ~/.rustup)
-ARG RUST_TOOLCHAIN=1.85.0
+ARG RUST_TOOLCHAIN=1.94.0
 RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain ${RUST_TOOLCHAIN}
 ENV RUSTUP_HOME="/home/node/.rustup"
 ENV CARGO_HOME="/home/node/.cargo"
@@ -194,7 +194,8 @@ RUN cargo install --locked --git https://github.com/Dicklesworthstone/meta_skill
 
 # Install CASS (Coding Agent Session Search) — session history indexing and search
 ARG CASS_COMMIT=c97553c50aa4ca77b6cd914bd08491140de63abe
-RUN cargo install --locked --git https://github.com/Dicklesworthstone/coding_agent_session_search.git --rev ${CASS_COMMIT}
+# Note: --locked omitted — upstream git dep (asupersync) has malformed test fixture Cargo.toml
+RUN cargo install --git https://github.com/Dicklesworthstone/coding_agent_session_search.git --rev ${CASS_COMMIT} coding-agent-search
 
 # Clean up Rust build caches (only compiled binaries needed at runtime)
 RUN rm -rf "$CARGO_HOME/registry" "$CARGO_HOME/git"
