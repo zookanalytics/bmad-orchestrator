@@ -676,6 +676,40 @@ describe('agent-env CLI', () => {
       expect(result.stdout).toContain('--force');
     });
   });
+
+  describe('update check', () => {
+    it('does not show update notice in non-TTY mode', async () => {
+      // Write a cache file with a newer version so the update check would fire
+      const cacheDir = join(tempRoot, '.agent-env');
+      await mkdir(cacheDir, { recursive: true });
+      await writeFile(
+        join(cacheDir, 'update-check.json'),
+        JSON.stringify({ lastCheck: Date.now(), latestVersion: '99.99.99' }),
+        'utf8'
+      );
+
+      // runCli uses execa (piped), so stderr is NOT a TTY — update notice should be suppressed
+      const result = await runCli(['list']);
+      expect(result.stderr).not.toContain('Update available');
+    });
+
+    it('does not show update notice when AGENT_ENV_CONTAINER=true', async () => {
+      // Note: execa pipes stderr so isTTY is already false, meaning this test
+      // cannot independently verify the container suppression path. It serves
+      // as a sanity/documentation test for the AGENT_ENV_CONTAINER flag.
+      // Write a cache file with a newer version so the update check would fire
+      const cacheDir = join(tempRoot, '.agent-env');
+      await mkdir(cacheDir, { recursive: true });
+      await writeFile(
+        join(cacheDir, 'update-check.json'),
+        JSON.stringify({ lastCheck: Date.now(), latestVersion: '99.99.99' }),
+        'utf8'
+      );
+
+      const result = await runCli(['list'], { AGENT_ENV_CONTAINER: 'true' });
+      expect(result.stderr).not.toContain('Update available');
+    });
+  });
 });
 
 describe('--repo flag integration', () => {
