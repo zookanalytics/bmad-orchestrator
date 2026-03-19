@@ -22,8 +22,8 @@ input=$(cat)
 tool_name=$(echo "$input" | jq -r '.tool_name // ""')
 command=$(echo "$input" | jq -r '.tool_input.command // ""')
 
-# Only process Bash commands
-if [[ "$tool_name" != "Bash" ]]; then
+# Only process shell commands (Bash for Claude, run_shell_command for Gemini)
+if [[ "$tool_name" != "Bash" && "$tool_name" != "run_shell_command" ]]; then
     exit 0
 fi
 
@@ -65,7 +65,7 @@ Required workflow:
    - Review changes with 'git diff'
    - Stage files with 'git add <files>'
    - Preview staged changes with 'git diff --staged'
-   - Touch commit state file
+   - Touch state file: $STATE_FILE
    - Create commit
 
 Never skip this workflow - even for "simple" changes.
