@@ -141,9 +141,13 @@ const updateCheckPromise = shouldCheck
     })
   : Promise.resolve(null);
 
-await program.parseAsync();
+async function main() {
+  await program.parseAsync();
 
-const updateMessage = await updateCheckPromise;
-if (updateMessage) {
-  process.stderr.write(updateMessage + '\n');
+  const updateMessage = await updateCheckPromise;
+  if (updateMessage) {
+    process.stderr.write(updateMessage + '\n');
+  }
 }
+
+main();
