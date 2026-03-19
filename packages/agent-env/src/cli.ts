@@ -4,7 +4,8 @@ import { formatError, createError } from '@zookanalytics/shared';
 import { program } from 'commander';
 import { render } from 'ink';
 import { existsSync } from 'node:fs';
-import { dirname, resolve } from 'node:path';
+import { homedir } from 'node:os';
+import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import React from 'react';
 
@@ -23,9 +24,11 @@ import { setupAudioCommand } from './commands/setup-audio.js';
 import { tmuxRestoreCommand } from './commands/tmux-restore.js';
 import { tmuxSaveCommand } from './commands/tmux-save.js';
 import { tmuxStatusCommand } from './commands/tmux-status.js';
+import { isInsideContainer } from './lib/container-env.js';
 import { launchActionLoop, launchInstancePicker } from './lib/interactive-menu.js';
 import { listInstances } from './lib/list-instances.js';
 import { buildMenuDeps } from './lib/menu-deps.js';
+import { checkForUpdate } from './lib/update-check.js';
 
 // Detect local/dev build: linked from monorepo or baked into image at /opt/agent-env-dev
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -127,4 +130,20 @@ program.action(async () => {
 });
 
 // Parse arguments
-program.parse();
+const shouldCheck = !!process.stderr.isTTY && !isInsideContainer() && !isLinked && !isBakedDev;
+
+const updateCheckPromise = shouldCheck
+  ? checkForUpdate({
+      currentVersion: packageJson.version,
+      packageName: packageJson.name,
+      cachePath: join(homedir(), '.agent-env', 'update-check.json'),
+      cacheTtlMs: 3_600_000,
+    })
+  : Promise.resolve(null);
+
+await program.parseAsync();
+
+const updateMessage = await updateCheckPromise;
+if (updateMessage) {
+  process.stderr.write(updateMessage + '\n');
+}
