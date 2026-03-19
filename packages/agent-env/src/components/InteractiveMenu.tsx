@@ -1,34 +1,37 @@
 /**
- * InteractiveMenu component for selecting and managing instances
+ * InteractiveMenu component for managing a single instance
  *
- * Displays a navigable list of instances using @inkjs/ui Select component.
- * On selection, shows an action menu for the chosen instance (Attach, Rebuild, etc.).
+ * Shows a header with instance info and an action select list.
+ * Supports inline "Set Purpose" flow with TextInput.
  */
 
-import { Select } from '@inkjs/ui';
-import { Box, Text } from 'ink';
+import { Select, TextInput } from '@inkjs/ui';
+import { Box, Text, useInput } from 'ink';
 import React, { useState } from 'react';
 
-import type { Instance, InstanceDisplayStatus } from '../lib/list-instances.js';
-
-import { formatGitIndicators } from './StatusIndicator.js';
-
-// ─── Constants ──────────────────────────────────────────────────────────────
-
-const COLUMN_PADDING = 2; // Padding between name, status, git, purpose
-const SELECT_PREFIX_WIDTH = 4; // Width of the Select component's arrow prefix "  > "
+import type { InstanceDisplayStatus, InstanceInfo } from '../lib/list-instances.js';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
+export type MenuAction = 'attach' | 'code' | 'rebuild' | 'set-purpose' | 'exit';
+
+/** @deprecated Use MenuAction instead — kept for backward compatibility until interactive-menu.ts is replaced (Task 3) */
 export type InstanceAction = 'attach' | 'rebuild' | 'purpose' | 'remove';
 
+/** @deprecated Kept for backward compatibility until cli.ts is updated (Task 5) */
 export interface InteractiveMenuProps {
-  instances: Instance[];
-  onAction: (action: InstanceAction, instanceName: string) => void;
+  instances: Array<{ name: string; [key: string]: unknown }>;
+  onAction: (action: string, instanceName: string) => void;
   terminalWidth?: number;
 }
 
-// ─── Formatting ─────────────────────────────────────────────────────────────
+export interface ActionMenuProps {
+  instanceInfo: InstanceInfo;
+  onAction: (action: MenuAction) => void;
+  onSetPurpose: (value: string) => void;
+}
+
+// ─── Helpers ─────────────────────────────────────────────────────────────────
 
 function statusSymbol(status: InstanceDisplayStatus): string {
   switch (status) {
@@ -37,119 +40,92 @@ function statusSymbol(status: InstanceDisplayStatus): string {
     case 'stopped':
       return '■';
     case 'orphaned':
+    case 'not-found':
       return '✗';
     case 'unknown':
       return '?';
-    case 'not-found':
-      return '✗';
   }
 }
 
-function gitIndicatorString(gitState: Instance['gitState']): string {
-  const indicators = formatGitIndicators(gitState);
-  return indicators.map((ind) => ind.symbol).join(' ');
-}
+// ─── Sub-components ──────────────────────────────────────────────────────────
 
-function truncatePurpose(purpose: string | null, maxLen: number): string {
-  if (!purpose) return '';
-  if (maxLen <= 3) return '';
-  if (purpose.length <= maxLen) return purpose;
-  return purpose.slice(0, maxLen - 3) + '...';
-}
-
-/**
- * Build a display label for a single instance option in the select menu.
- */
-export function buildOptionLabel(instance: Instance, terminalWidth: number): string {
-  const name = instance.name;
-  const status = statusSymbol(instance.status);
-  const git = gitIndicatorString(instance.gitState);
-
-  const fixedWidth =
-    name.length + COLUMN_PADDING + status.length + COLUMN_PADDING + git.length + COLUMN_PADDING;
-  const availableForPurpose = Math.max(0, terminalWidth - fixedWidth - SELECT_PREFIX_WIDTH);
-
-  const purpose = truncatePurpose(instance.purpose, availableForPurpose);
-  const parts = [name, status, git];
-  if (purpose) {
-    parts.push(purpose);
-  }
-  return parts.join('  ');
-}
-
-// ─── Components ─────────────────────────────────────────────────────────────
-
-function ActionMenu({
-  instanceName,
-  onSelectAction,
+function PurposeInput({
+  onSubmit,
+  onCancel,
 }: {
-  instanceName: string;
-  onSelectAction: (action: InstanceAction) => void;
+  onSubmit: (value: string) => void;
+  onCancel: () => void;
 }) {
-  const options = [
-    { label: '🚀 Attach to session', value: 'attach' as const },
-    { label: '🛠  Rebuild container', value: 'rebuild' as const },
-    { label: '📝 Show purpose', value: 'purpose' as const },
-    { label: '🗑  Remove instance', value: 'remove' as const },
-  ];
+  useInput((_input, key) => {
+    if (key.escape) {
+      onCancel();
+    }
+  });
 
   return (
     <Box flexDirection="column">
       <Box marginBottom={1}>
         <Text>
-          Manage{' '}
-          <Text bold color="cyan">
-            {instanceName}
-          </Text>
-          :
+          <Text bold>Purpose:</Text> <Text color="gray">(Escape to cancel)</Text>
         </Text>
       </Box>
-      <Select options={options} onChange={onSelectAction as (value: string) => void} />
+      <TextInput placeholder="Enter purpose..." onSubmit={onSubmit} />
     </Box>
   );
 }
 
+// ─── Main Component ──────────────────────────────────────────────────────────
+
+const ACTION_OPTIONS = [
+  { label: '🚀 Attach to session', value: 'attach' },
+  { label: '💻 Open in VS Code', value: 'code' },
+  { label: '🛠  Rebuild container', value: 'rebuild' },
+  { label: '📝 Set Purpose', value: 'set-purpose' },
+  { label: '🚪 Exit', value: 'exit' },
+];
+
 export function InteractiveMenu({
-  instances,
+  instanceInfo,
   onAction,
-  terminalWidth,
-}: InteractiveMenuProps): React.ReactElement {
-  const [selectedInstance, setSelectedInstance] = useState<string | null>(null);
-  const width = terminalWidth ?? process.stdout.columns ?? 80;
+  onSetPurpose,
+}: ActionMenuProps): React.ReactElement {
+  const [mode, setMode] = useState<'actions' | 'set-purpose'>('actions');
 
-  if (instances.length === 0) {
-    return (
-      <Box flexDirection="column">
-        <Text>No instances found.</Text>
-        <Text color="gray">
-          Create one with: agent-env create {'<name>'} --repo {'<url>'}
-        </Text>
-      </Box>
-    );
+  const { name, status, repoSlug, purpose } = instanceInfo;
+  const symbol = statusSymbol(status);
+
+  const handleActionChange = (value: string) => {
+    if (value === 'set-purpose') {
+      setMode('set-purpose');
+      return;
+    }
+    onAction(value as MenuAction);
+  };
+
+  const handlePurposeSubmit = (value: string) => {
+    onSetPurpose(value);
+  };
+
+  const handlePurposeCancel = () => {
+    setMode('actions');
+  };
+
+  // Build header parts
+  const headerParts = [name, symbol, repoSlug];
+  if (purpose !== null) {
+    headerParts.push(purpose);
   }
-
-  // Step 2: Select action
-  if (selectedInstance) {
-    return (
-      <ActionMenu
-        instanceName={selectedInstance}
-        onSelectAction={(action) => onAction(action, selectedInstance)}
-      />
-    );
-  }
-
-  // Step 1: Select instance
-  const options = instances.map((instance) => ({
-    label: buildOptionLabel(instance, width),
-    value: instance.name,
-  }));
 
   return (
     <Box flexDirection="column">
       <Box marginBottom={1}>
-        <Text bold>Select an instance:</Text>
+        <Text bold>{headerParts.join(' · ')}</Text>
       </Box>
-      <Select options={options} onChange={setSelectedInstance} />
+      {mode === 'actions' ? (
+        <Select options={ACTION_OPTIONS} onChange={handleActionChange} />
+      ) : (
+        <PurposeInput onSubmit={handlePurposeSubmit} onCancel={handlePurposeCancel} />
+      )}
     </Box>
   );
 }

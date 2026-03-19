@@ -2,237 +2,246 @@ import { render } from 'ink-testing-library';
 import React from 'react';
 import { describe, it, expect, vi } from 'vitest';
 
-import type { Instance } from '../lib/list-instances.js';
-import type { GitState, GitStateResult } from '../lib/types.js';
+import type { InstanceInfo } from '../lib/list-instances.js';
 
-import { InteractiveMenu, buildOptionLabel } from './InteractiveMenu.js';
+import { InteractiveMenu } from './InteractiveMenu.js';
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
-function cleanGitState(): GitState {
-  return {
-    hasStaged: false,
-    stagedCount: 0,
-    hasUnstaged: false,
-    unstagedCount: 0,
-    hasUntracked: false,
-    untrackedCount: 0,
-    stashCount: 0,
-    firstStashMessage: '',
-    unpushedBranches: [],
-    unpushedCommitCounts: {},
-    neverPushedBranches: [],
-    isDetachedHead: false,
-    isClean: true,
-  };
-}
-
-function makeCleanGitState(): GitStateResult {
-  return { ok: true, state: cleanGitState() };
-}
-
-function makeInstance(overrides: Partial<Instance> = {}): Instance {
+function makeInstanceInfo(overrides: Partial<InstanceInfo> = {}): InstanceInfo {
   return {
     name: 'test-instance',
-    repoSlug: 'repo',
-    repoUrl: 'https://github.com/user/repo.git',
-    status: 'running',
-    lastAttached: '2026-02-03T10:00:00.000Z',
+    repoSlug: 'my-repo',
     purpose: null,
-    gitState: makeCleanGitState(),
-    sshConnection: null,
+    status: 'running',
     ...overrides,
   };
+}
+
+/** Poll until a condition is met or timeout */
+async function waitFor(condition: () => boolean, timeoutMs = 5000): Promise<void> {
+  const start = Date.now();
+  while (Date.now() - start < timeoutMs) {
+    if (condition()) return;
+    await new Promise((resolve) => setTimeout(resolve, 20));
+  }
 }
 
 // ─── Tests ──────────────────────────────────────────────────────────────────
 
 describe('InteractiveMenu', () => {
-  describe('empty state (AC: #6)', () => {
-    it('shows create suggestion when no instances exist', () => {
-      const onAction = vi.fn();
+  describe('header rendering', () => {
+    it('shows instance name, status symbol, repo slug for running instance', () => {
+      const info = makeInstanceInfo({ name: 'alpha', status: 'running', repoSlug: 'my-repo' });
       const { lastFrame } = render(
-        <InteractiveMenu instances={[]} onAction={onAction} terminalWidth={80} />
+        <InteractiveMenu instanceInfo={info} onAction={vi.fn()} onSetPurpose={vi.fn()} />
       );
       const output = lastFrame() ?? '';
-      expect(output).toContain('No instances found');
-      expect(output).toContain('agent-env create');
+      expect(output).toContain('alpha');
+      expect(output).toContain('▶'); // running symbol
+      expect(output).toContain('my-repo');
+    });
+
+    it('shows stopped symbol for stopped instance', () => {
+      const info = makeInstanceInfo({ status: 'stopped' });
+      const { lastFrame } = render(
+        <InteractiveMenu instanceInfo={info} onAction={vi.fn()} onSetPurpose={vi.fn()} />
+      );
+      const output = lastFrame() ?? '';
+      expect(output).toContain('■');
+    });
+
+    it('shows orphaned symbol for orphaned instance', () => {
+      const info = makeInstanceInfo({ status: 'orphaned' });
+      const { lastFrame } = render(
+        <InteractiveMenu instanceInfo={info} onAction={vi.fn()} onSetPurpose={vi.fn()} />
+      );
+      const output = lastFrame() ?? '';
+      expect(output).toContain('✗');
+    });
+
+    it('shows not-found symbol for not-found instance', () => {
+      const info = makeInstanceInfo({ status: 'not-found' });
+      const { lastFrame } = render(
+        <InteractiveMenu instanceInfo={info} onAction={vi.fn()} onSetPurpose={vi.fn()} />
+      );
+      const output = lastFrame() ?? '';
+      expect(output).toContain('✗');
+    });
+
+    it('shows unknown symbol for unknown status', () => {
+      const info = makeInstanceInfo({ status: 'unknown' });
+      const { lastFrame } = render(
+        <InteractiveMenu instanceInfo={info} onAction={vi.fn()} onSetPurpose={vi.fn()} />
+      );
+      const output = lastFrame() ?? '';
+      expect(output).toContain('?');
+    });
+
+    it('shows purpose when set', () => {
+      const info = makeInstanceInfo({ purpose: 'Auth service work' });
+      const { lastFrame } = render(
+        <InteractiveMenu instanceInfo={info} onAction={vi.fn()} onSetPurpose={vi.fn()} />
+      );
+      const output = lastFrame() ?? '';
+      expect(output).toContain('Auth service work');
+    });
+
+    it('omits purpose segment when purpose is null', () => {
+      const info = makeInstanceInfo({ purpose: null });
+      const { lastFrame } = render(
+        <InteractiveMenu instanceInfo={info} onAction={vi.fn()} onSetPurpose={vi.fn()} />
+      );
+      const output = lastFrame() ?? '';
+      // Header should have name, status, repo but no extra separator for purpose
+      expect(output).toContain('test-instance');
+      expect(output).toContain('my-repo');
     });
   });
 
-  describe('rendering with instances (AC: #1, #4)', () => {
-    it('renders select header and instance options', () => {
-      const instances = [
-        makeInstance({ name: 'alpha', status: 'running', purpose: 'Auth service' }),
-        makeInstance({ name: 'beta', status: 'stopped', purpose: 'Database work' }),
-      ];
-      const onAction = vi.fn();
+  describe('action list', () => {
+    it('renders all five action options', () => {
+      const info = makeInstanceInfo();
       const { lastFrame } = render(
-        <InteractiveMenu instances={instances} onAction={onAction} terminalWidth={100} />
+        <InteractiveMenu instanceInfo={info} onAction={vi.fn()} onSetPurpose={vi.fn()} />
       );
       const output = lastFrame() ?? '';
-      expect(output).toContain('Select an instance:');
-      expect(output).toContain('alpha');
-      expect(output).toContain('beta');
-    });
-
-    it('shows git state indicators in labels', () => {
-      const instances = [
-        makeInstance({ name: 'clean-ws', gitState: makeCleanGitState() }),
-        makeInstance({
-          name: 'dirty-ws',
-          gitState: {
-            ok: true,
-            state: { ...cleanGitState(), hasUnstaged: true, isClean: false },
-          },
-        }),
-      ];
-      const onAction = vi.fn();
-      const { lastFrame } = render(
-        <InteractiveMenu instances={instances} onAction={onAction} terminalWidth={100} />
-      );
-      const output = lastFrame() ?? '';
-      // Clean state shows ✓
-      expect(output).toContain('✓');
-      // Dirty state shows ●
-      expect(output).toContain('●');
-    });
-  });
-
-  describe('user interaction (AC: #3)', () => {
-    it('shows action menu after selecting an instance', async () => {
-      const instances = [
-        makeInstance({ name: 'alpha', status: 'running' }),
-        makeInstance({ name: 'beta', status: 'stopped' }),
-      ];
-      const onAction = vi.fn();
-      const { stdin, lastFrame } = render(
-        <InteractiveMenu instances={instances} onAction={onAction} terminalWidth={80} />
-      );
-
-      // Verify initial render
-      let output = lastFrame() ?? '';
-      expect(output).toContain('Select an instance:');
-      expect(output).toContain('alpha');
-
-      // Select 'alpha'
-      stdin.write('\r'); // Enter key
-
-      // Wait for Ink to process the input
-      await new Promise((resolve) => setTimeout(resolve, 50));
-
-      output = lastFrame() ?? '';
-      expect(output).toContain('Manage alpha:');
       expect(output).toContain('Attach to session');
+      expect(output).toContain('Open in VS Code');
       expect(output).toContain('Rebuild container');
+      expect(output).toContain('Set Purpose');
+      expect(output).toContain('Exit');
     });
 
-    it('calls onAction with selected action and instance name', async () => {
-      const instances = [makeInstance({ name: 'alpha', status: 'running' })];
+    it('calls onAction with "attach" when first option selected', async () => {
+      const info = makeInstanceInfo();
       const onAction = vi.fn();
-      const { stdin, lastFrame } = render(
-        <InteractiveMenu instances={instances} onAction={onAction} terminalWidth={80} />
+      const { stdin } = render(
+        <InteractiveMenu instanceInfo={info} onAction={onAction} onSetPurpose={vi.fn()} />
       );
 
-      // Select 'alpha'
-      stdin.write('\r'); // Enter key
+      // First option is "attach" — press Enter
+      stdin.write('\r');
 
-      // Wait for action menu to render (polls to handle CI/parallel-test load)
-      const waitForFrame = async (match: string, timeoutMs = 5000) => {
-        const start = Date.now();
-        while (Date.now() - start < timeoutMs) {
-          if ((lastFrame() ?? '').includes(match)) return true;
-          await new Promise((resolve) => setTimeout(resolve, 20));
-        }
-        return false;
-      };
-      const menuReady = await waitForFrame('Manage alpha:');
-      expect(menuReady).toBe(true);
+      await waitFor(() => onAction.mock.calls.length > 0);
+      expect(onAction).toHaveBeenCalledWith('attach');
+    });
 
-      // Allow useEffect to register the new Select's useInput handler.
-      // lastFrame() reflects committed render output, but useEffect (which
-      // wires up the keyboard listener) runs asynchronously after commit.
+    it('calls onAction with "code" when second option selected', async () => {
+      const info = makeInstanceInfo();
+      const onAction = vi.fn();
+      const { stdin } = render(
+        <InteractiveMenu instanceInfo={info} onAction={onAction} onSetPurpose={vi.fn()} />
+      );
+
+      // Down once to "code", then Enter
+      stdin.write('\x1B[B');
+      stdin.write('\r');
+
+      await waitFor(() => onAction.mock.calls.length > 0);
+      expect(onAction).toHaveBeenCalledWith('code');
+    });
+
+    it('calls onAction with "exit" when last option selected', async () => {
+      const info = makeInstanceInfo();
+      const onAction = vi.fn();
+      const { stdin } = render(
+        <InteractiveMenu instanceInfo={info} onAction={onAction} onSetPurpose={vi.fn()} />
+      );
+
+      // Down 4 times to "exit", then Enter
+      stdin.write('\x1B[B');
+      stdin.write('\x1B[B');
+      stdin.write('\x1B[B');
+      stdin.write('\x1B[B');
+      stdin.write('\r');
+
+      await waitFor(() => onAction.mock.calls.length > 0);
+      expect(onAction).toHaveBeenCalledWith('exit');
+    });
+  });
+
+  describe('Set Purpose flow', () => {
+    it('switches to text input when Set Purpose is selected', async () => {
+      const info = makeInstanceInfo();
+      const onAction = vi.fn();
+      const { stdin, lastFrame } = render(
+        <InteractiveMenu instanceInfo={info} onAction={onAction} onSetPurpose={vi.fn()} />
+      );
+
+      // Down 3 times to "set-purpose", then Enter
+      stdin.write('\x1B[B');
+      stdin.write('\x1B[B');
+      stdin.write('\x1B[B');
+      stdin.write('\r');
+
+      // onAction should NOT be called for set-purpose — it's handled internally
+      await waitFor(() => (lastFrame() ?? '').includes('Purpose'));
+      const output = lastFrame() ?? '';
+      expect(output).toContain('Purpose');
+      expect(onAction).not.toHaveBeenCalled();
+    });
+
+    it('calls onSetPurpose when text is submitted', async () => {
+      const info = makeInstanceInfo();
+      const onAction = vi.fn();
+      const onSetPurpose = vi.fn();
+      const { stdin, lastFrame } = render(
+        <InteractiveMenu instanceInfo={info} onAction={onAction} onSetPurpose={onSetPurpose} />
+      );
+
+      // Navigate to "set-purpose" and select
+      stdin.write('\x1B[B');
+      stdin.write('\x1B[B');
+      stdin.write('\x1B[B');
+      stdin.write('\r');
+
+      // Wait for text input to appear
+      await waitFor(() => (lastFrame() ?? '').includes('Purpose'));
+
+      // Wait for useEffect to wire up input handlers
       await new Promise((resolve) => setTimeout(resolve, 50));
 
-      // Action menu is now visible, select 'rebuild' (down arrow once from 'attach')
-      stdin.write('\x1B[B'); // Down arrow key
-      stdin.write('\r'); // Enter key
+      // Type a purpose character by character
+      for (const char of 'New purpose text') {
+        stdin.write(char);
+      }
 
-      // Wait for onAction to be called
-      const waitForCall = async (fn: ReturnType<typeof vi.fn>, timeoutMs = 5000) => {
-        const start = Date.now();
-        while (Date.now() - start < timeoutMs) {
-          if (fn.mock.calls.length > 0) return;
-          await new Promise((resolve) => setTimeout(resolve, 20));
-        }
-      };
-      await waitForCall(onAction);
+      // Small delay then submit
+      await new Promise((resolve) => setTimeout(resolve, 50));
+      stdin.write('\r');
 
-      expect(onAction).toHaveBeenCalledWith('rebuild', 'alpha');
+      await waitFor(() => onSetPurpose.mock.calls.length > 0);
+      expect(onSetPurpose).toHaveBeenCalledWith('New purpose text');
     });
-  });
-});
 
-describe('buildOptionLabel', () => {
-  it('includes name, status symbol, and git indicator', () => {
-    const instance = makeInstance({ name: 'my-ws', status: 'running' });
-    const label = buildOptionLabel(instance, 100);
-    expect(label).toContain('my-ws');
-    expect(label).toContain('▶'); // running symbol
-    expect(label).toContain('✓'); // clean git
-  });
+    it('returns to action list on Escape without calling onSetPurpose', async () => {
+      const info = makeInstanceInfo();
+      const onAction = vi.fn();
+      const onSetPurpose = vi.fn();
+      const { stdin, lastFrame } = render(
+        <InteractiveMenu instanceInfo={info} onAction={onAction} onSetPurpose={onSetPurpose} />
+      );
 
-  it('includes purpose when space available', () => {
-    const instance = makeInstance({ name: 'ws', status: 'running', purpose: 'OAuth work' });
-    const label = buildOptionLabel(instance, 100);
-    expect(label).toContain('OAuth work');
-  });
+      // Navigate to "set-purpose" and select
+      stdin.write('\x1B[B');
+      stdin.write('\x1B[B');
+      stdin.write('\x1B[B');
+      stdin.write('\r');
 
-  it('truncates long purpose with ellipsis (AC: #5)', () => {
-    const longPurpose = 'This is a very long purpose string that exceeds available space';
-    const instance = makeInstance({
-      name: 'my-workspace-name',
-      status: 'running',
-      purpose: longPurpose,
+      // Wait for text input to appear
+      await waitFor(() => (lastFrame() ?? '').includes('Purpose'));
+
+      // Wait for useEffect to wire up input handlers
+      await new Promise((resolve) => setTimeout(resolve, 50));
+
+      // Press Escape
+      stdin.write('\x1B');
+
+      // Should return to action list
+      await waitFor(() => (lastFrame() ?? '').includes('Attach to session'));
+      expect(onSetPurpose).not.toHaveBeenCalled();
+      expect(lastFrame()).toContain('Attach to session');
     });
-    // With a narrow width, purpose should be truncated
-    const label = buildOptionLabel(instance, 50);
-    expect(label).toContain('...');
-    expect(label.length).toBeLessThanOrEqual(50);
-  });
-
-  it('omits purpose when terminal too narrow', () => {
-    const instance = makeInstance({
-      name: 'my-workspace-name',
-      status: 'running',
-      purpose: 'test',
-    });
-    // Very narrow — no room for purpose
-    const label = buildOptionLabel(instance, 30);
-    expect(label).not.toContain('test');
-  });
-
-  it('shows stopped symbol for stopped instance', () => {
-    const instance = makeInstance({ name: 'ws', status: 'stopped' });
-    const label = buildOptionLabel(instance, 80);
-    expect(label).toContain('■'); // stopped symbol
-  });
-
-  it('shows orphaned symbol for orphaned instance', () => {
-    const instance = makeInstance({ name: 'ws', status: 'orphaned' });
-    const label = buildOptionLabel(instance, 80);
-    expect(label).toContain('✗'); // orphaned symbol
-  });
-
-  it('shows unpushed indicator for unpushed branches', () => {
-    const instance = makeInstance({
-      name: 'ws',
-      gitState: {
-        ok: true,
-        state: { ...cleanGitState(), unpushedBranches: ['main'], isClean: false },
-      },
-    });
-    const label = buildOptionLabel(instance, 80);
-    expect(label).toContain('↑');
   });
 });

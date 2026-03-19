@@ -90,7 +90,8 @@ program.action(async () => {
     createRemoveDeps: createRemoveDefaultDeps,
     renderMenu: (instances, onAction) => {
       const { waitUntilExit } = render(
-        React.createElement(InteractiveMenu, { instances, onAction })
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Legacy call; replaced in Task 5
+        React.createElement(InteractiveMenu as any, { instances, onAction })
       );
       return { waitUntilExit };
     },
