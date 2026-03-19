@@ -1,140 +1,149 @@
 /**
  * Interactive menu orchestration for agent-env
  *
- * Lists instances and renders an interactive menu for selection.
- * On selection, provides an action menu (Attach, Rebuild, etc.).
+ * Provides two flows:
+ * 1. launchActionLoop — persistent action loop for a single instance
+ * 2. launchInstancePicker — instance selection picker for the default CLI flow
+ *
  * Uses dependency injection for all I/O operations to enable testing.
  */
 
-import type { InstanceAction } from '../components/InteractiveMenu.js';
-import type { AttachResult, AttachInstanceDeps } from './attach-instance.js';
-import type { Instance, ListResult } from './list-instances.js';
-import type { RebuildInstanceDeps, RebuildOptions, RebuildResult } from './rebuild-instance.js';
-import type { RemoveInstanceDeps, RemoveResult } from './remove-instance.js';
+import { formatError, createError } from '@zookanalytics/shared';
+
+import type { MenuAction } from '../components/InteractiveMenu.js';
+import type { Instance, InstanceInfo, ListResult } from './list-instances.js';
+
+// Re-export MenuAction so consumers can import from here
+export type { MenuAction } from '../components/InteractiveMenu.js';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
-export type MenuResult =
-  | { ok: true; action: 'attached' | 'rebuilt' | 'removed' | 'purpose-shown'; instanceName: string }
-  | { ok: true; action: 'empty' }
-  | { ok: false; error: { code: string; message: string; suggestion?: string } };
-
 export interface InteractiveMenuDeps {
-  listInstances: () => Promise<ListResult>;
   attachInstance: (
     name: string,
-    deps: AttachInstanceDeps,
-    onStarting?: () => void
-  ) => Promise<AttachResult>;
+    repoSlug?: string
+  ) => Promise<{ ok: boolean; error?: { code: string; message: string; suggestion?: string } }>;
+  codeInstance: (
+    name: string,
+    repoSlug?: string
+  ) => Promise<{ ok: boolean; error?: { code: string; message: string; suggestion?: string } }>;
   rebuildInstance: (
     name: string,
-    deps: RebuildInstanceDeps,
-    options?: RebuildOptions
-  ) => Promise<RebuildResult>;
-  removeInstance: (name: string, deps: RemoveInstanceDeps, force: boolean) => Promise<RemoveResult>;
-  createAttachDeps: () => AttachInstanceDeps;
-  createRebuildDeps: () => RebuildInstanceDeps;
-  createRemoveDeps: () => RemoveInstanceDeps;
+    repoSlug?: string
+  ) => Promise<{
+    ok: boolean;
+    containerName?: string;
+    error?: { code: string; message: string; suggestion?: string };
+  }>;
+  setPurpose: (
+    name: string,
+    value: string,
+    repoSlug?: string
+  ) => Promise<{ ok: boolean; error?: { code: string; message: string; suggestion?: string } }>;
+  getInstanceInfo: (workspaceName: string) => Promise<InstanceInfo>;
   renderMenu: (
-    instances: Instance[],
-    onAction: (action: InstanceAction, name: string) => void
-  ) => { waitUntilExit: () => Promise<void> };
+    instanceInfo: InstanceInfo
+  ) => Promise<{ action: MenuAction; purposeValue?: string }>;
 }
 
-// ─── Orchestration ──────────────────────────────────────────────────────────
+export interface InstancePickerDeps {
+  listInstances: () => Promise<ListResult>;
+  renderPicker: (instances: Instance[]) => Promise<string | null>;
+}
+
+// ─── Action Loop ─────────────────────────────────────────────────────────────
 
 /**
- * Launch the interactive menu.
+ * Launch a persistent action loop for a single instance.
  *
- * 1. List all instances
- * 2. If none, show empty state and return
- * 3. Render interactive menu with instance selection
- * 4. On selection, show action menu
- * 5. Execute chosen action
+ * 1. Get instance info
+ * 2. Render action menu
+ * 3. Execute selected action
+ * 4. On 'exit', break loop
+ * 5. On error, print formatted error and continue
+ * 6. Loop back to step 1 (re-reads instance state)
  */
-export async function launchInteractiveMenu(deps: InteractiveMenuDeps): Promise<MenuResult> {
-  // Step 1: List instances
+export async function launchActionLoop(
+  workspaceName: string,
+  deps: InteractiveMenuDeps,
+  repoSlug?: string
+): Promise<void> {
+  while (true) {
+    try {
+      // Step 1: Get fresh instance info
+      const instanceInfo = await deps.getInstanceInfo(workspaceName);
+
+      // Step 2: Render menu and get user selection
+      const { action, purposeValue } = await deps.renderMenu(instanceInfo);
+
+      // Step 3: Exit if requested
+      if (action === 'exit') {
+        break;
+      }
+
+      // Step 4: Execute action
+      let result: { ok: boolean; error?: { code: string; message: string; suggestion?: string } };
+
+      switch (action) {
+        case 'attach':
+          result = await deps.attachInstance(workspaceName, repoSlug);
+          break;
+        case 'code':
+          result = await deps.codeInstance(workspaceName, repoSlug);
+          break;
+        case 'rebuild':
+          result = await deps.rebuildInstance(workspaceName, repoSlug);
+          break;
+        case 'set-purpose':
+          result = await deps.setPurpose(workspaceName, purposeValue ?? '', repoSlug);
+          break;
+      }
+
+      // Handle action-level errors
+      if (!result.ok && result.error) {
+        const { code, message, suggestion } = result.error;
+        console.error(formatError(createError(code, message, suggestion)));
+      }
+    } catch (err) {
+      // Unexpected errors (including getInstanceInfo / renderMenu failures) — format and continue
+      const message = err instanceof Error ? err.message : String(err);
+      console.error(formatError(createError('ACTION_ERROR', message)));
+    }
+  }
+}
+
+// ─── Instance Picker ─────────────────────────────────────────────────────────
+
+/** Discriminated union result from launchInstancePicker */
+export type PickerResult =
+  | { kind: 'selected'; name: string }
+  | { kind: 'cancelled' }
+  | { kind: 'error' };
+
+/**
+ * Launch an instance picker for the default no-arg CLI flow.
+ *
+ * Lists instances and renders a picker. Returns a discriminated union:
+ * - `{ kind: 'selected', name }` when a workspace is chosen
+ * - `{ kind: 'cancelled' }` when the user exits or there are no instances
+ * - `{ kind: 'error' }` when listing instances fails
+ */
+export async function launchInstancePicker(deps: InstancePickerDeps): Promise<PickerResult> {
   const listResult = await deps.listInstances();
 
   if (!listResult.ok) {
-    return {
-      ok: false,
-      error: {
-        code: listResult.error.code,
-        message: listResult.error.message,
-        suggestion: 'Check if ~/.agent-env/workspaces/ is accessible.',
-      },
-    };
-  }
-
-  // Step 2: No instances
-  if (listResult.instances.length === 0) {
-    deps.renderMenu(listResult.instances, () => {});
-    return { ok: true, action: 'empty' };
-  }
-
-  // Step 3: Render menu and wait for selection
-  let selectedName: string | undefined;
-  let selectedAction: InstanceAction | undefined;
-
-  const selectionPromise = new Promise<{ action: InstanceAction; name: string }>((resolve) => {
-    const { waitUntilExit } = deps.renderMenu(
-      listResult.instances,
-      (action: InstanceAction, name: string) => {
-        selectedAction = action;
-        selectedName = name;
-        resolve({ action, name });
-      }
+    const { code, message } = listResult.error;
+    console.error(
+      formatError(createError(code, message, 'Check if ~/.agent-env/workspaces/ is accessible.'))
     );
-
-    void waitUntilExit().then(() => {
-      if (!selectedName || !selectedAction) {
-        // Resolve with empty to indicate exit
-        resolve({ action: 'attach', name: '' });
-      }
-    });
-  });
-
-  const { action, name } = await selectionPromise;
-
-  // User exited without selecting
-  if (!name) {
-    return { ok: true, action: 'empty' };
+    return { kind: 'error' };
   }
 
-  // Step 4: Execute selected action
-  switch (action) {
-    case 'attach': {
-      const attachDeps = deps.createAttachDeps();
-      const attachResult = await deps.attachInstance(name, attachDeps);
-      if (!attachResult.ok) return { ok: false, error: attachResult.error };
-      return { ok: true, action: 'attached', instanceName: name };
-    }
+  const selected = await deps.renderPicker(listResult.instances);
 
-    case 'rebuild': {
-      // Interactive menu selection IS the user's confirmation — pass force: true
-      // so running containers can be rebuilt without a dead-end.
-      const rebuildDeps = deps.createRebuildDeps();
-      const rebuildResult = await deps.rebuildInstance(name, rebuildDeps, { force: true });
-      if (!rebuildResult.ok) return { ok: false, error: rebuildResult.error };
-      return { ok: true, action: 'rebuilt', instanceName: name };
-    }
-
-    case 'purpose': {
-      const instance = listResult.instances.find((i) => i.name === name);
-      if (instance) {
-        console.log(`\nPurpose for ${name}:`);
-        console.log(instance.purpose || 'No purpose set.');
-      }
-      return { ok: true, action: 'purpose-shown', instanceName: name };
-    }
-
-    case 'remove': {
-      const removeDeps = deps.createRemoveDeps();
-      // We use force=false for the interactive menu to trigger safety checks
-      const removeResult = await deps.removeInstance(name, removeDeps, false);
-      if (!removeResult.ok) return { ok: false, error: removeResult.error };
-      return { ok: true, action: 'removed', instanceName: name };
-    }
+  if (selected === null) {
+    return { kind: 'cancelled' };
   }
+
+  return { kind: 'selected', name: selected };
 }

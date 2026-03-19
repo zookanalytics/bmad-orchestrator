@@ -1,15 +1,21 @@
 import { describe, it, expect, vi } from 'vitest';
 
-import type { InstanceAction } from '../components/InteractiveMenu.js';
-import type { AttachResult, AttachInstanceDeps } from './attach-instance.js';
-import type { InteractiveMenuDeps } from './interactive-menu.js';
-import type { ListResult, Instance } from './list-instances.js';
-import type { RebuildResult, RebuildInstanceDeps, RebuildOptions } from './rebuild-instance.js';
-import type { RemoveResult, RemoveInstanceDeps } from './remove-instance.js';
+import type { MenuAction, InteractiveMenuDeps, InstancePickerDeps } from './interactive-menu.js';
+import type { InstanceInfo, Instance, ListResult } from './list-instances.js';
 
-import { launchInteractiveMenu } from './interactive-menu.js';
+import { launchActionLoop, launchInstancePicker } from './interactive-menu.js';
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
+
+function makeInstanceInfo(overrides: Partial<InstanceInfo> = {}): InstanceInfo {
+  return {
+    name: 'test-instance',
+    repoSlug: 'repo',
+    purpose: null,
+    status: 'running',
+    ...overrides,
+  };
+}
 
 function makeInstance(overrides: Partial<Instance> = {}): Instance {
   return {
@@ -19,24 +25,7 @@ function makeInstance(overrides: Partial<Instance> = {}): Instance {
     status: 'running',
     lastAttached: '2026-02-03T10:00:00.000Z',
     purpose: null,
-    gitState: {
-      ok: true,
-      state: {
-        hasStaged: false,
-        stagedCount: 0,
-        hasUnstaged: false,
-        unstagedCount: 0,
-        hasUntracked: false,
-        untrackedCount: 0,
-        stashCount: 0,
-        firstStashMessage: '',
-        unpushedBranches: [],
-        unpushedCommitCounts: {},
-        neverPushedBranches: [],
-        isDetachedHead: false,
-        isClean: true,
-      },
-    },
+    gitState: null,
     sshConnection: null,
     ...overrides,
   };
@@ -55,164 +44,256 @@ function makeListError(): ListResult {
   };
 }
 
-function createMockDeps(overrides: Partial<InteractiveMenuDeps> = {}): InteractiveMenuDeps {
+type ActionSequence = Array<{ action: MenuAction; purposeValue?: string }>;
+
+function createMockDeps(
+  actionSequence: ActionSequence,
+  overrides: Partial<InteractiveMenuDeps> = {}
+): InteractiveMenuDeps {
+  let callIndex = 0;
   return {
-    listInstances: vi.fn<() => Promise<ListResult>>().mockResolvedValue(makeListSuccess()),
-    attachInstance: vi
-      .fn<(name: string, deps: AttachInstanceDeps) => Promise<AttachResult>>()
-      .mockResolvedValue({ ok: true }),
-    rebuildInstance: vi
-      .fn<
-        (
-          name: string,
-          deps: RebuildInstanceDeps,
-          options?: RebuildOptions
-        ) => Promise<RebuildResult>
-      >()
-      .mockResolvedValue({ ok: true, containerName: 'ae-test', wasRunning: false }),
-    removeInstance: vi
-      .fn<(name: string, deps: RemoveInstanceDeps) => Promise<RemoveResult>>()
-      .mockResolvedValue({ ok: true }),
-    createAttachDeps: vi.fn().mockReturnValue({} as AttachInstanceDeps),
-    createRebuildDeps: vi.fn().mockReturnValue({} as RebuildInstanceDeps),
-    createRemoveDeps: vi.fn().mockReturnValue({} as RemoveInstanceDeps),
-    renderMenu: vi.fn().mockReturnValue({ waitUntilExit: () => new Promise(() => {}) }),
+    attachInstance: vi.fn().mockResolvedValue({ ok: true }),
+    codeInstance: vi.fn().mockResolvedValue({ ok: true }),
+    rebuildInstance: vi.fn().mockResolvedValue({ ok: true, containerName: 'ae-test' }),
+    setPurpose: vi.fn().mockResolvedValue({ ok: true }),
+    getInstanceInfo: vi.fn().mockResolvedValue(makeInstanceInfo()),
+    renderMenu: vi.fn().mockImplementation(() => {
+      const result = actionSequence[callIndex] ?? { action: 'exit' as MenuAction };
+      callIndex++;
+      return Promise.resolve(result);
+    }),
     ...overrides,
   };
 }
 
-// ─── Tests ──────────────────────────────────────────────────────────────────
+// ─── Tests: launchActionLoop ─────────────────────────────────────────────────
 
-describe('launchInteractiveMenu', () => {
-  describe('list failure', () => {
-    it('returns error when listInstances fails', async () => {
-      const deps = createMockDeps({
-        listInstances: vi.fn().mockResolvedValue(makeListError()),
-      });
+describe('launchActionLoop', () => {
+  it('calls getInstanceInfo then renderMenu on each iteration', async () => {
+    const deps = createMockDeps([{ action: 'attach' }, { action: 'exit' }]);
 
-      const result = await launchInteractiveMenu(deps);
+    await launchActionLoop('my-ws', deps);
 
-      expect(result.ok).toBe(false);
-      if (!result.ok) {
-        expect(result.error.code).toBe('LIST_ERROR');
+    expect(deps.getInstanceInfo).toHaveBeenCalledTimes(2);
+    expect(deps.renderMenu).toHaveBeenCalledTimes(2);
+  });
+
+  it('passes instanceInfo from getInstanceInfo to renderMenu', async () => {
+    const info = makeInstanceInfo({ name: 'alpha', status: 'stopped' });
+    const deps = createMockDeps([{ action: 'exit' }], {
+      getInstanceInfo: vi.fn().mockResolvedValue(info),
+    });
+
+    await launchActionLoop('alpha', deps);
+
+    expect(deps.renderMenu).toHaveBeenCalledWith(info);
+  });
+
+  it('calls attachInstance when attach action is selected', async () => {
+    const deps = createMockDeps([{ action: 'attach' }, { action: 'exit' }]);
+
+    await launchActionLoop('alpha', deps, 'my-repo');
+
+    expect(deps.attachInstance).toHaveBeenCalledWith('alpha', 'my-repo');
+  });
+
+  it('calls codeInstance when code action is selected', async () => {
+    const deps = createMockDeps([{ action: 'code' }, { action: 'exit' }]);
+
+    await launchActionLoop('alpha', deps, 'my-repo');
+
+    expect(deps.codeInstance).toHaveBeenCalledWith('alpha', 'my-repo');
+  });
+
+  it('calls rebuildInstance when rebuild action is selected', async () => {
+    const deps = createMockDeps([{ action: 'rebuild' }, { action: 'exit' }]);
+
+    await launchActionLoop('alpha', deps, 'my-repo');
+
+    expect(deps.rebuildInstance).toHaveBeenCalledWith('alpha', 'my-repo');
+  });
+
+  it('calls setPurpose with purposeValue when set-purpose action is selected', async () => {
+    const deps = createMockDeps([
+      { action: 'set-purpose', purposeValue: 'testing auth flows' },
+      { action: 'exit' },
+    ]);
+
+    await launchActionLoop('alpha', deps, 'my-repo');
+
+    expect(deps.setPurpose).toHaveBeenCalledWith('alpha', 'testing auth flows', 'my-repo');
+  });
+
+  it('breaks loop on exit action', async () => {
+    const deps = createMockDeps([{ action: 'exit' }]);
+
+    await launchActionLoop('alpha', deps);
+
+    expect(deps.getInstanceInfo).toHaveBeenCalledTimes(1);
+    expect(deps.renderMenu).toHaveBeenCalledTimes(1);
+    // No action dep should be called
+    expect(deps.attachInstance).not.toHaveBeenCalled();
+    expect(deps.rebuildInstance).not.toHaveBeenCalled();
+    expect(deps.codeInstance).not.toHaveBeenCalled();
+    expect(deps.setPurpose).not.toHaveBeenCalled();
+  });
+
+  it('re-reads instance state between iterations', async () => {
+    const info1 = makeInstanceInfo({ name: 'alpha', status: 'stopped' });
+    const info2 = makeInstanceInfo({ name: 'alpha', status: 'running' });
+    let callCount = 0;
+    const getInstanceInfo = vi.fn().mockImplementation(() => {
+      callCount++;
+      return Promise.resolve(callCount === 1 ? info1 : info2);
+    });
+
+    const deps = createMockDeps([{ action: 'attach' }, { action: 'exit' }], {
+      getInstanceInfo,
+    });
+
+    await launchActionLoop('alpha', deps);
+
+    expect(getInstanceInfo).toHaveBeenCalledTimes(2);
+    expect(deps.renderMenu).toHaveBeenNthCalledWith(1, info1);
+    expect(deps.renderMenu).toHaveBeenNthCalledWith(2, info2);
+  });
+
+  it('continues loop after action error, prints formatted error', async () => {
+    const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+    const deps = createMockDeps([{ action: 'attach' }, { action: 'exit' }], {
+      attachInstance: vi.fn().mockResolvedValue({
+        ok: false,
+        error: { code: 'ATTACH_FAILED', message: 'Container not running', suggestion: 'Start it' },
+      }),
+    });
+
+    await launchActionLoop('alpha', deps);
+
+    // Loop continued: renderMenu called twice (once for attach, once for exit)
+    expect(deps.renderMenu).toHaveBeenCalledTimes(2);
+
+    // Error was printed
+    expect(consoleSpy).toHaveBeenCalled();
+    const errorOutput = String(consoleSpy.mock.calls[0]?.[0] ?? '');
+    expect(errorOutput).toContain('ATTACH_FAILED');
+    expect(errorOutput).toContain('Container not running');
+
+    consoleSpy.mockRestore();
+  });
+
+  it('handles action throwing an exception — prints error and continues', async () => {
+    const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+    const deps = createMockDeps([{ action: 'rebuild' }, { action: 'exit' }], {
+      rebuildInstance: vi.fn().mockRejectedValue(new Error('Docker daemon not responding')),
+    });
+
+    await launchActionLoop('alpha', deps);
+
+    expect(deps.renderMenu).toHaveBeenCalledTimes(2);
+    expect(consoleSpy).toHaveBeenCalled();
+    const errorOutput = String(consoleSpy.mock.calls[0]?.[0] ?? '');
+    expect(errorOutput).toContain('Docker daemon not responding');
+
+    consoleSpy.mockRestore();
+  });
+
+  it('handles getInstanceInfo throwing — prints error and continues loop', async () => {
+    const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+    let callCount = 0;
+    const getInstanceInfo = vi.fn().mockImplementation(() => {
+      callCount++;
+      if (callCount === 1) {
+        return Promise.reject(new Error('Workspace path not found'));
       }
+      return Promise.resolve(makeInstanceInfo());
     });
+
+    const deps = createMockDeps([{ action: 'exit' }], { getInstanceInfo });
+
+    await launchActionLoop('alpha', deps);
+
+    // Loop continued: getInstanceInfo called twice (first throws, second succeeds for exit)
+    expect(getInstanceInfo).toHaveBeenCalledTimes(2);
+    expect(consoleSpy).toHaveBeenCalled();
+    const errorOutput = String(consoleSpy.mock.calls[0]?.[0] ?? '');
+    expect(errorOutput).toContain('Workspace path not found');
+
+    consoleSpy.mockRestore();
   });
 
-  describe('empty instances (AC: #6)', () => {
-    it('returns empty action when no instances', async () => {
-      const deps = createMockDeps({
-        listInstances: vi.fn().mockResolvedValue(makeListSuccess([])),
-      });
+  it('passes workspaceName to getInstanceInfo', async () => {
+    const deps = createMockDeps([{ action: 'exit' }]);
 
-      const result = await launchInteractiveMenu(deps);
+    await launchActionLoop('my-workspace', deps);
 
-      expect(result).toEqual({ ok: true, action: 'empty' });
-      expect(deps.renderMenu).toHaveBeenCalledWith([], expect.any(Function));
-    });
+    expect(deps.getInstanceInfo).toHaveBeenCalledWith('my-workspace');
   });
 
-  describe('action selection', () => {
-    it('calls attachInstance when attach action is selected', async () => {
-      const instances = [makeInstance({ name: 'alpha' })];
+  it('works without repoSlug (optional parameter)', async () => {
+    const deps = createMockDeps([{ action: 'attach' }, { action: 'exit' }]);
 
-      const renderMenu = vi
-        .fn()
-        .mockImplementation(
-          (_instances: Instance[], onAction: (action: InstanceAction, name: string) => void) => {
-            setTimeout(() => onAction('attach', 'alpha'), 0);
-            return { waitUntilExit: () => new Promise(() => {}) };
-          }
-        );
+    await launchActionLoop('alpha', deps);
 
-      const attachInstance = vi.fn().mockResolvedValue({ ok: true });
+    expect(deps.attachInstance).toHaveBeenCalledWith('alpha', undefined);
+  });
+});
 
-      const deps = createMockDeps({
-        listInstances: vi.fn().mockResolvedValue(makeListSuccess(instances)),
-        renderMenu,
-        attachInstance,
-      });
+// ─── Tests: launchInstancePicker ─────────────────────────────────────────────
 
-      const result = await launchInteractiveMenu(deps);
+describe('launchInstancePicker', () => {
+  it('returns selected result with workspace name', async () => {
+    const instances = [makeInstance({ name: 'alpha' }), makeInstance({ name: 'beta' })];
+    const deps: InstancePickerDeps = {
+      listInstances: vi.fn().mockResolvedValue(makeListSuccess(instances)),
+      renderPicker: vi.fn().mockResolvedValue('alpha'),
+    };
 
-      expect(result).toEqual({ ok: true, action: 'attached', instanceName: 'alpha' });
-      expect(attachInstance).toHaveBeenCalledWith('alpha', expect.anything());
-    });
+    const result = await launchInstancePicker(deps);
 
-    it('calls rebuildInstance when rebuild action is selected', async () => {
-      const instances = [makeInstance({ name: 'alpha' })];
-
-      const renderMenu = vi
-        .fn()
-        .mockImplementation(
-          (_instances: Instance[], onAction: (action: InstanceAction, name: string) => void) => {
-            setTimeout(() => onAction('rebuild', 'alpha'), 0);
-            return { waitUntilExit: () => new Promise(() => {}) };
-          }
-        );
-
-      const rebuildInstance = vi.fn().mockResolvedValue({
-        ok: true,
-        containerName: 'ae-alpha',
-        wasRunning: false,
-      });
-
-      const deps = createMockDeps({
-        listInstances: vi.fn().mockResolvedValue(makeListSuccess(instances)),
-        renderMenu,
-        rebuildInstance,
-      });
-
-      const result = await launchInteractiveMenu(deps);
-
-      expect(result).toEqual({ ok: true, action: 'rebuilt', instanceName: 'alpha' });
-      expect(rebuildInstance).toHaveBeenCalledWith('alpha', expect.anything(), { force: true });
-    });
-
-    it('calls removeInstance when remove action is selected', async () => {
-      const instances = [makeInstance({ name: 'alpha' })];
-
-      const renderMenu = vi
-        .fn()
-        .mockImplementation(
-          (_instances: Instance[], onAction: (action: InstanceAction, name: string) => void) => {
-            setTimeout(() => onAction('remove', 'alpha'), 0);
-            return { waitUntilExit: () => new Promise(() => {}) };
-          }
-        );
-
-      const removeInstance = vi.fn().mockResolvedValue({ ok: true });
-
-      const deps = createMockDeps({
-        listInstances: vi.fn().mockResolvedValue(makeListSuccess(instances)),
-        renderMenu,
-        removeInstance,
-      });
-
-      const result = await launchInteractiveMenu(deps);
-
-      expect(result).toEqual({ ok: true, action: 'removed', instanceName: 'alpha' });
-      expect(removeInstance).toHaveBeenCalledWith('alpha', expect.anything(), false);
-    });
+    expect(result).toEqual({ kind: 'selected', name: 'alpha' });
+    expect(deps.renderPicker).toHaveBeenCalledWith(instances);
   });
 
-  describe('user exit without selection', () => {
-    it('returns empty action when user exits menu', async () => {
-      const instances = [makeInstance({ name: 'alpha' })];
+  it('returns cancelled when user exits picker', async () => {
+    const instances = [makeInstance({ name: 'alpha' })];
+    const deps: InstancePickerDeps = {
+      listInstances: vi.fn().mockResolvedValue(makeListSuccess(instances)),
+      renderPicker: vi.fn().mockResolvedValue(null),
+    };
 
-      const renderMenu = vi.fn().mockImplementation(() => ({
-        waitUntilExit: () => Promise.resolve(),
-      }));
+    const result = await launchInstancePicker(deps);
 
-      const deps = createMockDeps({
-        listInstances: vi.fn().mockResolvedValue(makeListSuccess(instances)),
-        renderMenu,
-      });
+    expect(result).toEqual({ kind: 'cancelled' });
+  });
 
-      const result = await launchInteractiveMenu(deps);
+  it('returns cancelled when no instances exist', async () => {
+    const deps: InstancePickerDeps = {
+      listInstances: vi.fn().mockResolvedValue(makeListSuccess([])),
+      renderPicker: vi.fn().mockResolvedValue(null),
+    };
 
-      expect(result).toEqual({ ok: true, action: 'empty' });
-      expect(deps.attachInstance).not.toHaveBeenCalled();
-    });
+    const result = await launchInstancePicker(deps);
+
+    expect(result).toEqual({ kind: 'cancelled' });
+    expect(deps.renderPicker).toHaveBeenCalledWith([]);
+  });
+
+  it('returns error when listInstances fails', async () => {
+    const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const deps: InstancePickerDeps = {
+      listInstances: vi.fn().mockResolvedValue(makeListError()),
+      renderPicker: vi.fn(),
+    };
+
+    const result = await launchInstancePicker(deps);
+
+    expect(result).toEqual({ kind: 'error' });
+    expect(deps.renderPicker).not.toHaveBeenCalled();
+    expect(consoleSpy).toHaveBeenCalled();
+
+    consoleSpy.mockRestore();
   });
 });

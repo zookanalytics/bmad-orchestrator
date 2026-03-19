@@ -14,6 +14,7 @@ import { codeCommand } from './commands/code.js';
 import { completionCommand } from './commands/completion.js';
 import { createCommand } from './commands/create.js';
 import { listCommand } from './commands/list.js';
+import { onCommand } from './commands/on.js';
 import { purposeCommand } from './commands/purpose.js';
 import { rebuildCommand } from './commands/rebuild.js';
 import { removeCommand } from './commands/remove.js';
@@ -22,12 +23,9 @@ import { setupAudioCommand } from './commands/setup-audio.js';
 import { tmuxRestoreCommand } from './commands/tmux-restore.js';
 import { tmuxSaveCommand } from './commands/tmux-save.js';
 import { tmuxStatusCommand } from './commands/tmux-status.js';
-import { InteractiveMenu } from './components/InteractiveMenu.js';
-import { attachInstance, createAttachDefaultDeps } from './lib/attach-instance.js';
-import { launchInteractiveMenu } from './lib/interactive-menu.js';
+import { launchActionLoop, launchInstancePicker } from './lib/interactive-menu.js';
 import { listInstances } from './lib/list-instances.js';
-import { rebuildInstance, createRebuildDefaultDeps } from './lib/rebuild-instance.js';
-import { removeInstance, createRemoveDefaultDeps } from './lib/remove-instance.js';
+import { buildMenuDeps } from './lib/menu-deps.js';
 
 // Detect local/dev build: linked from monorepo or baked into image at /opt/agent-env-dev
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -49,6 +47,7 @@ program.addCommand(codeCommand);
 program.addCommand(rebuildCommand);
 program.addCommand(removeCommand);
 program.addCommand(purposeCommand);
+program.addCommand(onCommand);
 program.addCommand(reposCommand);
 program.addCommand(tmuxStatusCommand);
 program.addCommand(tmuxSaveCommand);
@@ -80,31 +79,51 @@ program.action(async () => {
     return;
   }
 
-  const result = await launchInteractiveMenu({
+  // Step 1: Pick an instance
+  const { Select } = await import('@inkjs/ui');
+
+  const pickerResult = await launchInstancePicker({
     listInstances,
-    attachInstance,
-    rebuildInstance,
-    removeInstance,
-    createAttachDeps: createAttachDefaultDeps,
-    createRebuildDeps: createRebuildDefaultDeps,
-    createRemoveDeps: createRemoveDefaultDeps,
-    renderMenu: (instances, onAction) => {
-      const { waitUntilExit } = render(
-        React.createElement(InteractiveMenu, { instances, onAction })
-      );
-      return { waitUntilExit };
+    renderPicker: (instances) => {
+      if (instances.length === 0) {
+        console.log('No instances found.');
+        console.log('Create one with: agent-env create <name> --repo <url>');
+        return Promise.resolve(null);
+      }
+
+      return new Promise((resolve) => {
+        const options = instances.map((inst) => ({
+          label: inst.name,
+          value: inst.name,
+        }));
+
+        const { unmount } = render(
+          React.createElement(() => {
+            return React.createElement(Select, {
+              options,
+              onChange: (value: string) => {
+                unmount();
+                resolve(value);
+              },
+            });
+          })
+        );
+      });
     },
   });
 
-  if (!result.ok) {
-    const { code, message, suggestion } = result.error;
-    console.error(formatError(createError(code, message, suggestion)));
+  if (pickerResult.kind === 'error') {
     process.exitCode = 1;
-  } else if (result.action === 'rebuilt') {
-    console.log(`\x1b[32m✓\x1b[0m Instance '${result.instanceName}' rebuilt successfully`);
-  } else if (result.action === 'removed') {
-    console.log(`\x1b[32m✓\x1b[0m Instance '${result.instanceName}' removed`);
+    return;
   }
+
+  if (pickerResult.kind === 'cancelled') {
+    return;
+  }
+
+  // Step 2: Launch action loop for selected instance
+  const menuDeps = buildMenuDeps();
+  await launchActionLoop(pickerResult.name, menuDeps);
 });
 
 // Parse arguments

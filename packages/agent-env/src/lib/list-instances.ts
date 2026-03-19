@@ -68,6 +68,78 @@ export interface ListInstancesDeps {
   stateFsDeps: Pick<StateFsDeps, 'readFile'>;
 }
 
+/** Lightweight instance info for single-instance lookups (avoids full listInstances scan) */
+export interface InstanceInfo {
+  /** Workspace name */
+  name: string;
+  /** Repo slug from state */
+  repoSlug: string;
+  /** User-set purpose, or null */
+  purpose: string | null;
+  /** Display status: running, stopped, not-found, orphaned, unknown */
+  status: InstanceDisplayStatus;
+}
+
+/** Dependencies for getInstanceInfo (subset of ListInstancesDeps — no gitDetector needed) */
+export interface GetInstanceInfoDeps {
+  container: ContainerLifecycle;
+  workspaceFsDeps: FsDeps;
+  stateFsDeps: Pick<StateFsDeps, 'readFile'>;
+}
+
+/**
+ * Get lightweight status info for a single workspace instance.
+ *
+ * Reads state.json and checks container status without scanning all workspaces
+ * or detecting git state. Intended for the interactive menu's action loop to
+ * refresh instance state between iterations.
+ *
+ * @param workspaceName - The workspace name to look up
+ * @param deps - Injectable dependencies for testing
+ * @returns InstanceInfo with name, repoSlug, purpose, and status
+ * @remarks Missing workspace directories or corrupted/missing state.json files
+ * return fallback values (e.g., repoSlug: 'unknown'). Only unexpected I/O
+ * errors (e.g., EACCES permission denied) will throw.
+ */
+export async function getInstanceInfo(
+  workspaceName: string,
+  deps?: Partial<GetInstanceInfoDeps>
+): Promise<InstanceInfo> {
+  const container = deps?.container ?? createContainerLifecycle();
+  const wsFsDeps = deps?.workspaceFsDeps;
+  const stateFsDeps = deps?.stateFsDeps;
+
+  // Step 1: Get workspace path and read state
+  const wsPath: WorkspacePath = getWorkspacePathByName(workspaceName, wsFsDeps);
+  const state: InstanceState = await readState(wsPath, stateFsDeps);
+
+  // Step 2: Check Docker availability and container status
+  const dockerAvailable = await container.isDockerAvailable();
+  const containerResult = dockerAvailable
+    ? await container.containerStatus(state.containerName)
+    : null;
+
+  // Step 3: Map to display status (same logic as listInstances)
+  let status: InstanceDisplayStatus;
+
+  if (!dockerAvailable || containerResult === null) {
+    status = 'unknown';
+  } else if (!containerResult.ok) {
+    status = 'unknown';
+  } else if (containerResult.status === 'not-found') {
+    status = 'orphaned';
+  } else {
+    status = containerResult.status;
+  }
+
+  return {
+    name: workspaceName,
+    repoSlug: state.repoSlug,
+    purpose: state.purpose,
+    status,
+  };
+}
+
 // ─── Factory ─────────────────────────────────────────────────────────────────
 
 /** Options for filtering the instance list */
@@ -160,7 +232,8 @@ export async function listInstances(
             // Use OrbStack domain label override if present, otherwise default .orb.local DNS
             // Label may contain comma-separated domains; use the first one
             const orbDomains = containerResult.labels['dev.orbstack.domains'];
-            const hostname = orbDomains?.split(',')[0]?.trim() || `${state.containerName}.orb.local`;
+            const hostname =
+              orbDomains?.split(',')[0]?.trim() || `${state.containerName}.orb.local`;
             sshConnection = `node@${hostname}`;
             // Append localhost port fallback when port is published to non-standard port
             const hostPort = containerResult.ports['22/tcp'];
