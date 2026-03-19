@@ -199,6 +199,31 @@ describe('launchActionLoop', () => {
     consoleSpy.mockRestore();
   });
 
+  it('handles getInstanceInfo throwing — prints error and continues loop', async () => {
+    const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+    let callCount = 0;
+    const getInstanceInfo = vi.fn().mockImplementation(() => {
+      callCount++;
+      if (callCount === 1) {
+        return Promise.reject(new Error('Workspace path not found'));
+      }
+      return Promise.resolve(makeInstanceInfo());
+    });
+
+    const deps = createMockDeps([{ action: 'exit' }], { getInstanceInfo });
+
+    await launchActionLoop('alpha', deps);
+
+    // Loop continued: getInstanceInfo called twice (first throws, second succeeds for exit)
+    expect(getInstanceInfo).toHaveBeenCalledTimes(2);
+    expect(consoleSpy).toHaveBeenCalled();
+    const errorOutput = String(consoleSpy.mock.calls[0]?.[0] ?? '');
+    expect(errorOutput).toContain('Workspace path not found');
+
+    consoleSpy.mockRestore();
+  });
+
   it('passes workspaceName to getInstanceInfo', async () => {
     const deps = createMockDeps([{ action: 'exit' }]);
 
@@ -219,7 +244,7 @@ describe('launchActionLoop', () => {
 // ─── Tests: launchInstancePicker ─────────────────────────────────────────────
 
 describe('launchInstancePicker', () => {
-  it('returns selected workspace name', async () => {
+  it('returns selected result with workspace name', async () => {
     const instances = [makeInstance({ name: 'alpha' }), makeInstance({ name: 'beta' })];
     const deps: InstancePickerDeps = {
       listInstances: vi.fn().mockResolvedValue(makeListSuccess(instances)),
@@ -228,11 +253,11 @@ describe('launchInstancePicker', () => {
 
     const result = await launchInstancePicker(deps);
 
-    expect(result).toBe('alpha');
+    expect(result).toEqual({ kind: 'selected', name: 'alpha' });
     expect(deps.renderPicker).toHaveBeenCalledWith(instances);
   });
 
-  it('returns null when user exits picker', async () => {
+  it('returns cancelled when user exits picker', async () => {
     const instances = [makeInstance({ name: 'alpha' })];
     const deps: InstancePickerDeps = {
       listInstances: vi.fn().mockResolvedValue(makeListSuccess(instances)),
@@ -241,10 +266,10 @@ describe('launchInstancePicker', () => {
 
     const result = await launchInstancePicker(deps);
 
-    expect(result).toBeNull();
+    expect(result).toEqual({ kind: 'cancelled' });
   });
 
-  it('returns null when no instances exist', async () => {
+  it('returns cancelled when no instances exist', async () => {
     const deps: InstancePickerDeps = {
       listInstances: vi.fn().mockResolvedValue(makeListSuccess([])),
       renderPicker: vi.fn().mockResolvedValue(null),
@@ -252,11 +277,11 @@ describe('launchInstancePicker', () => {
 
     const result = await launchInstancePicker(deps);
 
-    expect(result).toBeNull();
+    expect(result).toEqual({ kind: 'cancelled' });
     expect(deps.renderPicker).toHaveBeenCalledWith([]);
   });
 
-  it('returns null when listInstances fails', async () => {
+  it('returns error when listInstances fails', async () => {
     const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
     const deps: InstancePickerDeps = {
       listInstances: vi.fn().mockResolvedValue(makeListError()),
@@ -265,7 +290,7 @@ describe('launchInstancePicker', () => {
 
     const result = await launchInstancePicker(deps);
 
-    expect(result).toBeNull();
+    expect(result).toEqual({ kind: 'error' });
     expect(deps.renderPicker).not.toHaveBeenCalled();
     expect(consoleSpy).toHaveBeenCalled();
 

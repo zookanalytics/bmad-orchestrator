@@ -23,24 +23,9 @@ import { setupAudioCommand } from './commands/setup-audio.js';
 import { tmuxRestoreCommand } from './commands/tmux-restore.js';
 import { tmuxSaveCommand } from './commands/tmux-save.js';
 import { tmuxStatusCommand } from './commands/tmux-status.js';
-import { InteractiveMenu } from './components/InteractiveMenu.js';
-import {
-  createAttachDefaultDeps,
-  attachInstance as attachInstanceLib,
-} from './lib/attach-instance.js';
-import { createCodeDefaultDeps, codeInstance as codeInstanceLib } from './lib/code-instance.js';
-import {
-  launchActionLoop,
-  launchInstancePicker,
-  type InteractiveMenuDeps,
-} from './lib/interactive-menu.js';
-import { listInstances, getInstanceInfo as getInstanceInfoLib } from './lib/list-instances.js';
-import { createProgressLine } from './lib/progress-line.js';
-import { createPurposeDefaultDeps, setPurpose as setPurposeLib } from './lib/purpose-instance.js';
-import {
-  createRebuildDefaultDeps,
-  rebuildInstance as rebuildInstanceLib,
-} from './lib/rebuild-instance.js';
+import { launchActionLoop, launchInstancePicker } from './lib/interactive-menu.js';
+import { listInstances } from './lib/list-instances.js';
+import { buildMenuDeps } from './lib/menu-deps.js';
 
 // Detect local/dev build: linked from monorepo or baked into image at /opt/agent-env-dev
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -70,79 +55,6 @@ program.addCommand(tmuxRestoreCommand);
 program.addCommand(completionCommand);
 program.addCommand(setupAudioCommand);
 
-/**
- * Build the DI wrappers for the action loop.
- * Shared between the `on` command and the default no-arg flow.
- */
-function buildMenuDeps(): InteractiveMenuDeps {
-  return {
-    attachInstance: (wsName, slug) => {
-      const deps = createAttachDefaultDeps();
-      return attachInstanceLib(
-        wsName,
-        deps,
-        () => console.log('Starting container...'),
-        () => {
-          console.log();
-          console.log('Attaching to tmux session...');
-        },
-        slug
-      );
-    },
-    codeInstance: (wsName, slug) => {
-      const deps = createCodeDefaultDeps();
-      return codeInstanceLib(
-        wsName,
-        deps,
-        () => console.log('Starting container...'),
-        () => console.log('Opening VS Code...'),
-        slug
-      );
-    },
-    rebuildInstance: (wsName, slug) => {
-      const rebuildDeps = createRebuildDefaultDeps();
-      const progress = createProgressLine();
-      console.log(`Rebuilding instance '${wsName}'...`);
-      return rebuildInstanceLib(
-        wsName,
-        rebuildDeps,
-        { force: true, onProgress: progress.update },
-        slug
-      )
-        .then((result) => {
-          progress.clear();
-          return result;
-        })
-        .catch((err) => {
-          progress.clear();
-          throw err;
-        });
-    },
-    setPurpose: (wsName, value, slug) => {
-      const deps = createPurposeDefaultDeps();
-      return setPurposeLib(wsName, value, deps, slug);
-    },
-    getInstanceInfo: (wsName) => getInstanceInfoLib(wsName),
-    renderMenu: (instanceInfo) => {
-      return new Promise((resolve) => {
-        const { unmount } = render(
-          React.createElement(InteractiveMenu, {
-            instanceInfo,
-            onAction: (action) => {
-              unmount();
-              resolve({ action });
-            },
-            onSetPurpose: (value) => {
-              unmount();
-              resolve({ action: 'set-purpose' as const, purposeValue: value });
-            },
-          })
-        );
-      });
-    },
-  };
-}
-
 // Default action: interactive menu (TTY) or help (non-TTY)
 program.action(async () => {
   // Handle unknown commands passed as arguments
@@ -170,7 +82,7 @@ program.action(async () => {
   // Step 1: Pick an instance
   const { Select } = await import('@inkjs/ui');
 
-  const workspaceName = await launchInstancePicker({
+  const pickerResult = await launchInstancePicker({
     listInstances,
     renderPicker: (instances) => {
       if (instances.length === 0) {
@@ -200,13 +112,18 @@ program.action(async () => {
     },
   });
 
-  if (!workspaceName) {
+  if (pickerResult.kind === 'error') {
+    process.exitCode = 1;
+    return;
+  }
+
+  if (pickerResult.kind === 'cancelled') {
     return;
   }
 
   // Step 2: Launch action loop for selected instance
   const menuDeps = buildMenuDeps();
-  await launchActionLoop(workspaceName, menuDeps);
+  await launchActionLoop(pickerResult.name, menuDeps);
 });
 
 // Parse arguments

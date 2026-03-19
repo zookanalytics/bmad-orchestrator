@@ -25,6 +25,7 @@ async function waitFor(condition: () => boolean, timeoutMs = 5000): Promise<void
     if (condition()) return;
     await new Promise((resolve) => setTimeout(resolve, 20));
   }
+  throw new Error('waitFor timed out after ' + timeoutMs + 'ms');
 }
 
 // ─── Tests ──────────────────────────────────────────────────────────────────

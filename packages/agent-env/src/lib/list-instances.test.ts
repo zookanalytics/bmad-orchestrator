@@ -1385,19 +1385,23 @@ describe('getInstanceInfo', () => {
     expect(statusFn).toHaveBeenCalledWith('ae-my-repo-my-instance');
   });
 
-  it('throws when readState fails (e.g., workspace does not exist)', async () => {
+  it('returns fallback values when readState encounters ENOENT', async () => {
     const container = mockContainer();
     const wsFsDeps = mockFsDeps([]);
+    const err = new Error('ENOENT: no such file') as NodeJS.ErrnoException;
+    err.code = 'ENOENT';
     const stateFsDeps = {
-      readFile: vi.fn().mockRejectedValue(new Error('ENOENT: no such file')),
+      readFile: vi.fn().mockRejectedValue(err),
     };
 
-    await expect(
-      getInstanceInfo('nonexistent-workspace', {
-        container,
-        workspaceFsDeps: wsFsDeps,
-        stateFsDeps,
-      })
-    ).rejects.toThrow('ENOENT');
+    const result = await getInstanceInfo('nonexistent-workspace', {
+      container,
+      workspaceFsDeps: wsFsDeps,
+      stateFsDeps,
+    });
+
+    expect(result.name).toBe('nonexistent-workspace');
+    expect(result.repoSlug).toBe('unknown');
+    expect(result.purpose).toBeNull();
   });
 });

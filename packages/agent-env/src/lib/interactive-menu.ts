@@ -69,19 +69,19 @@ export async function launchActionLoop(
   repoSlug?: string
 ): Promise<void> {
   while (true) {
-    // Step 1: Get fresh instance info
-    const instanceInfo = await deps.getInstanceInfo(workspaceName);
-
-    // Step 2: Render menu and get user selection
-    const { action, purposeValue } = await deps.renderMenu(instanceInfo);
-
-    // Step 3: Exit if requested
-    if (action === 'exit') {
-      break;
-    }
-
-    // Step 4: Execute action
     try {
+      // Step 1: Get fresh instance info
+      const instanceInfo = await deps.getInstanceInfo(workspaceName);
+
+      // Step 2: Render menu and get user selection
+      const { action, purposeValue } = await deps.renderMenu(instanceInfo);
+
+      // Step 3: Exit if requested
+      if (action === 'exit') {
+        break;
+      }
+
+      // Step 4: Execute action
       let result: { ok: boolean; error?: { code: string; message: string; suggestion?: string } };
 
       switch (action) {
@@ -105,7 +105,7 @@ export async function launchActionLoop(
         console.error(formatError(createError(code, message, suggestion)));
       }
     } catch (err) {
-      // Unexpected errors — format and continue
+      // Unexpected errors (including getInstanceInfo / renderMenu failures) — format and continue
       const message = err instanceof Error ? err.message : String(err);
       console.error(formatError(createError('ACTION_ERROR', message)));
     }
@@ -114,15 +114,21 @@ export async function launchActionLoop(
 
 // ─── Instance Picker ─────────────────────────────────────────────────────────
 
+/** Discriminated union result from launchInstancePicker */
+export type PickerResult =
+  | { kind: 'selected'; name: string }
+  | { kind: 'cancelled' }
+  | { kind: 'error' };
+
 /**
  * Launch an instance picker for the default no-arg CLI flow.
  *
- * Lists instances and renders a picker. Returns the selected workspace name,
- * or null if the user exits or there's an error.
+ * Lists instances and renders a picker. Returns a discriminated union:
+ * - `{ kind: 'selected', name }` when a workspace is chosen
+ * - `{ kind: 'cancelled' }` when the user exits or there are no instances
+ * - `{ kind: 'error' }` when listing instances fails
  */
-// ─── Instance Picker ─────────────────────────────────────────────────────────
-
-export async function launchInstancePicker(deps: InstancePickerDeps): Promise<string | null> {
+export async function launchInstancePicker(deps: InstancePickerDeps): Promise<PickerResult> {
   const listResult = await deps.listInstances();
 
   if (!listResult.ok) {
@@ -130,8 +136,14 @@ export async function launchInstancePicker(deps: InstancePickerDeps): Promise<st
     console.error(
       formatError(createError(code, message, 'Check if ~/.agent-env/workspaces/ is accessible.'))
     );
-    return null;
+    return { kind: 'error' };
   }
 
-  return deps.renderPicker(listResult.instances);
+  const selected = await deps.renderPicker(listResult.instances);
+
+  if (selected === null) {
+    return { kind: 'cancelled' };
+  }
+
+  return { kind: 'selected', name: selected };
 }

@@ -97,7 +97,9 @@ export interface GetInstanceInfoDeps {
  * @param workspaceName - The workspace name to look up
  * @param deps - Injectable dependencies for testing
  * @returns InstanceInfo with name, repoSlug, purpose, and status
- * @throws If workspace does not exist or state.json is unreadable — callers should catch and handle
+ * @remarks Missing workspace directories or corrupted/missing state.json files
+ * return fallback values (e.g., repoSlug: 'unknown'). Only unexpected I/O
+ * errors (e.g., EACCES permission denied) will throw.
  */
 export async function getInstanceInfo(
   workspaceName: string,
