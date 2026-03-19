@@ -15,9 +15,10 @@ function makeFreshCache(latestVersion: string, offsetMs = 0): string {
   return JSON.stringify({ lastCheck: NOW - offsetMs, latestVersion });
 }
 
-function makeReadFile(content: string | Error) {
+function makeReadFile(content: string | Error | null) {
   return async (_path: string, _enc: BufferEncoding): Promise<string> => {
     if (content instanceof Error) throw content;
+    if (content === null) throw new Error('ENOENT');
     return content;
   };
 }
