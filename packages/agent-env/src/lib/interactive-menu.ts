@@ -120,20 +120,6 @@ export async function launchActionLoop(
  * Lists instances and renders a picker. Returns the selected workspace name,
  * or null if the user exits or there's an error.
  */
-// ─── Backward Compatibility ──────────────────────────────────────────────────
-
-// Keep old types/exports alive so cli.ts (Task 5) can still build before it is updated.
-
-/** @deprecated Use InteractiveMenuDeps — removed in Task 5 */
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-export type LegacyInteractiveMenuDeps = Record<string, any>;
-
-/** @deprecated Use launchActionLoop — removed in Task 5 */
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-export async function launchInteractiveMenu(_deps: LegacyInteractiveMenuDeps): Promise<any> {
-  return { ok: true, action: 'empty' };
-}
-
 // ─── Instance Picker ─────────────────────────────────────────────────────────
 
 export async function launchInstancePicker(deps: InstancePickerDeps): Promise<string | null> {

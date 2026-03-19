@@ -15,16 +15,6 @@ import type { InstanceDisplayStatus, InstanceInfo } from '../lib/list-instances.
 
 export type MenuAction = 'attach' | 'code' | 'rebuild' | 'set-purpose' | 'exit';
 
-/** @deprecated Use MenuAction instead — kept for backward compatibility until interactive-menu.ts is replaced (Task 3) */
-export type InstanceAction = 'attach' | 'rebuild' | 'purpose' | 'remove';
-
-/** @deprecated Kept for backward compatibility until cli.ts is updated (Task 5) */
-export interface InteractiveMenuProps {
-  instances: Array<{ name: string; [key: string]: unknown }>;
-  onAction: (action: string, instanceName: string) => void;
-  terminalWidth?: number;
-}
-
 export interface ActionMenuProps {
   instanceInfo: InstanceInfo;
   onAction: (action: MenuAction) => void;
