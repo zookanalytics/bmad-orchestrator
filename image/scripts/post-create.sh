@@ -226,44 +226,44 @@ fi
 
 echo "✓ CLI tools installed"
 
-# Step 9: Install shared agent skills
+# Step 8: Install shared agent skills
 echo ""
-echo "[Step 9] Installing shared agent skills..."
+echo "[Step 8] Installing shared agent skills..."
 if /usr/local/bin/install-shared-skills.sh; then
   echo "✓ Shared agent skills installed"
 else
   echo "⚠ Shared agent skills installation had issues (see above)"
 fi
 
-# Step 10: Start dnsmasq for DNS logging
+# Step 9: Start dnsmasq for DNS logging
 echo ""
-echo "[Step 10] Starting dnsmasq DNS forwarder..."
+echo "[Step 9] Starting dnsmasq DNS forwarder..."
 sudo /usr/local/bin/start-dnsmasq.sh
 
-# Step 11: Start ulogd for firewall logging
+# Step 10: Start ulogd for firewall logging
 echo ""
-echo "[Step 11] Starting ulogd firewall logger..."
+echo "[Step 10] Starting ulogd firewall logger..."
 sudo /usr/local/bin/start-ulogd.sh
 echo "✓ ulogd started"
 
-# Step 12: Initialize firewall
+# Step 11: Initialize firewall
 echo ""
-echo "[Step 12] Initializing firewall rules..."
+echo "[Step 11] Initializing firewall rules..."
 sudo /usr/local/bin/init-firewall.sh
 echo "✓ Firewall initialized"
 
-# Step 13: Run sanity check
+# Step 12: Run sanity check
 echo ""
-echo "[Step 13] Running sanity check..."
+echo "[Step 12] Running sanity check..."
 if /usr/local/bin/devcontainer-sanity-check.sh; then
   echo "✓ Sanity check passed"
 else
   echo "⚠ Sanity check reported failures (see above) - container continues"
 fi
 
-# Step 14: Run project-specific post-create if it exists
+# Step 13: Run project-specific post-create if it exists
 echo ""
-echo "[Step 14] Running project-specific setup..."
+echo "[Step 13] Running project-specific setup..."
 PROJECT_POST_CREATE="$WORKSPACE_ROOT/.devcontainer/post-create-project.sh"
 if [ -f "$PROJECT_POST_CREATE" ]; then
     echo "Running $PROJECT_POST_CREATE..."
