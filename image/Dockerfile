@@ -289,6 +289,7 @@ RUN mkdir -p /etc/gemini-code/hooks && \
   ln -s /etc/claude-code/hooks/prevent-env-leakage.py /etc/gemini-code/hooks/ && \
   ln -s /etc/claude-code/hooks/prevent-bash-sensitive-args.py /etc/gemini-code/hooks/ && \
   ln -s /etc/claude-code/hooks/prevent-sensitive-files.py /etc/gemini-code/hooks/ && \
+  ln -s /etc/claude-code/hooks/enforce-commit-skill.sh /etc/gemini-code/hooks/ && \
   ln -s /etc/claude-code/hooks/lib /etc/gemini-code/hooks/
 
 # Devcontainer metadata — infrastructure defaults for all projects
