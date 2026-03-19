@@ -1,5 +1,21 @@
 # @zookanalytics/agent-env
 
+## 0.10.0
+
+### Minor Changes
+
+- [#69](https://github.com/zookanalytics/bmad-orchestrator/pull/69) [`496ca81`](https://github.com/zookanalytics/bmad-orchestrator/commit/496ca81392fbb7cd04e6cd5f470cb6bc7a6ca377) Thanks [@johnzook](https://github.com/johnzook)! - Add `on` command for persistent interactive instance menu
+
+  `agent-env on <name>` opens a persistent action menu for a named instance with options to Attach, Open in VS Code, Rebuild, Set Purpose, or Exit. The menu loops after each action, refreshing instance state between iterations. Also replaces the default no-arg interactive menu with an instance picker followed by the same action loop.
+
+- [#75](https://github.com/zookanalytics/bmad-orchestrator/pull/75) [`eadc2f6`](https://github.com/zookanalytics/bmad-orchestrator/commit/eadc2f6239415ec5459f66aef8e6e29786707482) Thanks [@johnzook](https://github.com/johnzook)! - Add non-blocking update check that notifies host users when a newer version is available on npm
+
+  On CLI startup, an async registry check fires concurrently with command execution. After the command completes, a notice is printed to stderr if a newer version exists. Results are cached for 1 hour at `~/.agent-env/update-check.json`. The check is suppressed in non-TTY environments, inside containers, and during local development.
+
+### Patch Changes
+
+- [#66](https://github.com/zookanalytics/bmad-orchestrator/pull/66) [`e886f2f`](https://github.com/zookanalytics/bmad-orchestrator/commit/e886f2fb834975e6df3f1a117ac284be4c8f4dbe) Thanks [@johnzook](https://github.com/johnzook)! - Fix tmux session starting in /workspaces instead of repo directory after container rebuild
+
 ## 0.9.1
 
 ### Patch Changes
