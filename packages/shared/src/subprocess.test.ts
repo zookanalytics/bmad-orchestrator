@@ -211,6 +211,38 @@ describe('subprocess', () => {
       expect(result.ok).toBe(true);
       expect(lines).toEqual(['line one', 'line two', 'error line']);
     });
+
+    it('splits on carriage returns so \\r-based progress lines are separate', async () => {
+      const { EventEmitter } = await import('node:events');
+      const mockStdout = new EventEmitter();
+
+      const resultData = { failed: false, stdout: '', stderr: '', exitCode: 0 };
+      const subprocess = Object.assign(Promise.resolve(resultData), {
+        stdout: mockStdout,
+        stderr: undefined,
+      });
+      const mockExecutor = vi.fn().mockReturnValue(subprocess) as unknown as Executor;
+
+      const exec = createExecutor(mockExecutor);
+      const lines: string[] = [];
+      const onLine = vi.fn((line: string) => lines.push(line));
+
+      const execPromise = exec('test', [], { onLine });
+
+      // Simulate installer progress using \r to overwrite in-place
+      mockStdout.emit('data', 'Downloading 10%\rDownloading 50%\rDownloading 100%\n');
+      // Also test bare \r\n (Windows-style)
+      mockStdout.emit('data', 'Step 1 done\r\nStep 2 done\r\n');
+
+      await execPromise;
+      expect(lines).toEqual([
+        'Downloading 10%',
+        'Downloading 50%',
+        'Downloading 100%',
+        'Step 1 done',
+        'Step 2 done',
+      ]);
+    });
   });
 
   describe('default execute export', () => {
