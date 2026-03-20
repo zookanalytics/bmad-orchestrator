@@ -48,7 +48,7 @@ export function createExecutor(executor: Executor = execa) {
         stderr?: NodeJS.ReadableStream;
       };
       const handleChunk = (chunk: Buffer | string) => {
-        for (const line of chunk.toString().split('\n')) {
+        for (const line of chunk.toString().split(/\r?\n|\r/)) {
           const trimmed = line.trim();
           if (trimmed) onLine(trimmed);
         }
