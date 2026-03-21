@@ -29,10 +29,10 @@ describe('completion', () => {
       it('completes instance names and --repo for attach and purpose', () => {
         const script = generateCompletionScript('bash');
         expect(script).toContain('~/.agent-env/workspaces');
-        expect(script).toContain('attach|purpose');
+        expect(script).toContain('attach|path|purpose');
         // [^;]* constrains match to within the case block (before ;;)
-        expect(script).toMatch(/attach\|purpose\)[^;]*--repo/);
-        expect(script).toMatch(/attach\|purpose\)[^;]*_agent_env_instances/);
+        expect(script).toMatch(/attach\|path\|purpose\)[^;]*--repo/);
+        expect(script).toMatch(/attach\|path\|purpose\)[^;]*_agent_env_instances/);
       });
 
       it('completes options and instance names for rebuild', () => {
@@ -111,6 +111,17 @@ describe('completion', () => {
         const instanceFn = script.match(/_agent_env_instances\(\)\s*\{([\s\S]*?)\n\}/)?.[1] ?? '';
         expect(instanceFn).not.toContain('${base##*-}');
       });
+
+      it('includes aecd shell function with completions', () => {
+        const script = generateCompletionScript('bash');
+        expect(script).toContain('aecd()');
+        expect(script).toContain('agent-env path');
+        expect(script).toContain('_aecd_completions()');
+        expect(script).toContain('complete -F _aecd_completions aecd');
+        // aecd completions should use instance names and --repo
+        expect(script).toMatch(/_aecd_completions\(\)[\s\S]*_agent_env_instances/);
+        expect(script).toMatch(/_aecd_completions\(\)[\s\S]*_agent_env_repos/);
+      });
     });
 
     describe('zsh', () => {
@@ -118,8 +129,10 @@ describe('completion', () => {
         const script = generateCompletionScript('zsh');
         expect(script).toContain('#compdef agent-env');
         expect(script).toContain('_agent_env');
-        // Final line should register the completion function, not call it directly
-        expect(script.trim().endsWith('compdef _agent_env agent-env')).toBe(true);
+        // Should register the main completion function
+        expect(script).toContain('compdef _agent_env agent-env');
+        // Final line should register the aecd completion function
+        expect(script.trim().endsWith('compdef _aecd aecd')).toBe(true);
       });
 
       it('includes all registered commands with descriptions', () => {
@@ -139,7 +152,7 @@ describe('completion', () => {
         const script = generateCompletionScript('zsh');
         expect(script).toContain('_agent_env_instances');
         expect(script).toContain('~/.agent-env/workspaces');
-        expect(script).toMatch(/attach\|purpose\)[^;]*--repo/);
+        expect(script).toMatch(/attach\|path\|purpose\)[^;]*--repo/);
       });
 
       it('completes options and instance names for rebuild', () => {
@@ -208,6 +221,17 @@ describe('completion', () => {
         expect(instanceFn).toContain('instances+=("${base}")');
         // Should NOT extract suffix after last hyphen (old broken pattern)
         expect(instanceFn).not.toContain('${base##*-}');
+      });
+
+      it('includes aecd shell function with completions', () => {
+        const script = generateCompletionScript('zsh');
+        expect(script).toContain('aecd()');
+        expect(script).toContain('agent-env path');
+        expect(script).toContain('_aecd()');
+        expect(script).toContain('compdef _aecd aecd');
+        // aecd zsh completer should wire instance names and repo
+        expect(script).toMatch(/_aecd\(\)[^}]*_agent_env_instances/s);
+        expect(script).toMatch(/_aecd\(\)[^}]*_agent_env_repos/s);
       });
     });
   });
