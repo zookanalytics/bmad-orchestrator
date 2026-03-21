@@ -2,12 +2,10 @@
 set -euo pipefail  # Exit on error, undefined vars, and pipeline failures
 IFS=$'\n\t'       # Stricter word splitting
 
-# Detect workspace root - environment variable or git root fallback
-# SECURITY: This script runs as root. The git command is safe because:
-# 1. git rev-parse only reads .git/config, doesn't execute arbitrary code
-# 2. WORKSPACE_ROOT is only used to read allowed-domains.txt (validated by process_domains_file)
-# 3. A malicious .git could at worst cause wrong path detection, not code execution
-WORKSPACE_ROOT="${WORKSPACE_ROOT:-$(git rev-parse --show-toplevel 2>/dev/null || pwd)}"
+# Note: Domain-to-IP resolution is now handled by dnsmasq's --ipset feature
+# (see start-dnsmasq.sh). This script no longer reads allowed-domains.txt or
+# resolves domains — it only creates the ipset, fetches GitHub CIDR ranges,
+# and sets up iptables rules. dnsmasq populates the ipset reactively from DNS.
 
 # SECURITY NOTE: This script temporarily sets ACCEPT policies during execution
 # to allow re-runs. If the script fails mid-execution, the error trap handler
@@ -95,43 +93,35 @@ while read -r cidr; do
     ipset add allowed-domains "$cidr"
 done < <(echo "$gh_ranges" | jq -r '(.web + .api + .git)[]' | aggregate -q)
 
-# Process domain files
-process_domains_file() {
-    local domains_file="$1"
-    if [ ! -f "$domains_file" ]; then
-        return
+# Domain-to-IP resolution is handled by dnsmasq's --ipset feature (configured in
+# start-dnsmasq.sh). When a DNS query matches an allowed domain, dnsmasq automatically
+# adds the resolved IP to the 'allowed-domains' ipset. This solves the dynamic IP
+# problem — IPs are learned at query time rather than resolved once at startup.
+#
+# Restart dnsmasq so it picks up any new domains added to allowed-domains.txt
+# since the last run, and re-learns IPs into the freshly created ipset.
+if pgrep -x dnsmasq >/dev/null 2>&1; then
+    echo "Restarting dnsmasq to pick up domain changes..."
+    pkill -x dnsmasq || true
+    # Wait for dnsmasq to fully release port 53 before restarting
+    for _ in 1 2 3 4 5; do
+        pgrep -x dnsmasq >/dev/null 2>&1 || break
+        sleep 1
+    done
+    if pgrep -x dnsmasq >/dev/null 2>&1; then
+        echo "WARNING: dnsmasq did not stop within 5 seconds, killing forcefully"
+        pkill -9 -x dnsmasq || true
+        sleep 1
     fi
-
-    echo "Reading allowed domains from $domains_file..."
-    while IFS= read -r line; do
-        [[ -z "$line" || "$line" =~ ^[[:space:]]*# ]] && continue
-
-        domain=$(echo "$line" | xargs)
-        echo "Resolving $domain..."
-        ips=$(dig +noall +answer A "$domain" | awk '$4 == "A" {print $5}')
-        if [ -z "$ips" ]; then
-            echo "WARNING: Failed to resolve $domain, skipping"
-            continue
-        fi
-
-        while read -r ip; do
-            if [[ ! "$ip" =~ ^[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}$ ]]; then
-                echo "WARNING: Invalid IP from DNS for $domain: $ip"
-                continue
-            fi
-            if ! ipset test -q allowed-domains "$ip"; then
-                echo "Adding $ip for $domain"
-                ipset add allowed-domains "$ip"
-            fi
-        done < <(echo "$ips")
-    done < "$domains_file"
-}
-
-# Process base domains (from image)
-process_domains_file "/etc/allowed-domains.txt"
-
-# Process project-specific domains (if present)
-process_domains_file "$WORKSPACE_ROOT/.devcontainer/allowed-domains.txt"
+else
+    echo "Starting dnsmasq (not currently running)..."
+fi
+WORKSPACE_ROOT="${WORKSPACE_ROOT:-}" /usr/local/bin/start-dnsmasq.sh
+# Wait for dnsmasq to be ready to serve DNS queries
+for _ in 1 2 3 4 5; do
+    dig +short +timeout=1 +tries=1 localhost @127.0.0.1 >/dev/null 2>&1 && break
+    sleep 1
+done
 
 # Get host IP from default route
 HOST_IP=$(ip route | grep default | cut -d" " -f3)
@@ -160,6 +150,13 @@ iptables -A OUTPUT -j NFLOG --nflog-group 1 --nflog-prefix "FIREWALL-BLOCK: "
 # Reject remaining traffic immediately (instead of DROP timeout)
 iptables -A OUTPUT -j REJECT --reject-with icmp-net-unreachable
 
+# Prime the ipset by resolving a key domain through dnsmasq. The dig uses UDP/53
+# which is already allowed above. dnsmasq's --ipset adds the resolved IP to the
+# ipset on response. GitHub CIDRs from /meta already cover api.github.com, but
+# this ensures the ipset also has the exact IP for the verification curl below.
+echo "Priming ipset via DNS lookups..."
+dig +short @127.0.0.1 api.github.com >/dev/null 2>&1 || true
+
 # Set default policies to DROP as the final step
 # This is done AFTER all rules are added to prevent blocking traffic during setup
 iptables -P INPUT DROP
@@ -170,6 +167,7 @@ iptables -P OUTPUT DROP
 trap - ERR EXIT
 
 echo "Firewall configuration complete"
+
 echo "Verifying firewall rules..."
 if curl --connect-timeout 5 https://example.com >/dev/null 2>&1; then
     echo "ERROR: Firewall verification failed - was able to reach https://example.com"
