@@ -34,7 +34,8 @@ else
     echo "WARNING: No upstream DNS found, falling back to Docker DNS ($UPSTREAM_DNS)"
 fi
 
-# Detect workspace root for project-specific allowed domains
+# Detect workspace root for project-specific allowed domains.
+# Prefer WORKSPACE_ROOT from caller (avoids running git as root).
 WORKSPACE_ROOT="${WORKSPACE_ROOT:-$(git rev-parse --show-toplevel 2>/dev/null || pwd)}"
 
 # Generate --ipset directives from allowed-domains.txt files

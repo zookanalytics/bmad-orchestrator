@@ -104,11 +104,21 @@ if pgrep -x dnsmasq >/dev/null 2>&1; then
     echo "Restarting dnsmasq to pick up domain changes..."
     pkill -x dnsmasq || true
     # Wait for dnsmasq to fully release port 53 before restarting
-    for i in 1 2 3 4 5; do
+    for _ in 1 2 3 4 5; do
         pgrep -x dnsmasq >/dev/null 2>&1 || break
         sleep 1
     done
-    /usr/local/bin/start-dnsmasq.sh
+    if pgrep -x dnsmasq >/dev/null 2>&1; then
+        echo "WARNING: dnsmasq did not stop within 5 seconds, killing forcefully"
+        pkill -9 -x dnsmasq || true
+        sleep 1
+    fi
+    WORKSPACE_ROOT="${WORKSPACE_ROOT:-}" /usr/local/bin/start-dnsmasq.sh
+    # Wait for dnsmasq to be ready to serve DNS queries
+    for _ in 1 2 3 4 5; do
+        dig +short +timeout=1 +tries=1 localhost @127.0.0.1 >/dev/null 2>&1 && break
+        sleep 1
+    done
 fi
 
 # Get host IP from default route
@@ -138,9 +148,10 @@ iptables -A OUTPUT -j NFLOG --nflog-group 1 --nflog-prefix "FIREWALL-BLOCK: "
 # Reject remaining traffic immediately (instead of DROP timeout)
 iptables -A OUTPUT -j REJECT --reject-with icmp-net-unreachable
 
-# Prime the ipset by resolving key domains through dnsmasq BEFORE setting DROP.
-# dnsmasq's --ipset feature adds resolved IPs on DNS response, but the ipset starts
-# empty (except GitHub CIDRs). Pre-resolving ensures verification curls succeed.
+# Prime the ipset by resolving a key domain through dnsmasq. The dig uses UDP/53
+# which is already allowed above. dnsmasq's --ipset adds the resolved IP to the
+# ipset on response. GitHub CIDRs from /meta already cover api.github.com, but
+# this ensures the ipset also has the exact IP for the verification curl below.
 echo "Priming ipset via DNS lookups..."
 dig +short api.github.com >/dev/null 2>&1 || true
 
