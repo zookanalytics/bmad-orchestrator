@@ -1,5 +1,15 @@
 # @zookanalytics/agent-env
 
+## 0.11.0
+
+### Minor Changes
+
+- [#82](https://github.com/zookanalytics/bmad-orchestrator/pull/82) [`2cfb078`](https://github.com/zookanalytics/bmad-orchestrator/commit/2cfb0788e3c35eb875d797d66ca25a05fc34f6a7) Thanks [@johnzook](https://github.com/johnzook)! - Add `agent-env path <name>` command and `aecd` shell function for quickly navigating to instance host directories with tab completion
+
+### Patch Changes
+
+- [#83](https://github.com/zookanalytics/bmad-orchestrator/pull/83) [`391e340`](https://github.com/zookanalytics/bmad-orchestrator/commit/391e340a63a04f1ea9604729f092d7fcca683064) Thanks [@johnzook](https://github.com/johnzook)! - Use dnsmasq ipset for reactive domain-to-IP resolution in firewall, fixing dynamic IP staleness for Google/Gemini APIs
+
 ## 0.10.0
 
 ### Minor Changes
