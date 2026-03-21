@@ -174,10 +174,16 @@ aecd() {
 _aecd_completions() {
   local cur="\${COMP_WORDS[COMP_CWORD]}"
   local prev="\${COMP_WORDS[COMP_CWORD-1]}"
+  local i has_repo=0
+  for ((i=1; i < COMP_CWORD; i++)); do
+    [[ "\${COMP_WORDS[i]}" == "--repo" ]] && has_repo=1 && break
+  done
   if [[ "\${prev}" == "--repo" ]]; then
     COMPREPLY=($(compgen -W "$(_agent_env_repos)" -- "\${cur}"))
+  elif [[ "\${cur}" == -* && \${has_repo} -eq 0 ]]; then
+    COMPREPLY=($(compgen -W "--repo" -- "\${cur}"))
   else
-    COMPREPLY=($(compgen -W "--repo $(_agent_env_instances)" -- "\${cur}"))
+    COMPREPLY=($(compgen -W "$(_agent_env_instances)" -- "\${cur}"))
   fi
 }
 
@@ -302,6 +308,7 @@ ${commandDescriptions.map((desc) => `    '${desc}'`).join('\n')}
 compdef _agent_env agent-env
 
 # aecd: cd into an instance's host directory
+# Note: requires eval installation (not fpath autoload) for the function to be available
 aecd() {
   local dir
   dir="$(agent-env path "$@")" || return 1
