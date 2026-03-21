@@ -113,13 +113,15 @@ if pgrep -x dnsmasq >/dev/null 2>&1; then
         pkill -9 -x dnsmasq || true
         sleep 1
     fi
-    WORKSPACE_ROOT="${WORKSPACE_ROOT:-}" /usr/local/bin/start-dnsmasq.sh
-    # Wait for dnsmasq to be ready to serve DNS queries
-    for _ in 1 2 3 4 5; do
-        dig +short +timeout=1 +tries=1 localhost @127.0.0.1 >/dev/null 2>&1 && break
-        sleep 1
-    done
+else
+    echo "Starting dnsmasq (not currently running)..."
 fi
+WORKSPACE_ROOT="${WORKSPACE_ROOT:-}" /usr/local/bin/start-dnsmasq.sh
+# Wait for dnsmasq to be ready to serve DNS queries
+for _ in 1 2 3 4 5; do
+    dig +short +timeout=1 +tries=1 localhost @127.0.0.1 >/dev/null 2>&1 && break
+    sleep 1
+done
 
 # Get host IP from default route
 HOST_IP=$(ip route | grep default | cut -d" " -f3)
@@ -153,7 +155,7 @@ iptables -A OUTPUT -j REJECT --reject-with icmp-net-unreachable
 # ipset on response. GitHub CIDRs from /meta already cover api.github.com, but
 # this ensures the ipset also has the exact IP for the verification curl below.
 echo "Priming ipset via DNS lookups..."
-dig +short api.github.com >/dev/null 2>&1 || true
+dig +short @127.0.0.1 api.github.com >/dev/null 2>&1 || true
 
 # Set default policies to DROP as the final step
 # This is done AFTER all rules are added to prevent blocking traffic during setup

@@ -53,8 +53,17 @@ generate_ipset_args() {
     echo "Generating ipset directives from $domains_file..."
     while IFS= read -r line; do
         [[ -z "$line" || "$line" =~ ^[[:space:]]*# ]] && continue
-        domain=$(echo "$line" | xargs)
+        # Strip inline comments and trim whitespace, take first token as domain
+        local trimmed
+        trimmed=$(echo "$line" | xargs)
+        [ -z "$trimmed" ] && continue
+        local domain="${trimmed%%[[:space:]]*}"
         [ -z "$domain" ] && continue
+        # Validate domain format: labels of letters/digits/hyphens separated by dots
+        if [[ ! "$domain" =~ ^([A-Za-z0-9]([A-Za-z0-9-]{0,61}[A-Za-z0-9])?\.)+[A-Za-z]{2,63}$ ]]; then
+            echo "  WARNING: Skipping invalid domain '$domain' in $domains_file"
+            continue
+        fi
         IPSET_ARGS+=("--ipset=/${domain}/allowed-domains")
         echo "  ipset: $domain -> allowed-domains"
     done < "$domains_file"
