@@ -16,6 +16,7 @@ const COMMANDS = [
   'list',
   'ps',
   'attach',
+  'path',
   'rebuild',
   'remove',
   'repos',
@@ -114,7 +115,7 @@ _agent_env_completions() {
 
   # Complete based on command
   case "\${prev}" in
-    attach|purpose)
+    attach|path|purpose)
       local instances
       instances="$(_agent_env_instances)"
       COMPREPLY=($(compgen -W "--repo \${instances}" -- "\${cur}"))
@@ -161,7 +162,26 @@ _agent_env_completions() {
   return 0
 }
 
-complete -F _agent_env_completions agent-env`;
+complete -F _agent_env_completions agent-env
+
+# aecd: cd into an instance's host directory
+aecd() {
+  local dir
+  dir="$(agent-env path "$@")" || return 1
+  cd "\${dir}" || return 1
+}
+
+_aecd_completions() {
+  local cur="\${COMP_WORDS[COMP_CWORD]}"
+  local prev="\${COMP_WORDS[COMP_CWORD-1]}"
+  if [[ "\${prev}" == "--repo" ]]; then
+    COMPREPLY=($(compgen -W "$(_agent_env_repos)" -- "\${cur}"))
+  else
+    COMPREPLY=($(compgen -W "--repo $(_agent_env_instances)" -- "\${cur}"))
+  fi
+}
+
+complete -F _aecd_completions aecd`;
 }
 
 function generateZshCompletion(): string {
@@ -170,6 +190,7 @@ function generateZshCompletion(): string {
     'list:List all instances',
     'ps:List all instances (alias)',
     'attach:Attach to an instance tmux session',
+    'path:Print host directory path for an instance',
     'rebuild:Rebuild an instance container',
     'remove:Remove an instance',
     'repos:List tracked repositories',
@@ -233,7 +254,7 @@ ${commandDescriptions.map((desc) => `    '${desc}'`).join('\n')}
       ;;
     args)
       case $words[1] in
-        attach|purpose)
+        attach|path|purpose)
           _arguments \\
             '--repo[Repo slug to scope lookup]:slug:_agent_env_repos' \\
             '1:instance:_agent_env_instances'
@@ -278,5 +299,20 @@ ${commandDescriptions.map((desc) => `    '${desc}'`).join('\n')}
   esac
 }
 
-compdef _agent_env agent-env`;
+compdef _agent_env agent-env
+
+# aecd: cd into an instance's host directory
+aecd() {
+  local dir
+  dir="$(agent-env path "$@")" || return 1
+  cd "\${dir}" || return 1
+}
+
+_aecd() {
+  _arguments \\
+    '--repo[Repo slug to scope lookup]:slug:_agent_env_repos' \\
+    '1:instance:_agent_env_instances'
+}
+
+compdef _aecd aecd`;
 }

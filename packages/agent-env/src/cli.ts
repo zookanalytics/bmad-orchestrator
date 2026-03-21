@@ -16,6 +16,7 @@ import { completionCommand } from './commands/completion.js';
 import { createCommand } from './commands/create.js';
 import { listCommand } from './commands/list.js';
 import { onCommand } from './commands/on.js';
+import { pathCommand } from './commands/path.js';
 import { purposeCommand } from './commands/purpose.js';
 import { rebuildCommand } from './commands/rebuild.js';
 import { removeCommand } from './commands/remove.js';
@@ -46,6 +47,7 @@ program
 program.addCommand(createCommand);
 program.addCommand(listCommand);
 program.addCommand(attachCommand);
+program.addCommand(pathCommand);
 program.addCommand(codeCommand);
 program.addCommand(rebuildCommand);
 program.addCommand(removeCommand);
