@@ -5,38 +5,61 @@
  * - Command name completion for all registered commands
  * - Dynamic workspace name completion for commands that accept instance names
  * - Repo slug completion for --repo options
+ *
+ * Command list is derived from the program at runtime via extractCompletionCommands(),
+ * so new commands automatically get completion without manual updates.
  */
+
+import type { Command } from 'commander';
 
 /** Supported shell types for completion */
 export type ShellType = 'bash' | 'zsh';
 
-/** All registered agent-env commands */
-const COMMANDS = [
-  'create',
-  'list',
-  'ps',
-  'attach',
-  'path',
-  'rebuild',
-  'shutdown',
-  'remove',
-  'repos',
-  'purpose',
-  'tmux-status',
-  'completion',
-];
+/** Command metadata for completion generation */
+export interface CompletionCommandMeta {
+  name: string;
+  description: string;
+  aliases: string[];
+}
+
+/**
+ * Commands excluded from shell completion (internal/container-only).
+ * All other commands registered on the program are included automatically.
+ */
+export const COMPLETION_EXCLUDED_COMMANDS = new Set(['tmux-save', 'tmux-restore', 'setup-audio']);
+
+/**
+ * Extract completion command metadata from a Commander program.
+ * Includes all commands except those in the exclusion set.
+ */
+export function extractCompletionCommands(
+  program: Command,
+  excluded: Set<string> = COMPLETION_EXCLUDED_COMMANDS
+): CompletionCommandMeta[] {
+  return program.commands
+    .filter((cmd) => !excluded.has(cmd.name()))
+    .map((cmd) => ({
+      name: cmd.name(),
+      description: cmd.description().split('\n')[0],
+      aliases: cmd.aliases(),
+    }));
+}
 
 /**
  * Generate a shell completion script for the specified shell
  * @param shell - The target shell type ('bash' or 'zsh')
+ * @param commands - Command metadata to include in completion
  * @returns The completion script as a string
  */
-export function generateCompletionScript(shell: ShellType): string {
+export function generateCompletionScript(
+  shell: ShellType,
+  commands: CompletionCommandMeta[]
+): string {
   switch (shell) {
     case 'bash':
-      return generateBashCompletion();
+      return generateBashCompletion(commands);
     case 'zsh':
-      return generateZshCompletion();
+      return generateZshCompletion(commands);
   }
 }
 
@@ -68,8 +91,9 @@ export function getInstallInstructions(): string {
     agent-env completion zsh > ~/.zsh/completions/_agent-env`;
 }
 
-function generateBashCompletion(): string {
-  const commandList = COMMANDS.join(' ');
+function generateBashCompletion(commands: CompletionCommandMeta[]): string {
+  const allNames = commands.flatMap((c) => [c.name, ...c.aliases]);
+  const commandList = allNames.join(' ');
 
   return `#!/usr/bin/env bash
 # agent-env bash completion script
@@ -116,7 +140,7 @@ _agent_env_completions() {
 
   # Complete based on command
   case "\${prev}" in
-    attach|path|purpose)
+    on|code|attach|path|purpose)
       local instances
       instances="$(_agent_env_instances)"
       COMPREPLY=($(compgen -W "--repo \${instances}" -- "\${cur}"))
@@ -134,12 +158,6 @@ _agent_env_completions() {
       local instances
       instances="$(_agent_env_instances)"
       COMPREPLY=($(compgen -W "--force --yes --no-pull --use-cache --repo \${instances}" -- "\${cur}"))
-      return 0
-      ;;
-    shutdown)
-      local instances
-      instances="$(_agent_env_instances)"
-      COMPREPLY=($(compgen -W "--yes --repo \${instances}" -- "\${cur}"))
       return 0
       ;;
     remove)
@@ -197,21 +215,18 @@ _aecd_completions() {
 complete -F _aecd_completions aecd`;
 }
 
-function generateZshCompletion(): string {
-  const commandDescriptions = [
-    'create:Create a new instance',
-    'list:List all instances',
-    'ps:List all instances (alias)',
-    'attach:Attach to an instance tmux session',
-    'path:Print host directory path for an instance',
-    'rebuild:Rebuild an instance container',
-    'shutdown:Gracefully shut down an instance',
-    'remove:Remove an instance',
-    'repos:List tracked repositories',
-    'purpose:Get or set instance purpose',
-    'tmux-status:Show tmux status bar info',
-    'completion:Generate shell completion script',
-  ];
+function generateZshCompletion(commands: CompletionCommandMeta[]): string {
+  // Escape single quotes for zsh single-quoted strings: ' → '\''
+  const zshEscape = (s: string): string => s.replace(/'/g, "'\\''");
+
+  const commandDescriptions = commands.flatMap((cmd) => {
+    const desc = zshEscape(cmd.description);
+    const entries = [`${cmd.name}:${desc}`];
+    for (const alias of cmd.aliases) {
+      entries.push(`${alias}:${desc} (alias)`);
+    }
+    return entries;
+  });
 
   return `#compdef agent-env
 # agent-env zsh completion script
@@ -268,7 +283,7 @@ ${commandDescriptions.map((desc) => `    '${desc}'`).join('\n')}
       ;;
     args)
       case $words[1] in
-        attach|path|purpose)
+        on|code|attach|path|purpose)
           _arguments \\
             '--repo[Repo slug to scope lookup]:slug:_agent_env_repos' \\
             '1:instance:_agent_env_instances'
@@ -290,12 +305,6 @@ ${commandDescriptions.map((desc) => `    '${desc}'`).join('\n')}
             '--yes[Skip confirmation prompt]' \\
             '--no-pull[Skip pulling fresh images]' \\
             '--use-cache[Allow Docker layer cache]' \\
-            '--repo[Repo slug to scope lookup]:slug:_agent_env_repos' \\
-            '1:instance:_agent_env_instances'
-          ;;
-        shutdown)
-          _arguments \\
-            '--yes[Skip confirmation prompt]' \\
             '--repo[Repo slug to scope lookup]:slug:_agent_env_repos' \\
             '1:instance:_agent_env_instances'
           ;;
