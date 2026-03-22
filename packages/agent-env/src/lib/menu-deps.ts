@@ -73,7 +73,12 @@ export function buildMenuDeps(): InteractiveMenuDeps {
     shutdownInstance: (wsName, slug) => {
       const deps = createShutdownDefaultDeps();
       console.log(`Shutting down instance '${wsName}'...`);
-      return shutdownInstanceLib(wsName, deps, slug);
+      return shutdownInstanceLib(wsName, deps, slug).then((result) => {
+        if (result.ok) {
+          console.log(`\x1b[32m✓\x1b[0m Instance '${wsName}' shut down`);
+        }
+        return result;
+      });
     },
     setPurpose: (wsName, value, slug) => {
       const deps = createPurposeDefaultDeps();

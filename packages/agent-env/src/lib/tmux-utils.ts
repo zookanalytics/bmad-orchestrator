@@ -26,20 +26,26 @@ export interface TmuxSaveDeps {
  * Save tmux session state inside a container (best-effort).
  *
  * Executes `agent-env tmux-save` inside the container via `docker exec`.
- * Returns whether the save succeeded. Never throws.
+ * Returns whether the save succeeded. Does not throw under normal conditions
+ * (executor uses reject: false).
  */
 export async function saveTmuxState(containerName: string, deps: TmuxSaveDeps): Promise<boolean> {
-  const result = await deps.executor('docker', [
-    'exec',
-    containerName,
-    'bash',
-    '-lc',
-    'agent-env tmux-save',
-  ]);
-  if (result.ok) {
-    deps.logger?.info('Saved tmux session state');
-    return true;
-  } else {
+  try {
+    const result = await deps.executor('docker', [
+      'exec',
+      containerName,
+      'bash',
+      '-lc',
+      'agent-env tmux-save',
+    ]);
+    if (result.ok) {
+      deps.logger?.info('Saved tmux session state');
+      return true;
+    } else {
+      deps.logger?.warn('Could not save tmux session state (non-fatal)');
+      return false;
+    }
+  } catch {
     deps.logger?.warn('Could not save tmux session state (non-fatal)');
     return false;
   }
