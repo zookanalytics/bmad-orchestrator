@@ -103,7 +103,11 @@ export async function shutdownInstance(
   // Step 3: Check container status
   const statusResult = await deps.container.containerStatus(containerName);
 
-  if (!statusResult.ok || statusResult.status !== 'running') {
+  if (!statusResult.ok) {
+    return { ok: false, error: statusResult.error };
+  }
+
+  if (statusResult.status !== 'running') {
     return {
       ok: false,
       error: {

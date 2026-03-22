@@ -31,13 +31,11 @@ export interface TmuxSaveDeps {
  */
 export async function saveTmuxState(containerName: string, deps: TmuxSaveDeps): Promise<boolean> {
   try {
-    const result = await deps.executor('docker', [
-      'exec',
-      containerName,
-      'bash',
-      '-lc',
-      'agent-env tmux-save',
-    ]);
+    const result = await deps.executor(
+      'docker',
+      ['exec', containerName, 'bash', '-lc', 'agent-env tmux-save'],
+      { timeout: 30_000 }
+    );
     if (result.ok) {
       deps.logger?.info('Saved tmux session state');
       return true;
