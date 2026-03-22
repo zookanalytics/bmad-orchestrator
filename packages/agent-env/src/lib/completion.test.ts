@@ -159,6 +159,14 @@ describe('completion', () => {
         }
       });
 
+      it('escapes single quotes in command descriptions', () => {
+        const script = generateCompletionScript('zsh', TEST_COMMANDS);
+        // The attach description contains "instance's" — the single quote
+        // must be escaped in the zsh commands=(...) block
+        const commandsBlock = script.match(/commands=\(\n([\s\S]*?)\n\s*\)/)?.[1] ?? '';
+        expect(commandsBlock).not.toContain("instance's");
+      });
+
       it('completes instance names and --repo for on, code, attach, and purpose', () => {
         const script = generateCompletionScript('zsh', TEST_COMMANDS);
         expect(script).toContain('_agent_env_instances');

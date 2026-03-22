@@ -216,10 +216,14 @@ complete -F _aecd_completions aecd`;
 }
 
 function generateZshCompletion(commands: CompletionCommandMeta[]): string {
+  // Escape single quotes for zsh single-quoted strings: ' → '\''
+  const zshEscape = (s: string): string => s.replace(/'/g, "'\\''");
+
   const commandDescriptions = commands.flatMap((cmd) => {
-    const entries = [`${cmd.name}:${cmd.description}`];
+    const desc = zshEscape(cmd.description);
+    const entries = [`${cmd.name}:${desc}`];
     for (const alias of cmd.aliases) {
-      entries.push(`${alias}:${cmd.description} (alias)`);
+      entries.push(`${alias}:${desc} (alias)`);
     }
     return entries;
   });
