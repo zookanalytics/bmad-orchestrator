@@ -101,7 +101,7 @@ describe('InteractiveMenu', () => {
   });
 
   describe('action list', () => {
-    it('renders all five action options', () => {
+    it('renders all six action options', () => {
       const info = makeInstanceInfo();
       const { lastFrame } = render(
         <InteractiveMenu instanceInfo={info} onAction={vi.fn()} onSetPurpose={vi.fn()} />
@@ -110,6 +110,7 @@ describe('InteractiveMenu', () => {
       expect(output).toContain('Attach to session');
       expect(output).toContain('Open in VS Code');
       expect(output).toContain('Rebuild container');
+      expect(output).toContain('Shutdown container');
       expect(output).toContain('Set Purpose');
       expect(output).toContain('Exit');
     });
@@ -150,7 +151,8 @@ describe('InteractiveMenu', () => {
         <InteractiveMenu instanceInfo={info} onAction={onAction} onSetPurpose={vi.fn()} />
       );
 
-      // Down 4 times to "exit", then Enter
+      // Down 5 times to "exit", then Enter
+      stdin.write('\x1B[B');
       stdin.write('\x1B[B');
       stdin.write('\x1B[B');
       stdin.write('\x1B[B');
@@ -170,7 +172,8 @@ describe('InteractiveMenu', () => {
         <InteractiveMenu instanceInfo={info} onAction={onAction} onSetPurpose={vi.fn()} />
       );
 
-      // Down 3 times to "set-purpose", then Enter
+      // Down 4 times to "set-purpose", then Enter
+      stdin.write('\x1B[B');
       stdin.write('\x1B[B');
       stdin.write('\x1B[B');
       stdin.write('\x1B[B');

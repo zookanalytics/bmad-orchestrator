@@ -1,4 +1,13 @@
-import { mkdir, readFile, rename, rm, writeFile, appendFile } from 'node:fs/promises';
+import {
+  mkdir,
+  readdir,
+  readFile,
+  rename,
+  rm,
+  stat,
+  writeFile,
+  appendFile,
+} from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
@@ -82,8 +91,8 @@ function createTestDeps(
     container: createMockContainer(containerOverrides),
     workspaceFsDeps: {
       mkdir,
-      readdir: vi.fn(),
-      stat: vi.fn(),
+      readdir,
+      stat,
       homedir: () => tempDir,
     },
     stateFsDeps: { readFile, writeFile, rename, mkdir, appendFile },
