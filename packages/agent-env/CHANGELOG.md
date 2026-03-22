@@ -1,5 +1,15 @@
 # @zookanalytics/agent-env
 
+## 0.12.0
+
+### Minor Changes
+
+- [#84](https://github.com/zookanalytics/bmad-orchestrator/pull/84) [`09d9188`](https://github.com/zookanalytics/bmad-orchestrator/commit/09d91883868f87b0b41c7bf785c680aa94afdcfd) Thanks [@johnzook](https://github.com/johnzook)! - Add shutdown command and TUI menu option for graceful instance shutdown
+
+### Patch Changes
+
+- [#85](https://github.com/zookanalytics/bmad-orchestrator/pull/85) [`2f88480`](https://github.com/zookanalytics/bmad-orchestrator/commit/2f88480329f3543eca0e85912ef357d5d0ad7190) Thanks [@johnzook](https://github.com/johnzook)! - Derive shell completion commands from the program at runtime instead of a hardcoded list, fixing missing autocomplete for `on` and `code` commands
+
 ## 0.11.0
 
 ### Minor Changes
