@@ -1,8 +1,8 @@
 /**
  * Shutdown instance orchestration for agent-env
  *
- * Orchestrates a graceful shutdown:
- *   find workspace → check Docker → check container status → save tmux state → stop container.
+ * Orchestrates graceful shutdown:
+ *   find workspace → check Docker → check container status → save tmux → stop container.
  * Preserves the workspace and container (only stops, does not remove).
  * Uses dependency injection for all I/O operations to enable testing.
  */
