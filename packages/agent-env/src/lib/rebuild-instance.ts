@@ -43,6 +43,7 @@ import {
 } from './devcontainer-merge.js';
 import { copyManagedAssets, parseDockerfileImages, resolveDockerfilePath } from './devcontainer.js';
 import { readState, writeStateAtomic } from './state.js';
+import { saveTmuxState } from './tmux-utils.js';
 import { AGENT_ENV_DIR } from './types.js';
 import { deriveContainerName, getWorkspacePathByName, resolveInstance } from './workspace.js';
 
@@ -296,26 +297,6 @@ async function executePullStep(
   }
 
   return { ok: true, hasDockerfile };
-}
-
-// ─── Pre-teardown State Save ─────────────────────────────────────────────
-
-async function saveTmuxState(
-  containerName: string,
-  deps: Pick<RebuildInstanceDeps, 'executor' | 'logger'>
-): Promise<void> {
-  const result = await deps.executor('docker', [
-    'exec',
-    containerName,
-    'bash',
-    '-lc',
-    'agent-env tmux-save',
-  ]);
-  if (result.ok) {
-    deps.logger?.info('Saved tmux session state');
-  } else {
-    deps.logger?.warn('Could not save tmux session state (non-fatal)');
-  }
 }
 
 // ─── Container Teardown ──────────────────────────────────────────────────

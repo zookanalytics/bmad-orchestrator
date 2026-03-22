@@ -1,38 +1,12 @@
 import { formatError, createError } from '@zookanalytics/shared';
 import chalk from 'chalk';
 import { Command } from 'commander';
-import { createInterface } from 'node:readline';
 
 import type { RebuildOptions } from '../lib/rebuild-instance.js';
 
-import { resolveRepoOrExit } from '../lib/command-helpers.js';
+import { promptForConfirmation, resolveRepoOrExit } from '../lib/command-helpers.js';
 import { createProgressLine } from '../lib/progress-line.js';
 import { createRebuildDefaultDeps, rebuildInstance } from '../lib/rebuild-instance.js';
-
-/**
- * Prompt the user to confirm rebuilding a running instance.
- */
-function promptForConfirmation(instanceName: string): Promise<boolean> {
-  return new Promise((resolve) => {
-    const rl = createInterface({
-      input: process.stdin,
-      output: process.stderr,
-    });
-
-    rl.question(
-      `\n${chalk.yellow('Warning:')} Rebuilding '${instanceName}' will destroy the current container and create a new one.\nAny active sessions will be lost. Continue? (y/N) `,
-      (answer) => {
-        rl.close();
-        resolve(answer.toLowerCase() === 'y' || answer.toLowerCase() === 'yes');
-      }
-    );
-
-    rl.on('SIGINT', () => {
-      rl.close();
-      resolve(false);
-    });
-  });
-}
 
 export const rebuildCommand = new Command('rebuild')
   .description('Rebuild an instance by recreating its container')
@@ -55,7 +29,9 @@ export const rebuildCommand = new Command('rebuild')
       // --yes implies --force and skips prompt; --force also skips prompt
       let confirmed = false;
       if (!options.yes && !options.force && process.stdin.isTTY) {
-        confirmed = await promptForConfirmation(name);
+        confirmed = await promptForConfirmation(
+          `\n${chalk.yellow('Warning:')} Rebuilding '${name}' will destroy the current container and create a new one.\nAny active sessions will be lost. Continue? (y/N) `
+        );
         if (!confirmed) {
           console.log('Rebuild cancelled');
           return;

@@ -35,6 +35,10 @@ export interface InteractiveMenuDeps {
     containerName?: string;
     error?: { code: string; message: string; suggestion?: string };
   }>;
+  shutdownInstance: (
+    name: string,
+    repoSlug?: string
+  ) => Promise<{ ok: boolean; error?: { code: string; message: string; suggestion?: string } }>;
   setPurpose: (
     name: string,
     value: string,
@@ -76,8 +80,15 @@ export async function launchActionLoop(
       // Step 2: Render menu and get user selection
       const { action, purposeValue } = await deps.renderMenu(instanceInfo);
 
-      // Step 3: Exit if requested
-      if (action === 'exit') {
+      // Step 3: Exit if requested (or after shutdown — container is stopped)
+      if (action === 'exit' || action === 'shutdown') {
+        if (action === 'shutdown') {
+          const shutdownResult = await deps.shutdownInstance(workspaceName, repoSlug);
+          if (!shutdownResult.ok && shutdownResult.error) {
+            const { code, message, suggestion } = shutdownResult.error;
+            console.error(formatError(createError(code, message, suggestion)));
+          }
+        }
         break;
       }
 
