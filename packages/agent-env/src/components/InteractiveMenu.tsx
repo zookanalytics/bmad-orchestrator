@@ -113,7 +113,11 @@ export function InteractiveMenu({
         <Text bold>{headerParts.join(' · ')}</Text>
       </Box>
       {mode === 'actions' ? (
-        <Select options={ACTION_OPTIONS} onChange={handleActionChange} />
+        <Select
+          options={ACTION_OPTIONS}
+          onChange={handleActionChange}
+          visibleOptionCount={ACTION_OPTIONS.length}
+        />
       ) : (
         <PurposeInput onSubmit={handlePurposeSubmit} onCancel={handlePurposeCancel} />
       )}
