@@ -88,9 +88,11 @@ export async function launchActionLoop(
       // Step 3b: Shutdown — exit loop only on success, stay on failure
       if (action === 'shutdown') {
         const shutdownResult = await deps.shutdownInstance(workspaceName, repoSlug);
-        if (!shutdownResult.ok && shutdownResult.error) {
-          const { code, message, suggestion } = shutdownResult.error;
-          console.error(formatError(createError(code, message, suggestion)));
+        if (!shutdownResult.ok) {
+          if (shutdownResult.error) {
+            const { code, message, suggestion } = shutdownResult.error;
+            console.error(formatError(createError(code, message, suggestion)));
+          }
           continue;
         }
         break;

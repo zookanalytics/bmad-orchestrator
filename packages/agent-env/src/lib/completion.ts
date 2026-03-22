@@ -160,6 +160,12 @@ _agent_env_completions() {
       COMPREPLY=($(compgen -W "--force --yes --no-pull --use-cache --repo \${instances}" -- "\${cur}"))
       return 0
       ;;
+    shutdown)
+      local instances
+      instances="$(_agent_env_instances)"
+      COMPREPLY=($(compgen -W "--yes --repo \${instances}" -- "\${cur}"))
+      return 0
+      ;;
     remove)
       local instances
       instances="$(_agent_env_instances)"
@@ -305,6 +311,12 @@ ${commandDescriptions.map((desc) => `    '${desc}'`).join('\n')}
             '--yes[Skip confirmation prompt]' \\
             '--no-pull[Skip pulling fresh images]' \\
             '--use-cache[Allow Docker layer cache]' \\
+            '--repo[Repo slug to scope lookup]:slug:_agent_env_repos' \\
+            '1:instance:_agent_env_instances'
+          ;;
+        shutdown)
+          _arguments \\
+            '--yes[Skip confirmation prompt]' \\
             '--repo[Repo slug to scope lookup]:slug:_agent_env_repos' \\
             '1:instance:_agent_env_instances'
           ;;
