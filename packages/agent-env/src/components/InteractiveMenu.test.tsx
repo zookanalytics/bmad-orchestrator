@@ -198,6 +198,7 @@ describe('InteractiveMenu', () => {
       stdin.write('\x1B[B');
       stdin.write('\x1B[B');
       stdin.write('\x1B[B');
+      stdin.write('\x1B[B');
       stdin.write('\r');
 
       // Wait for text input to appear
@@ -228,6 +229,7 @@ describe('InteractiveMenu', () => {
       );
 
       // Navigate to "set-purpose" and select
+      stdin.write('\x1B[B');
       stdin.write('\x1B[B');
       stdin.write('\x1B[B');
       stdin.write('\x1B[B');
