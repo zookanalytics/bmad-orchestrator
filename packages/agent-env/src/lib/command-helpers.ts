@@ -1,4 +1,5 @@
 import { createError, createExecutor, formatError } from '@zookanalytics/shared';
+import { createInterface } from 'node:readline';
 
 import type { ResolveRepoOpts } from './workspace.js';
 
@@ -30,4 +31,29 @@ export async function resolveRepoOrExit(opts: ResolveRepoOpts): Promise<string |
   }
 
   return undefined;
+}
+
+/**
+ * Prompt the user for yes/no confirmation via readline.
+ *
+ * Returns true if the user answers "y" or "yes" (case-insensitive).
+ * Returns false on "n", empty input, or SIGINT.
+ */
+export function promptForConfirmation(message: string): Promise<boolean> {
+  return new Promise((resolve) => {
+    const rl = createInterface({
+      input: process.stdin,
+      output: process.stderr,
+    });
+
+    rl.question(message, (answer) => {
+      rl.close();
+      resolve(answer.toLowerCase() === 'y' || answer.toLowerCase() === 'yes');
+    });
+
+    rl.on('SIGINT', () => {
+      rl.close();
+      resolve(false);
+    });
+  });
 }

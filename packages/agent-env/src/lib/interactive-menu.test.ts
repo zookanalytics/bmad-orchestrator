@@ -55,6 +55,7 @@ function createMockDeps(
     attachInstance: vi.fn().mockResolvedValue({ ok: true }),
     codeInstance: vi.fn().mockResolvedValue({ ok: true }),
     rebuildInstance: vi.fn().mockResolvedValue({ ok: true, containerName: 'ae-test' }),
+    shutdownInstance: vi.fn().mockResolvedValue({ ok: true }),
     setPurpose: vi.fn().mockResolvedValue({ ok: true }),
     getInstanceInfo: vi.fn().mockResolvedValue(makeInstanceInfo()),
     renderMenu: vi.fn().mockImplementation(() => {

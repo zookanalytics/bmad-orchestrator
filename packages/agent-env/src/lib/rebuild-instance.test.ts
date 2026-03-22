@@ -737,13 +737,11 @@ describe('rebuildInstance', () => {
     await rebuildInstance('auth', deps, { force: true });
 
     // Verify tmux-save was called with correct args
-    expect(mockExecutor).toHaveBeenCalledWith('docker', [
-      'exec',
-      'ae-repo-auth',
-      'bash',
-      '-lc',
-      'agent-env tmux-save',
-    ]);
+    expect(mockExecutor).toHaveBeenCalledWith(
+      'docker',
+      ['exec', 'ae-repo-auth', 'bash', '-lc', 'agent-env tmux-save'],
+      { timeout: 30_000 }
+    );
 
     // Verify tmux-save ran before container stop
     expect(callOrder.indexOf('tmux-save')).toBeLessThan(callOrder.indexOf('containerStop'));

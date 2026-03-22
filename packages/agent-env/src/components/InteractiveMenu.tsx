@@ -13,7 +13,7 @@ import type { InstanceDisplayStatus, InstanceInfo } from '../lib/list-instances.
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
-export type MenuAction = 'attach' | 'code' | 'rebuild' | 'set-purpose' | 'exit';
+export type MenuAction = 'attach' | 'code' | 'rebuild' | 'shutdown' | 'set-purpose' | 'exit';
 
 export interface ActionMenuProps {
   instanceInfo: InstanceInfo;
@@ -70,6 +70,7 @@ const ACTION_OPTIONS = [
   { label: '🚀 Attach to session', value: 'attach' },
   { label: '💻 Open in VS Code', value: 'code' },
   { label: '🛠  Rebuild container', value: 'rebuild' },
+  { label: '⏹  Shutdown container', value: 'shutdown' },
   { label: '📝 Set Purpose', value: 'set-purpose' },
   { label: '🚪 Exit', value: 'exit' },
 ];
@@ -112,7 +113,11 @@ export function InteractiveMenu({
         <Text bold>{headerParts.join(' · ')}</Text>
       </Box>
       {mode === 'actions' ? (
-        <Select options={ACTION_OPTIONS} onChange={handleActionChange} />
+        <Select
+          options={ACTION_OPTIONS}
+          onChange={handleActionChange}
+          visibleOptionCount={ACTION_OPTIONS.length}
+        />
       ) : (
         <PurposeInput onSubmit={handlePurposeSubmit} onCancel={handlePurposeCancel} />
       )}

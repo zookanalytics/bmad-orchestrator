@@ -35,6 +35,10 @@ export interface InteractiveMenuDeps {
     containerName?: string;
     error?: { code: string; message: string; suggestion?: string };
   }>;
+  shutdownInstance: (
+    name: string,
+    repoSlug?: string
+  ) => Promise<{ ok: boolean; error?: { code: string; message: string; suggestion?: string } }>;
   setPurpose: (
     name: string,
     value: string,
@@ -78,6 +82,19 @@ export async function launchActionLoop(
 
       // Step 3: Exit if requested
       if (action === 'exit') {
+        break;
+      }
+
+      // Step 3b: Shutdown — exit loop only on success, stay on failure
+      if (action === 'shutdown') {
+        const shutdownResult = await deps.shutdownInstance(workspaceName, repoSlug);
+        if (!shutdownResult.ok) {
+          if (shutdownResult.error) {
+            const { code, message, suggestion } = shutdownResult.error;
+            console.error(formatError(createError(code, message, suggestion)));
+          }
+          continue;
+        }
         break;
       }
 

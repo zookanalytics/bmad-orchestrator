@@ -17,6 +17,10 @@ import {
   createRebuildDefaultDeps,
   rebuildInstance as rebuildInstanceLib,
 } from './rebuild-instance.js';
+import {
+  createShutdownDefaultDeps,
+  shutdownInstance as shutdownInstanceLib,
+} from './shutdown-instance.js';
 
 /**
  * Build the DI wrappers for the action loop.
@@ -65,6 +69,16 @@ export function buildMenuDeps(): InteractiveMenuDeps {
           progress.clear();
           throw err;
         });
+    },
+    shutdownInstance: (wsName, slug) => {
+      const deps = createShutdownDefaultDeps();
+      console.log(`Shutting down instance '${wsName}'...`);
+      return shutdownInstanceLib(wsName, deps, slug).then((result) => {
+        if (result.ok) {
+          console.log(`\x1b[32m✓\x1b[0m Instance '${wsName}' shut down`);
+        }
+        return result;
+      });
     },
     setPurpose: (wsName, value, slug) => {
       const deps = createPurposeDefaultDeps();
