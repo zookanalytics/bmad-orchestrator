@@ -1,5 +1,17 @@
 # @zookanalytics/agent-env
 
+## 0.12.1
+
+### Patch Changes
+
+- [#90](https://github.com/zookanalytics/bmad-orchestrator/pull/90) [`228b7de`](https://github.com/zookanalytics/bmad-orchestrator/commit/228b7dea981cbfafacf6fae17f363a2a43bc1091) Thanks [@johnzook](https://github.com/johnzook)! - Fix localhost access blocked by domain-based firewall filtering
+
+  Chrome 145+ resolves localhost to [::1] (IPv6 only), but the firewall only configured
+  iptables (IPv4) rules. Added ip6tables loopback rules and defense-in-depth IPv4 ipset
+  entries to ensure localhost is never blocked.
+
+- [#88](https://github.com/zookanalytics/bmad-orchestrator/pull/88) [`321ad48`](https://github.com/zookanalytics/bmad-orchestrator/commit/321ad48f737cfb89a5965f58d6b1462fbbf850a7) Thanks [@johnzook](https://github.com/johnzook)! - Persist Convex config across container rebuilds by symlinking ~/.convex to shared-data volume
+
 ## 0.12.0
 
 ### Minor Changes
