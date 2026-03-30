@@ -236,7 +236,7 @@ backup_if_not_symlink() {
 backup_if_not_symlink "$HOME/.claude.json"
 backup_if_not_symlink "$HOME/.claude"
 backup_if_not_symlink "$HOME/.gemini"
-backup_if_not_symlink "$HOME/.convex"
+# Note: ~/.convex is handled in Step 13 (migration before backup, like gh in Step 12)
 
 check_fail_at_step 3
 
@@ -638,7 +638,7 @@ if [ -d "$HOME/.convex" ] && [ ! -L "$HOME/.convex" ] && [ -n "$(ls -A "$HOME/.c
   fi
 fi
 
-# Use standard backup function for cleanup (may already be handled by Step 3 batch)
+# Use standard backup function for cleanup
 if ! backup_if_not_symlink "$HOME/.convex"; then
   exit 1
 fi
