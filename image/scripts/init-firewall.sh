@@ -60,15 +60,25 @@ iptables -A INPUT -p udp --sport 53 -j ACCEPT
 iptables -A OUTPUT -p tcp --dport 22 -j ACCEPT
 # Allow inbound SSH responses
 iptables -A INPUT -p tcp --sport 22 -m state --state ESTABLISHED -j ACCEPT
-# Allow localhost
+# Allow localhost (IPv4 and IPv6)
+# IPv6 is critical: Chrome 145+ resolves localhost to [::1] only, bypassing IPv4 entirely.
+# Without ip6tables loopback rules, Chrome's connections to localhost are blocked.
 iptables -A INPUT -i lo -j ACCEPT
 iptables -A OUTPUT -o lo -j ACCEPT
+ip6tables -A INPUT -i lo -j ACCEPT
+ip6tables -A OUTPUT -o lo -j ACCEPT
 # Allow metadata service (169.254.169.254 - used by cloud providers for instance metadata)
 iptables -A OUTPUT -d 169.254.169.254 -j ACCEPT
 iptables -A INPUT -s 169.254.169.254 -j ACCEPT
 
 # Create ipset with CIDR support
 ipset create allowed-domains hash:net
+
+# Always allow loopback — localhost must never be blocked regardless of domain filtering.
+# Chrome's async DNS resolver queries dnsmasq for localhost (bypassing /etc/hosts),
+# so 127.0.0.1 must be in the ipset for the allow rule to match that traffic path.
+echo "Adding loopback to allowed-domains ipset"
+ipset add allowed-domains 127.0.0.1/32 -exist
 
 # Fetch GitHub meta information and aggregate + add their IP ranges
 echo "Fetching GitHub IP ranges..."

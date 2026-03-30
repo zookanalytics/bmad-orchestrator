@@ -69,6 +69,10 @@ generate_ipset_args() {
     done < "$domains_file"
 }
 
+# Always add localhost to ipset so Chrome's async DNS resolver (which queries dnsmasq
+# directly instead of using /etc/hosts) populates the ipset with 127.0.0.1.
+IPSET_ARGS+=("--ipset=/localhost/allowed-domains")
+
 generate_ipset_args "/etc/allowed-domains.txt"
 generate_ipset_args "$WORKSPACE_ROOT/.devcontainer/allowed-domains.txt"
 
