@@ -18,6 +18,8 @@
 #   ├── gh/                        # SHARED - GitHub CLI config (~/.config/gh)
 #   │   ├── hosts.yml              # GitHub auth tokens
 #   │   └── config.yml             # CLI preferences
+#   ├── convex/                    # SHARED - Convex config (~/.convex)
+#   │   └── config.json            # Access token (write-once)
 #   └── instance/                  # PER-INSTANCE isolation
 #       └── <instance-id>/
 #           ├── claude/            # -> symlink target for ~/.claude
@@ -84,7 +86,7 @@ rollback() {
   fi
 
   # Restore backups
-  for backup in "$HOME"/.claude.json.bak* "$HOME"/.claude.bak* "$HOME"/.gemini.bak* "$HOME"/.config/gh.bak*; do
+  for backup in "$HOME"/.claude.json.bak* "$HOME"/.claude.bak* "$HOME"/.gemini.bak* "$HOME"/.config/gh.bak* "$HOME"/.convex.bak*; do
     if [ -f "$backup" ] || [ -d "$backup" ]; then
       # Find the original name by removing .bak suffix
       original="${backup%.bak*}"
@@ -96,7 +98,7 @@ rollback() {
   done
 
   echo "Rollback complete. Manual recovery may be needed."
-  echo "Check: ~/.claude.json, ~/.claude, ~/.gemini, ~/.config/gh"
+  echo "Check: ~/.claude.json, ~/.claude, ~/.gemini, ~/.config/gh, ~/.convex"
 }
 
 # Track a symlink for potential rollback
@@ -234,6 +236,7 @@ backup_if_not_symlink() {
 backup_if_not_symlink "$HOME/.claude.json"
 backup_if_not_symlink "$HOME/.claude"
 backup_if_not_symlink "$HOME/.gemini"
+# Note: ~/.convex is handled in Step 13 (migration before backup, like gh in Step 12)
 
 check_fail_at_step 3
 
@@ -523,6 +526,7 @@ if ! verify_writable "$HOME/.gemini"; then
 fi
 
 # Note: ~/.config/gh is verified in Step 12 after creation
+# Note: ~/.convex is verified in Step 13 after creation
 
 if [ "$HEALTH_CHECK_FAILED" = true ]; then
   echo "E008: ERROR: Final health check failed. Rolling back..."
@@ -617,6 +621,47 @@ echo "  ~/.config/gh -> $SHARED_DATA/gh"
 
 check_fail_at_step 12
 
+# --- Step 13: Symlink ~/.convex -> shared directory ---
+echo ""
+echo "[13] Setting up Convex config (shared)..."
+
+# Create shared convex directory
+create_dir "$SHARED_DATA/convex"
+
+# Migrate existing convex config to shared volume (only if shared is empty to avoid clobber)
+if [ -d "$HOME/.convex" ] && [ ! -L "$HOME/.convex" ] && [ -n "$(ls -A "$HOME/.convex" 2>/dev/null)" ]; then
+  if [ -z "$(ls -A "$SHARED_DATA/convex" 2>/dev/null)" ]; then
+    echo "  Migrating existing Convex config to shared volume..."
+    cp -rp "$HOME/.convex/." "$SHARED_DATA/convex/" 2>/dev/null || true
+  else
+    echo "  Shared Convex config already exists, skipping migration"
+  fi
+fi
+
+# Use standard backup function for cleanup
+if ! backup_if_not_symlink "$HOME/.convex"; then
+  exit 1
+fi
+
+if ! ln -sf "$SHARED_DATA/convex" "$HOME/.convex"; then
+  echo "E006: ERROR: Failed to create symlink: ~/.convex -> $SHARED_DATA/convex"
+  exit 1
+fi
+track_symlink "$HOME/.convex"
+
+# Verify symlink and writability
+if [ ! -L "$HOME/.convex" ]; then
+  echo "E007: ERROR: Symlink verification failed for: ~/.convex"
+  exit 1
+fi
+if ! verify_writable "$HOME/.convex"; then
+  echo "E008: ERROR: ~/.convex is not writable"
+  exit 1
+fi
+echo "  ~/.convex -> $SHARED_DATA/convex"
+
+check_fail_at_step 13
+
 # --- Success ---
 echo ""
 echo "Instance isolation complete for: $INSTANCE_ID"
@@ -629,4 +674,5 @@ echo "  Claude settings:    $SHARED_DATA/claude/settings.json (shared)"
 echo "  Claude config:      $SHARED_DATA/claude/config.json (shared - theme, MCP, state)"
 echo "  Gemini:             $SHARED_DATA/gemini/ (shared)"
 echo "  GitHub CLI:         $SHARED_DATA/gh/ (shared)"
+echo "  Convex:             $SHARED_DATA/convex/ (shared)"
 echo "  ZSH history:        $SHARED_DATA/instance/$INSTANCE_ID/zsh_history (per-instance)"
