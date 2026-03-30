@@ -6,11 +6,10 @@
 api.firecrawl.dev
 mcp.firecrawl.dev
 
-# Convex
+# Convex (project-specific *.convex.cloud domains belong in the project's own allowed-domains.txt)
 api.convex.dev
 version.convex.dev
 auth.convex.dev
-first-magpie-968.convex.cloud
 docs.convex.dev
 stack.convex.dev
 
