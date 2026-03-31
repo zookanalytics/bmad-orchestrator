@@ -24,6 +24,8 @@ api.vercel.com
 
 # Playwright
 playwright.dev
+playwright.download.prss.microsoft.com
+cdn.playwright.dev
 
 # Google Cloud Storage (Claude Code installer)
 storage.googleapis.com
