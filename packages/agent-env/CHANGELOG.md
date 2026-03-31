@@ -1,5 +1,11 @@
 # @zookanalytics/agent-env
 
+## 0.12.2
+
+### Patch Changes
+
+- [#92](https://github.com/zookanalytics/bmad-orchestrator/pull/92) [`4b1582c`](https://github.com/zookanalytics/bmad-orchestrator/commit/4b1582c92faf7ec57074079507a9a6509b21e163) Thanks [@johnzook](https://github.com/johnzook)! - Forward stdin to post-create commands when running in an interactive terminal, allowing users to respond to prompts instead of hanging
+
 ## 0.12.1
 
 ### Patch Changes
