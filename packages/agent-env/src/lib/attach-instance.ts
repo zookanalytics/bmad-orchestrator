@@ -177,6 +177,7 @@ export async function attachInstance(
     const startResult = await deps.container.devcontainerUp(wsPath.root, containerName, {
       remoteEnv: { AGENT_INSTANCE: wsPath.name },
       configPath,
+      interactive: true,
     });
 
     if (!startResult.ok) {
