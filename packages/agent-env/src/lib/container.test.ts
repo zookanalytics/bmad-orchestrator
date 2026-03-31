@@ -1161,6 +1161,82 @@ describe('devcontainerUp build options', () => {
   });
 });
 
+// ─── devcontainerUp interactive stdin ────────────────────────────────────
+
+describe('devcontainerUp interactive option', () => {
+  it('passes stdin inherit when interactive is true and stdin is a TTY', async () => {
+    const originalIsTTY = process.stdin.isTTY;
+    process.stdin.isTTY = true;
+    try {
+      const executor = mockExecutor({
+        'docker info': successResult,
+        'devcontainer up': {
+          ok: true,
+          stdout: JSON.stringify({ outcome: 'success', containerId: 'x' }),
+          stderr: '',
+          exitCode: 0,
+        },
+      });
+      const lifecycle = createContainerLifecycle(executor);
+
+      await lifecycle.devcontainerUp('/workspace', 'ae-test', { interactive: true });
+      const devcontainerCall = executor.mock.calls.find(
+        (call: unknown[]) => call[0] === 'devcontainer'
+      );
+      expect(devcontainerCall).toBeDefined();
+      expect((devcontainerCall as unknown[])[2]).toHaveProperty('stdin', 'inherit');
+    } finally {
+      process.stdin.isTTY = originalIsTTY;
+    }
+  });
+
+  it('does not pass stdin inherit when interactive is true but stdin is not a TTY', async () => {
+    const originalIsTTY = process.stdin.isTTY;
+    process.stdin.isTTY = undefined as unknown as boolean;
+    try {
+      const executor = mockExecutor({
+        'docker info': successResult,
+        'devcontainer up': {
+          ok: true,
+          stdout: JSON.stringify({ outcome: 'success', containerId: 'x' }),
+          stderr: '',
+          exitCode: 0,
+        },
+      });
+      const lifecycle = createContainerLifecycle(executor);
+
+      await lifecycle.devcontainerUp('/workspace', 'ae-test', { interactive: true });
+      const devcontainerCall = executor.mock.calls.find(
+        (call: unknown[]) => call[0] === 'devcontainer'
+      );
+      expect(devcontainerCall).toBeDefined();
+      expect((devcontainerCall as unknown[])[2]).not.toHaveProperty('stdin');
+    } finally {
+      process.stdin.isTTY = originalIsTTY;
+    }
+  });
+
+  it('does not pass stdin inherit when interactive option is omitted', async () => {
+    const executor = mockExecutor({
+      'docker info': successResult,
+      'devcontainer up': {
+        ok: true,
+        stdout: JSON.stringify({ outcome: 'success', containerId: 'x' }),
+        stderr: '',
+        exitCode: 0,
+      },
+    });
+    const lifecycle = createContainerLifecycle(executor);
+
+    await lifecycle.devcontainerUp('/workspace', 'ae-test');
+    const devcontainerCall = executor.mock.calls.find(
+      (call: unknown[]) => call[0] === 'devcontainer'
+    );
+    expect(devcontainerCall).toBeDefined();
+    expect((devcontainerCall as unknown[])[2]).not.toHaveProperty('stdin');
+  });
+});
+
 // ─── containerRemove ────────────────────────────────────────────────────────
 
 describe('containerRemove', () => {

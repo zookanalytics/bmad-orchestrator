@@ -56,6 +56,7 @@ export interface ContainerLifecycle {
       remoteEnv?: Record<string, string>;
       configPath?: string;
       onProgress?: (line: string) => void;
+      interactive?: boolean;
     }
   ): Promise<ContainerResult>;
   dockerPull(image: string): Promise<DockerPullResult>;
@@ -357,6 +358,7 @@ export function createContainerLifecycle(executor: Execute = createExecutor()): 
       remoteEnv?: Record<string, string>;
       configPath?: string;
       onProgress?: (line: string) => void;
+      interactive?: boolean;
     }
   ): Promise<ContainerResult> {
     // Check Docker availability first
@@ -396,9 +398,11 @@ export function createContainerLifecycle(executor: Execute = createExecutor()): 
       ...remoteEnvArgs,
       ...(buildNoCache ? ['--build-no-cache'] : []),
     ];
+    const inheritStdin = options?.interactive === true && process.stdin.isTTY === true;
     const result = await executor('devcontainer', args, {
       timeout: buildNoCache ? DEVCONTAINER_UP_NO_CACHE_TIMEOUT : DEVCONTAINER_UP_TIMEOUT,
       onLine: options?.onProgress,
+      ...(inheritStdin && { stdin: 'inherit' }),
     });
 
     // Parse devcontainer up JSON output (it outputs JSON with outcome and containerId)

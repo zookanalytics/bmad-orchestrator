@@ -491,6 +491,7 @@ export async function createInstance(
     },
     configPath,
     onProgress: options?.onProgress,
+    interactive: true,
   });
   if (!containerResult.ok) {
     return rollbackContainerFailure(containerName, wsPath, containerResult, deps);

@@ -205,6 +205,7 @@ export async function codeInstance(
     const startResult = await deps.container.devcontainerUp(wsPath.root, containerName, {
       remoteEnv: { AGENT_INSTANCE: wsPath.name },
       configPath,
+      interactive: true,
     });
 
     if (!startResult.ok) {

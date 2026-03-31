@@ -356,6 +356,7 @@ async function startAndDiscoverContainer(
     remoteEnv: { AGENT_INSTANCE: wsPath.name, AGENT_ENV_PURPOSE: purpose },
     configPath,
     onProgress,
+    interactive: true,
   });
   if (!containerResult.ok) {
     return { ok: false, error: containerResult.error };
