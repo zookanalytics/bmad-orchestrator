@@ -45,8 +45,12 @@ iptables -t nat -F
 iptables -t nat -X
 iptables -t mangle -F
 iptables -t mangle -X
-ip6tables -F
-ip6tables -X
+for table in filter mangle nat; do
+    if ip6tables -t "$table" -S >/dev/null 2>&1; then
+        ip6tables -t "$table" -F
+        ip6tables -t "$table" -X
+    fi
+done
 ipset destroy allowed-domains 2>/dev/null || true
 
 # 2. Selectively restore ONLY internal Docker DNS resolution
@@ -207,24 +211,28 @@ fi
 
 # Verify Chromium can reach localhost (Chrome 145+ uses IPv6 [::1])
 echo "Verifying Chromium localhost access..."
-if command -v node >/dev/null 2>&1 && [ -d "/home/node/.cache/ms-playwright" ]; then
-    RESULT=$(node -e "
+if command -v node >/dev/null 2>&1 && HOME=/home/node XDG_CACHE_HOME=/home/node/.cache node -e "require.resolve('playwright')" >/dev/null 2>&1; then
+    RESULT=$(HOME=/home/node XDG_CACHE_HOME=/home/node/.cache node -e "
       const { chromium } = require('playwright');
       (async () => {
         const http = require('http');
         const server = http.createServer((_, res) => { res.writeHead(200); res.end('ok'); });
         server.listen(0, '::', async () => {
           const port = server.address().port;
+          let browser;
           try {
-            const browser = await chromium.launch();
+            browser = await chromium.launch();
             const page = await browser.newPage();
             const resp = await page.goto('http://localhost:' + port, { timeout: 5000 });
             console.log(resp?.status() === 200 ? 'PASS' : 'FAIL:status=' + resp?.status());
-            await browser.close();
           } catch (e) {
             console.log('FAIL:' + e.message.split('\n')[0]);
+          } finally {
+            if (browser) {
+              await browser.close();
+            }
+            server.close();
           }
-          server.close();
         });
       })();
     " 2>&1)
