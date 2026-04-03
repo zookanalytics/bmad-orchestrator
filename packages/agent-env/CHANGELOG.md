@@ -1,5 +1,11 @@
 # @zookanalytics/agent-env
 
+## 0.12.3
+
+### Patch Changes
+
+- [#95](https://github.com/zookanalytics/bmad-orchestrator/pull/95) [`7bbc714`](https://github.com/zookanalytics/bmad-orchestrator/commit/7bbc7144a2f2bb9edebd35d4f95ac25d3c4ce342) Thanks [@johnzook](https://github.com/johnzook)! - Add ip6tables parity to firewall script (flush, ACCEPT reset, DROP defaults, error trap) and Chromium localhost verification test for Chrome 145+ IPv6 resolution
+
 ## 0.12.2
 
 ### Patch Changes
