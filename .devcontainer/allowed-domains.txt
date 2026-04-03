@@ -60,3 +60,6 @@ api.openai.com
 
 # GitHub artifacts
 productionresultssa1.blob.core.windows.net
+
+# Agent Flywheel (Dicklesworth)
+agent-flywheel.com
