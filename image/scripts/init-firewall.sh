@@ -18,6 +18,9 @@ IFS=$'\n\t'       # Stricter word splitting
 iptables -P INPUT ACCEPT
 iptables -P FORWARD ACCEPT
 iptables -P OUTPUT ACCEPT
+ip6tables -P INPUT ACCEPT
+ip6tables -P FORWARD ACCEPT
+ip6tables -P OUTPUT ACCEPT
 
 # Set up error trap to restore DROP policies if script fails
 # This prevents leaving the container in a permissive state on error
@@ -26,6 +29,9 @@ cleanup_on_error() {
     iptables -P INPUT DROP 2>/dev/null || true
     iptables -P OUTPUT DROP 2>/dev/null || true
     iptables -P FORWARD DROP 2>/dev/null || true
+    ip6tables -P INPUT DROP 2>/dev/null || true
+    ip6tables -P OUTPUT DROP 2>/dev/null || true
+    ip6tables -P FORWARD DROP 2>/dev/null || true
 }
 trap cleanup_on_error ERR EXIT
 
@@ -39,6 +45,12 @@ iptables -t nat -F
 iptables -t nat -X
 iptables -t mangle -F
 iptables -t mangle -X
+for table in filter mangle nat; do
+    if ip6tables -t "$table" -S >/dev/null 2>&1; then
+        ip6tables -t "$table" -F
+        ip6tables -t "$table" -X
+    fi
+done
 ipset destroy allowed-domains 2>/dev/null || true
 
 # 2. Selectively restore ONLY internal Docker DNS resolution
@@ -172,6 +184,9 @@ dig +short @127.0.0.1 api.github.com >/dev/null 2>&1 || true
 iptables -P INPUT DROP
 iptables -P FORWARD DROP
 iptables -P OUTPUT DROP
+ip6tables -P INPUT DROP
+ip6tables -P FORWARD DROP
+ip6tables -P OUTPUT DROP
 
 # Remove error trap now that configuration is complete and policies are locked down
 trap - ERR EXIT
@@ -192,4 +207,43 @@ if ! curl --connect-timeout 5 https://api.github.com/zen >/dev/null 2>&1; then
     exit 1
 else
     echo "Firewall verification passed - able to reach https://api.github.com as expected"
+fi
+
+# Verify Chromium can reach localhost (Chrome 145+ uses IPv6 [::1])
+echo "Verifying Chromium localhost access..."
+if command -v node >/dev/null 2>&1 && HOME=/home/node XDG_CACHE_HOME=/home/node/.cache node -e "require.resolve('playwright')" >/dev/null 2>&1; then
+    RESULT=$(HOME=/home/node XDG_CACHE_HOME=/home/node/.cache node -e "
+      const { chromium } = require('playwright');
+      (async () => {
+        const http = require('http');
+        const server = http.createServer((_, res) => { res.writeHead(200); res.end('ok'); });
+        server.listen(0, '::', async () => {
+          const port = server.address().port;
+          let browser;
+          try {
+            browser = await chromium.launch();
+            const page = await browser.newPage();
+            const resp = await page.goto('http://localhost:' + port, { timeout: 5000 });
+            console.log(resp?.status() === 200 ? 'PASS' : 'FAIL:status=' + resp?.status());
+          } catch (e) {
+            console.log('FAIL:' + e.message.split('\n')[0]);
+          } finally {
+            if (browser) {
+              await browser.close();
+            }
+            server.close();
+          }
+        });
+      })();
+    " 2>&1)
+    if echo "$RESULT" | grep -q "^PASS"; then
+        echo "Chromium localhost verification passed"
+    else
+        echo "ERROR: Chromium cannot reach localhost — Chrome 145+ resolves to [::1] (IPv6)"
+        echo "Detail: $RESULT"
+        echo "Check: ip6tables loopback rules and IPv6 default policies"
+        exit 1
+    fi
+else
+    echo "Skipping Chromium verification (Playwright not installed)"
 fi
