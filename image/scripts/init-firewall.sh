@@ -211,7 +211,7 @@ fi
 
 # Verify Chromium can reach localhost (Chrome 145+ uses IPv6 [::1])
 echo "Verifying Chromium localhost access..."
-if command -v node >/dev/null 2>&1 && HOME=/home/node XDG_CACHE_HOME=/home/node/.cache node -e "require.resolve('playwright')" >/dev/null 2>&1; then
+if command -v node >/dev/null 2>&1 && HOME=/home/node XDG_CACHE_HOME=/home/node/.cache node -e "const p = require('playwright'); const e = p.chromium.executablePath(); require('fs').accessSync(e)" >/dev/null 2>&1; then
     RESULT=$(HOME=/home/node XDG_CACHE_HOME=/home/node/.cache node -e "
       const { chromium } = require('playwright');
       (async () => {
@@ -245,5 +245,5 @@ if command -v node >/dev/null 2>&1 && HOME=/home/node XDG_CACHE_HOME=/home/node/
         exit 1
     fi
 else
-    echo "Skipping Chromium verification (Playwright not installed)"
+    echo "Skipping Chromium verification (Playwright or Chromium browsers not installed)"
 fi
