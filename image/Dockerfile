@@ -1,29 +1,3 @@
-# ── Stage 1: Rust builder ────────────────────────────────────────────
-# Self-contained stage for compiling Dicklesworth Rust tools (ms, CASS).
-# Cached independently — changes to the main image never re-trigger this.
-# Uses Trixie (Debian testing) because CASS's ONNX Runtime requires
-# glibc 2.38+ and newer libstdc++ not available in Bookworm.
-FROM debian:trixie-slim AS rust-builder
-
-# Install Rust toolchain and build deps
-ARG RUST_TOOLCHAIN=1.94.0
-RUN apt-get update && apt-get install -y --no-install-recommends \
-  curl ca-certificates build-essential \
-  pkg-config libssl-dev libsqlite3-dev \
-  && rm -rf /var/lib/apt/lists/* \
-  && curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain ${RUST_TOOLCHAIN}
-ENV PATH="/root/.cargo/bin:$PATH"
-
-# Install ms (Meta Skill) — skill indexing, search, feedback, evolution
-ARG MS_COMMIT=43281f08e0ee220cde6cb35d8b15cb45a89aa718
-RUN cargo install --locked --git https://github.com/Dicklesworthstone/meta_skill.git --rev ${MS_COMMIT}
-
-# Install CASS (Coding Agent Session Search) — session history indexing and search
-ARG CASS_COMMIT=c97553c50aa4ca77b6cd914bd08491140de63abe
-# Note: --locked omitted — upstream git dep (asupersync) has malformed test fixture Cargo.toml
-RUN cargo install --git https://github.com/Dicklesworthstone/coding_agent_session_search.git --rev ${CASS_COMMIT} coding-agent-search
-
-# ── Stage 2: Main image ─────────────────────────────────────────────
 FROM node:22-trixie
 
 ARG TZ
@@ -202,10 +176,6 @@ ENV PATH="$BUN_INSTALL/bin:$PATH"
 
 # Install keystone-cli globally via bun (must run as node user for PATH)
 RUN bun install -g github:ZookAnalytics/keystone-cli
-
-# Copy pre-built Rust binaries from builder stage (ms, cass)
-COPY --from=rust-builder --chown=node:node /root/.cargo/bin/ms /home/node/.local/bin/ms
-COPY --from=rust-builder --chown=node:node /root/.cargo/bin/cass /home/node/.local/bin/cass
 
 USER root
 

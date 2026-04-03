@@ -93,21 +93,3 @@ else
   echo "  ⚠ Skills repo not available, skipping installation"
   exit 1
 fi
-
-# Step 3: Index skills into ms for search/feedback/evolution
-if command -v ms &>/dev/null && [ -d "$SKILLS_REPO_DIR" ]; then
-  echo "  Indexing skills into ms..."
-  (cd "$SKILLS_REPO_DIR" && { ms init 2>/dev/null || true; } && ms index "$SKILLS_REPO_DIR/skills") \
-    && echo "  ✓ Skills indexed in ms" \
-    || echo "  ⚠ ms index failed"
-fi
-
-# Step 4: Index session history into CASS (opt-in via env var)
-if [ "${CASS_INDEX_ENABLED:-false}" = "true" ] && command -v cass &>/dev/null; then
-  echo "  Indexing session history into CASS..."
-  if ! cass index --full 2>/dev/null; then
-    echo "  ⚠ CASS index failed"
-  else
-    echo "  ✓ Session history indexed"
-  fi
-fi
