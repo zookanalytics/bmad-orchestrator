@@ -170,7 +170,10 @@ iptables -A OUTPUT -m set --match-set allowed-domains dst -j ACCEPT
 iptables -A OUTPUT -j NFLOG --nflog-group 1 --nflog-prefix "FIREWALL-BLOCK: "
 
 # Reject remaining traffic immediately (instead of DROP timeout)
+# IPv6 REJECT lets Happy Eyeballs fall back to IPv4 in milliseconds instead of
+# waiting for a full TCP timeout from a silent DROP.
 iptables -A OUTPUT -j REJECT --reject-with icmp-net-unreachable
+ip6tables -A OUTPUT -j REJECT --reject-with icmp6-addr-unreachable
 
 # Prime the ipset by resolving a key domain through dnsmasq. The dig uses UDP/53
 # which is already allowed above. dnsmasq's --ipset adds the resolved IP to the
