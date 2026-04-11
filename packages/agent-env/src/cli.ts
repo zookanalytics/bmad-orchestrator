@@ -14,6 +14,7 @@ import { attachCommand } from './commands/attach.js';
 import { codeCommand } from './commands/code.js';
 import { completionCommand } from './commands/completion.js';
 import { createCommand } from './commands/create.js';
+import { envCommand } from './commands/env.js';
 import { listCommand } from './commands/list.js';
 import { onCommand } from './commands/on.js';
 import { pathCommand } from './commands/path.js';
@@ -46,6 +47,7 @@ program
 
 // Register commands
 program.addCommand(createCommand);
+program.addCommand(envCommand);
 program.addCommand(listCommand);
 program.addCommand(attachCommand);
 program.addCommand(pathCommand);

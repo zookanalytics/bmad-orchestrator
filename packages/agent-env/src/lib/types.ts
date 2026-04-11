@@ -10,6 +10,9 @@ export const AGENT_ENV_DIR = '.agent-env';
 /** Directory name for workspaces within AGENT_ENV_DIR */
 export const WORKSPACES_DIR = 'workspaces';
 
+/** Directory name for per-repo shared data within AGENT_ENV_DIR */
+export const REPOS_DIR = 'repos';
+
 /** State file name within each workspace's .agent-env directory */
 export const STATE_FILE = 'state.json';
 
