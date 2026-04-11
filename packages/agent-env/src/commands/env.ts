@@ -1,12 +1,12 @@
-import { formatError, createError } from '@zookanalytics/shared';
+import { createError, formatError } from '@zookanalytics/shared';
 import { Command } from 'commander';
-import { execSync } from 'node:child_process';
+import { spawnSync } from 'node:child_process';
 import { existsSync, mkdirSync } from 'node:fs';
 
 import { getRepoEnvDir, loadRepoEnv } from '../lib/repo-env.js';
 
 export const envCommand = new Command('env')
-  .description('Manage repo-level .env files copied into workspaces')
+  .description('Manage repo-level env files copied into workspaces')
   .argument('<repo-slug>', 'Repo slug (from `agent-env repos`)')
   .option('--edit', 'Open .env in $EDITOR')
   .option('--edit-local', 'Open .env.local in $EDITOR')
@@ -30,9 +30,8 @@ export const envCommand = new Command('env')
           mkdirSync(dir, { recursive: true });
         }
 
-        try {
-          execSync(`${editor} ${filePath}`, { stdio: 'inherit' });
-        } catch {
+        const result = spawnSync(editor, [filePath], { stdio: 'inherit' });
+        if (result.status !== 0) {
           console.error(
             formatError(createError('EDITOR_ERROR', `Failed to open ${filename} in ${editor}.`))
           );
@@ -46,12 +45,12 @@ export const envCommand = new Command('env')
       const keys = Object.keys(env);
 
       if (keys.length === 0) {
-        console.log(`No .env files found for repo "${repoSlug}".`);
+        console.log(`No env files found for repo "${repoSlug}".`);
         console.log(`Create one at: ${dir}/.env`);
         return;
       }
 
-      // Show vars with source indication
+      // Show merged env vars
       console.log(`Repo env vars for "${repoSlug}" (${dir}):\n`);
       for (const [key, value] of Object.entries(env)) {
         console.log(`  ${key}=${value}`);

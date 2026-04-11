@@ -75,16 +75,34 @@ describe('getRepoEnvDir', () => {
       join('/home/testuser', '.agent-env', 'repos', 'my-repo')
     );
   });
+
+  it('rejects slugs with path traversal characters', () => {
+    const deps = { homedir: () => '/home/testuser' };
+    expect(() => getRepoEnvDir('../../etc', deps)).toThrow('Invalid repo slug');
+    expect(() => getRepoEnvDir('foo/bar', deps)).toThrow('Invalid repo slug');
+    expect(() => getRepoEnvDir('foo\\bar', deps)).toThrow('Invalid repo slug');
+  });
+
+  it('rejects empty slug', () => {
+    const deps = { homedir: () => '/home/testuser' };
+    expect(() => getRepoEnvDir('', deps)).toThrow('Invalid repo slug');
+  });
 });
 
 // ─── loadRepoEnv ────────────────────────────────────────────────────────────
 
 describe('loadRepoEnv', () => {
+  const makeEnoent = () => {
+    const err = new Error('ENOENT') as NodeJS.ErrnoException;
+    err.code = 'ENOENT';
+    return err;
+  };
+
   const makeDeps = (files: Record<string, string>) => ({
     homedir: () => '/home/testuser',
     readFile: vi.fn(async (path: string) => {
       if (path in files) return files[path];
-      throw new Error('ENOENT');
+      throw makeEnoent();
     }),
   });
 
@@ -116,6 +134,18 @@ describe('loadRepoEnv', () => {
     const deps = makeDeps({ [localPath]: 'KEY=value' });
     const result = await loadRepoEnv('my-repo', deps);
     expect(result).toEqual({ KEY: 'value' });
+  });
+
+  it('propagates non-ENOENT errors', async () => {
+    const eacces = new Error('EACCES') as NodeJS.ErrnoException;
+    eacces.code = 'EACCES';
+    const deps = {
+      homedir: () => '/home/testuser',
+      readFile: vi.fn(async () => {
+        throw eacces;
+      }),
+    };
+    await expect(loadRepoEnv('my-repo', deps)).rejects.toThrow('EACCES');
   });
 });
 
@@ -171,5 +201,18 @@ describe('copyRepoEnvFiles', () => {
 
     expect(copied).toEqual([]);
     expect(deps.copyFile).toHaveBeenCalledTimes(2);
+  });
+
+  it('propagates non-ENOENT copy errors', async () => {
+    const eacces = new Error('EACCES') as NodeJS.ErrnoException;
+    eacces.code = 'EACCES';
+    const deps = {
+      homedir: () => '/home/testuser',
+      readFile: vi.fn(),
+      copyFile: vi.fn(async () => {
+        throw eacces;
+      }),
+    };
+    await expect(copyRepoEnvFiles('my-repo', destDir, deps)).rejects.toThrow('EACCES');
   });
 });

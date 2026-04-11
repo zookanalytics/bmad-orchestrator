@@ -26,16 +26,31 @@ const defaultDeps: RepoEnvDeps = {
   homedir,
 };
 
+// ─── Validation ─────────────────────────────────────────────────────────────
+
+/** Same safe pattern used for workspace name segments (see workspace.ts) */
+const VALID_SLUG_PATTERN = /^[a-zA-Z0-9][a-zA-Z0-9._-]*$/;
+
+function validateRepoSlug(slug: string): void {
+  if (!slug || !VALID_SLUG_PATTERN.test(slug)) {
+    throw new Error(
+      `Invalid repo slug: "${slug}". Only alphanumeric, dash, dot, and underscore are allowed (must start with alphanumeric).`
+    );
+  }
+}
+
 // ─── Path utilities ─────────────────────────────────────────────────────────
 
 /**
  * Get the directory for a repo's shared env files.
  * @returns Absolute path to ~/.agent-env/repos/<repoSlug>/
+ * @throws If repoSlug contains invalid characters (prevents path traversal)
  */
 export function getRepoEnvDir(
   repoSlug: string,
   deps: Pick<RepoEnvDeps, 'homedir'> = defaultDeps
 ): string {
+  validateRepoSlug(repoSlug);
   return join(deps.homedir(), AGENT_ENV_DIR, REPOS_DIR, repoSlug);
 }
 
@@ -105,8 +120,10 @@ export async function loadRepoEnv(
     try {
       const content = await deps.readFile(filePath, 'utf-8');
       Object.assign(result, parseEnvFile(content));
-    } catch {
-      // File doesn't exist — skip silently
+    } catch (error: unknown) {
+      if ((error as NodeJS.ErrnoException).code !== 'ENOENT') {
+        throw error;
+      }
     }
   }
 
@@ -139,8 +156,10 @@ export async function copyRepoEnvFiles(
     try {
       await deps.copyFile(src, dest);
       copied.push(filename);
-    } catch {
-      // Source file doesn't exist — skip silently
+    } catch (error: unknown) {
+      if ((error as NodeJS.ErrnoException).code !== 'ENOENT') {
+        throw error;
+      }
     }
   }
 
