@@ -1,5 +1,17 @@
 # @zookanalytics/agent-env
 
+## 0.13.0
+
+### Minor Changes
+
+- [#101](https://github.com/zookanalytics/bmad-orchestrator/pull/101) [`16d565f`](https://github.com/zookanalytics/bmad-orchestrator/commit/16d565f09af64ba89d5e4b3aacb21ce22d4208c3) Thanks [@johnzook](https://github.com/johnzook)! - Add repo-level env file management: store env files once per repo and automatically copy them into workspace roots during create/rebuild
+
+### Patch Changes
+
+- [#98](https://github.com/zookanalytics/bmad-orchestrator/pull/98) [`bf5980e`](https://github.com/zookanalytics/bmad-orchestrator/commit/bf5980e7befcf931a89d88625509e246db3f2631) Thanks [@johnzook](https://github.com/johnzook)! - Verify Chromium binary exists before running firewall localhost test to prevent devcontainer startup failure
+
+- [#100](https://github.com/zookanalytics/bmad-orchestrator/pull/100) [`cafdf6a`](https://github.com/zookanalytics/bmad-orchestrator/commit/cafdf6a6ffed3ee7349c91272ad2ed7ce20015fd) Thanks [@johnzook](https://github.com/johnzook)! - Add IPv6 REJECT rule to firewall for fast Happy Eyeballs fallback to IPv4
+
 ## 0.12.3
 
 ### Patch Changes
