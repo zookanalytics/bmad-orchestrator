@@ -42,6 +42,7 @@ import {
   writeGeneratedConfig,
 } from './devcontainer-merge.js';
 import { copyManagedAssets, parseDockerfileImages, resolveDockerfilePath } from './devcontainer.js';
+import { copyRepoEnvFiles } from './repo-env.js';
 import { readState, writeStateAtomic } from './state.js';
 import { saveTmuxState } from './tmux-utils.js';
 import { AGENT_ENV_DIR } from './types.js';
@@ -145,6 +146,9 @@ async function refreshMergedConfig(
       repoSlug,
       purpose,
     });
+
+    // Copy repo-level .env / .env.local into workspace root
+    await copyRepoEnvFiles(repoSlug, wsRoot);
 
     const repoConfig = await readRepoConfig(wsRoot, deps.mergeDeps, deps.logger);
 

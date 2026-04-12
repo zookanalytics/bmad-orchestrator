@@ -41,6 +41,7 @@ import {
 } from './devcontainer-merge.js';
 import { copyManagedAssets } from './devcontainer.js';
 import { MAX_PURPOSE_LENGTH } from './purpose-instance.js';
+import { copyRepoEnvFiles } from './repo-env.js';
 import { createInitialState, ensureGitExclude, writeStateAtomic } from './state.js';
 import { AGENT_ENV_DIR, MAX_INSTANCE_NAME_LENGTH } from './types.js';
 import {
@@ -277,6 +278,9 @@ async function setupMergedConfig(
       repoSlug: repoName,
       purpose: purposeText,
     });
+
+    // Copy repo-level .env / .env.local into workspace root
+    await copyRepoEnvFiles(repoName, wsPath.root);
 
     // Read and validate repo config (if any)
     const repoConfig = await readRepoConfig(wsPath.root, deps.mergeDeps, deps.logger);
