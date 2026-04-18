@@ -3,6 +3,20 @@ import { describe, it, expect, vi } from 'vitest';
 import type { MenuAction, InteractiveMenuDeps, InstancePickerDeps } from './interactive-menu.js';
 import type { InstanceInfo, Instance, ListResult } from './list-instances.js';
 
+// Replace restartMenu with a no-op that records its call so tests can verify
+// the action loop invokes it and then cleanly exits via the next 'exit' action.
+const restartMenuMock = vi.fn();
+vi.mock('./version-drift.js', async () => {
+  const actual = await vi.importActual<typeof import('./version-drift.js')>('./version-drift.js');
+  return {
+    ...actual,
+    restartMenu: (...args: unknown[]) => {
+      restartMenuMock(...args);
+      // Returns normally in tests (production calls process.exit).
+    },
+  };
+});
+
 import { launchActionLoop, launchInstancePicker } from './interactive-menu.js';
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
@@ -57,6 +71,7 @@ function createMockDeps(
     rebuildInstance: vi.fn().mockResolvedValue({ ok: true, containerName: 'ae-test' }),
     shutdownInstance: vi.fn().mockResolvedValue({ ok: true }),
     setPurpose: vi.fn().mockResolvedValue({ ok: true }),
+    checkForUpdates: vi.fn().mockResolvedValue({ ok: true }),
     getInstanceInfo: vi.fn().mockResolvedValue(makeInstanceInfo()),
     renderMenu: vi.fn().mockImplementation(() => {
       const result = actionSequence[callIndex] ?? { action: 'exit' as MenuAction };
@@ -123,6 +138,36 @@ describe('launchActionLoop', () => {
     await launchActionLoop('alpha', deps, 'my-repo');
 
     expect(deps.setPurpose).toHaveBeenCalledWith('alpha', 'testing auth flows', 'my-repo');
+  });
+
+  it('calls checkForUpdates when check-updates action is selected', async () => {
+    const deps = createMockDeps([{ action: 'check-updates' }, { action: 'exit' }]);
+
+    await launchActionLoop('alpha', deps, 'my-repo');
+
+    expect(deps.checkForUpdates).toHaveBeenCalledTimes(1);
+    // None of the other action deps should have fired.
+    expect(deps.attachInstance).not.toHaveBeenCalled();
+    expect(deps.rebuildInstance).not.toHaveBeenCalled();
+  });
+
+  it('invokes restartMenu and does not run other action deps when restart is selected', async () => {
+    restartMenuMock.mockClear();
+    const deps = createMockDeps([{ action: 'restart' }, { action: 'exit' }]);
+
+    await launchActionLoop('alpha', deps, 'my-repo');
+
+    expect(restartMenuMock).toHaveBeenCalledTimes(1);
+    expect(restartMenuMock).toHaveBeenCalledWith({
+      workspaceName: 'alpha',
+      repoSlug: 'my-repo',
+    });
+    // None of the non-restart action handlers should have fired.
+    expect(deps.attachInstance).not.toHaveBeenCalled();
+    expect(deps.codeInstance).not.toHaveBeenCalled();
+    expect(deps.rebuildInstance).not.toHaveBeenCalled();
+    expect(deps.setPurpose).not.toHaveBeenCalled();
+    expect(deps.shutdownInstance).not.toHaveBeenCalled();
   });
 
   it('breaks loop on exit action', async () => {
