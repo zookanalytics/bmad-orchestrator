@@ -235,12 +235,12 @@ describe('restartMenu', () => {
     });
   });
 
-  it('propagates non-zero child exit codes and falls back to 0 for null status', () => {
+  it('propagates non-zero child exit codes and treats null status as failure', () => {
     const spawn = vi.fn().mockReturnValueOnce({ status: 42 }).mockReturnValueOnce({ status: null });
     const exit = vi.fn<(code: number) => never>(makeExitThatThrows());
 
     expect(() => restartMenu({ workspaceName: 'a' }, { spawn, exit })).toThrow('__exit(42)');
-    expect(() => restartMenu({ workspaceName: 'b' }, { spawn, exit })).toThrow('__exit(0)');
+    expect(() => restartMenu({ workspaceName: 'b' }, { spawn, exit })).toThrow('__exit(1)');
   });
 });
 

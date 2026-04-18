@@ -34,7 +34,7 @@ export interface MenuContainerProps {
   initialDriftState?: VersionDriftState;
   /** Override for tests. */
   detectDriftStateFn?: () => Promise<VersionDriftState>;
-  /** Override for tests — defaults to 30 seconds. */
+  /** Override for tests — defaults to 10 minutes. */
   pollIntervalMs?: number;
 }
 

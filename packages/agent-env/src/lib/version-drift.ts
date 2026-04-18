@@ -265,5 +265,6 @@ export function restartMenu(
   }
 
   const result = spawn('agent-env', args, { stdio: 'inherit' });
-  exit(result.status ?? 0);
+  // null status means spawn failed or child was killed by signal — treat as failure.
+  exit(result.status ?? 1);
 }
