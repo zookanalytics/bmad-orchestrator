@@ -1,5 +1,11 @@
 # @zookanalytics/agent-env
 
+## 0.14.0
+
+### Minor Changes
+
+- [#102](https://github.com/zookanalytics/bmad-orchestrator/pull/102) [`8dde98d`](https://github.com/zookanalytics/bmad-orchestrator/commit/8dde98d45045ee4f774d796b5625e557892d4ca8) Thanks [@johnzook](https://github.com/johnzook)! - Add version drift detection and auto-restart for the interactive menu, preventing opaque CONFIG_REFRESH_FAILED errors when agent-env is upgraded while the menu is running
+
 ## 0.13.0
 
 ### Minor Changes
