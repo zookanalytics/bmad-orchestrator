@@ -13,6 +13,8 @@ import { formatError, createError } from '@zookanalytics/shared';
 import type { MenuAction } from '../components/InteractiveMenu.js';
 import type { Instance, InstanceInfo, ListResult } from './list-instances.js';
 
+import { restartMenu } from './version-drift.js';
+
 // Re-export MenuAction so consumers can import from here
 export type { MenuAction } from '../components/InteractiveMenu.js';
 
@@ -44,6 +46,14 @@ export interface InteractiveMenuDeps {
     value: string,
     repoSlug?: string
   ) => Promise<{ ok: boolean; error?: { code: string; message: string; suggestion?: string } }>;
+  /**
+   * Force a fresh drift probe (bypassing the registry cache) and print a
+   * user-facing result. Used by the manual "Check for updates" action.
+   */
+  checkForUpdates: () => Promise<{
+    ok: boolean;
+    error?: { code: string; message: string; suggestion?: string };
+  }>;
   getInstanceInfo: (workspaceName: string) => Promise<InstanceInfo>;
   renderMenu: (
     instanceInfo: InstanceInfo
@@ -85,6 +95,14 @@ export async function launchActionLoop(
         break;
       }
 
+      // Step 3a: Restart — exec a fresh `agent-env on` process and exit.
+      // In production restartMenu() calls process.exit and never returns;
+      // the `continue` below is only reached if a test injects a no-op.
+      if (action === 'restart') {
+        restartMenu({ workspaceName, repoSlug });
+        continue;
+      }
+
       // Step 3b: Shutdown — exit loop only on success, stay on failure
       if (action === 'shutdown') {
         const shutdownResult = await deps.shutdownInstance(workspaceName, repoSlug);
@@ -113,6 +131,9 @@ export async function launchActionLoop(
           break;
         case 'set-purpose':
           result = await deps.setPurpose(workspaceName, purposeValue ?? '', repoSlug);
+          break;
+        case 'check-updates':
+          result = await deps.checkForUpdates();
           break;
       }
 

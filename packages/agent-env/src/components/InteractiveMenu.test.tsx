@@ -220,6 +220,169 @@ describe('InteractiveMenu', () => {
       expect(onSetPurpose).toHaveBeenCalledWith('New purpose text');
     });
 
+    it('does not inject a Restart option when driftState is undefined', () => {
+      const info = makeInstanceInfo();
+      const { lastFrame } = render(
+        <InteractiveMenu instanceInfo={info} onAction={vi.fn()} onSetPurpose={vi.fn()} />
+      );
+      expect(lastFrame() ?? '').not.toContain('Restart menu');
+    });
+
+    it('shows a "Check for updates" option when no drift is known', () => {
+      const info = makeInstanceInfo();
+      const { lastFrame } = render(
+        <InteractiveMenu
+          instanceInfo={info}
+          onAction={vi.fn()}
+          onSetPurpose={vi.fn()}
+          driftState={{
+            packageMoved: false,
+            updateMessage: null,
+            installedVersion: null,
+            currentVersion: '0.12.3',
+          }}
+        />
+      );
+      const output = lastFrame() ?? '';
+      expect(output).toContain('Check for updates');
+      expect(output).not.toContain('Restart menu');
+    });
+
+    it('replaces "Check for updates" with Restart when drift is detected', () => {
+      const info = makeInstanceInfo();
+      const { lastFrame } = render(
+        <InteractiveMenu
+          instanceInfo={info}
+          onAction={vi.fn()}
+          onSetPurpose={vi.fn()}
+          driftState={{
+            packageMoved: true,
+            updateMessage: null,
+            installedVersion: null,
+            currentVersion: '0.12.2',
+          }}
+        />
+      );
+      const output = lastFrame() ?? '';
+      expect(output).toContain('Restart menu');
+      expect(output).not.toContain('Check for updates');
+    });
+
+    it('calls onAction with "check-updates" when that option is selected', async () => {
+      const info = makeInstanceInfo();
+      const onAction = vi.fn();
+      const { stdin } = render(
+        <InteractiveMenu
+          instanceInfo={info}
+          onAction={onAction}
+          onSetPurpose={vi.fn()}
+          driftState={{
+            packageMoved: false,
+            updateMessage: null,
+            installedVersion: null,
+            currentVersion: '0.12.3',
+          }}
+        />
+      );
+
+      // Navigate down past Attach, Code, Rebuild, Shutdown, Set Purpose to
+      // land on "Check for updates" (6th option, index 5 — 5 down-arrows).
+      for (let i = 0; i < 5; i++) {
+        stdin.write('\x1B[B');
+      }
+      stdin.write('\r');
+
+      await waitFor(() => onAction.mock.calls.length > 0);
+      expect(onAction).toHaveBeenCalledWith('check-updates');
+    });
+
+    it('shows a drift banner and Restart option when packageMoved is true', () => {
+      const info = makeInstanceInfo();
+      const { lastFrame } = render(
+        <InteractiveMenu
+          instanceInfo={info}
+          onAction={vi.fn()}
+          onSetPurpose={vi.fn()}
+          driftState={{
+            packageMoved: true,
+            updateMessage: null,
+            installedVersion: null,
+            currentVersion: '0.12.2',
+          }}
+        />
+      );
+      const output = lastFrame() ?? '';
+      expect(output).toContain('agent-env was upgraded');
+      expect(output).toContain('Restart menu');
+      expect(output).toContain('required');
+    });
+
+    it('shows Restart with version when installed > current (already upgraded)', () => {
+      const info = makeInstanceInfo();
+      const { lastFrame } = render(
+        <InteractiveMenu
+          instanceInfo={info}
+          onAction={vi.fn()}
+          onSetPurpose={vi.fn()}
+          driftState={{
+            packageMoved: false,
+            updateMessage: null,
+            installedVersion: '0.13.0',
+            currentVersion: '0.12.3',
+          }}
+        />
+      );
+      const output = lastFrame() ?? '';
+      expect(output).toContain('Restart menu');
+      expect(output).toContain('v0.13.0 installed');
+      expect(output).toContain('restart to use it');
+    });
+
+    it('shows update banner with Check for updates (not Restart) when npm has newer but not installed', () => {
+      const info = makeInstanceInfo();
+      const { lastFrame } = render(
+        <InteractiveMenu
+          instanceInfo={info}
+          onAction={vi.fn()}
+          onSetPurpose={vi.fn()}
+          driftState={{
+            packageMoved: false,
+            updateMessage: 'Update available: 0.12.2 -> 0.13.0',
+            installedVersion: null,
+            currentVersion: '0.12.2',
+          }}
+        />
+      );
+      const output = lastFrame() ?? '';
+      expect(output).toContain('Update available: 0.12.2 -> 0.13.0');
+      expect(output).toContain('Check for updates');
+      expect(output).not.toContain('Restart menu');
+    });
+
+    it('calls onAction with "restart" when Restart option selected under drift', async () => {
+      const info = makeInstanceInfo();
+      const onAction = vi.fn();
+      const { stdin } = render(
+        <InteractiveMenu
+          instanceInfo={info}
+          onAction={onAction}
+          onSetPurpose={vi.fn()}
+          driftState={{
+            packageMoved: true,
+            updateMessage: null,
+            installedVersion: null,
+            currentVersion: '0.12.2',
+          }}
+        />
+      );
+
+      // Restart is prepended, so it's the first option — press Enter.
+      stdin.write('\r');
+
+      await waitFor(() => onAction.mock.calls.length > 0);
+      expect(onAction).toHaveBeenCalledWith('restart');
+    });
+
     it('returns to action list on Escape without calling onSetPurpose', async () => {
       const info = makeInstanceInfo();
       const onAction = vi.fn();
