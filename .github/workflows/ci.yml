@@ -29,8 +29,8 @@ jobs:
         run: |
           NODE_VERSION=$(node -v)
           MAJOR_VERSION=$(echo $NODE_VERSION | cut -d 'v' -f 2 | cut -d '.' -f 1)
-          if [ "$MAJOR_VERSION" -lt 20 ]; then
-            echo "Error: Node.js version must be at least 20. Found $NODE_VERSION"
+          if [ "$MAJOR_VERSION" -lt 24 ]; then
+            echo "Error: Node.js version must be at least 24. Found $NODE_VERSION"
             exit 1
           fi
 
