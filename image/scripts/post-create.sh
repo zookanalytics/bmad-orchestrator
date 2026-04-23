@@ -171,19 +171,24 @@ if ! grep -qF "$MARKER" "$HOME/.zshrc" 2>/dev/null; then
   echo "  ✓ Claude session persistence wrapper configured"
 fi
 
+# Pre-approve build/postinstall scripts for global installs.
+# pnpm 11 removed `pnpm.onlyBuiltDependencies` from package.json (pnpm#10086,
+# #11220). Each global install is also isolated under {PNPM_HOME}/global/v11/{hash}/
+# with its own config, so a single pre-written workspace file doesn't cover all
+# install groups. Passing `--allow-build` on every `pnpm install -g` tells pnpm
+# to persist allowBuilds into the correct isolated dir at install time.
+PNPM_ALLOW_BUILDS=(
+  --allow-build=@zookanalytics/keystone-workflows
+  --allow-build=keytar
+  --allow-build=node-pty
+  --allow-build=protobufjs
+  --allow-build=tree-sitter-bash
+)
+
 # Install Gemini CLI via pnpm
-# Pre-approve build/postinstall scripts to avoid interactive prompts during global install
 GEMINI_CLI_VERSION="${GEMINI_CLI_VERSION:-latest}"
 echo "  - Installing @google/gemini-cli@${GEMINI_CLI_VERSION}..."
-GLOBAL_DIR="$(pnpm root -g)/.."
-if [ -f "$GLOBAL_DIR/package.json" ]; then
-  # Merge onlyBuiltDependencies into existing global package.json
-  jq '.pnpm.onlyBuiltDependencies = ["@zookanalytics/keystone-workflows","keytar","node-pty","protobufjs","tree-sitter-bash"]' "$GLOBAL_DIR/package.json" > "$GLOBAL_DIR/package.json.tmp" && mv "$GLOBAL_DIR/package.json.tmp" "$GLOBAL_DIR/package.json"
-else
-  mkdir -p "$GLOBAL_DIR"
-  echo '{"pnpm":{"onlyBuiltDependencies":["@zookanalytics/keystone-workflows","keytar","node-pty","protobufjs","tree-sitter-bash"]}}' > "$GLOBAL_DIR/package.json"
-fi
-pnpm install -g "@google/gemini-cli@${GEMINI_CLI_VERSION}"
+pnpm install -g "${PNPM_ALLOW_BUILDS[@]}" "@google/gemini-cli@${GEMINI_CLI_VERSION}"
 
 # Install keystone-cli via bun
 echo "  - Installing keystone-cli..."
@@ -193,7 +198,7 @@ fi
 
 # Install keystone-workflows from npm (postinstall copies workflows to ~/.keystone/)
 echo "  - Installing @zookanalytics/keystone-workflows..."
-if ! pnpm install -g @zookanalytics/keystone-workflows; then
+if ! pnpm install -g "${PNPM_ALLOW_BUILDS[@]}" @zookanalytics/keystone-workflows; then
   echo "  ⚠ keystone-workflows update failed, using existing version"
 fi
 
@@ -212,7 +217,7 @@ if [ -d "$AGENT_ENV_DEV_MOUNT" ]; then
   fi
 else
   echo "    No dev mount — installing from npm"
-  if ! pnpm install -g @zookanalytics/agent-env; then
+  if ! pnpm install -g "${PNPM_ALLOW_BUILDS[@]}" @zookanalytics/agent-env; then
     echo "    ⚠ agent-env installation failed, using existing version if available"
   fi
 fi

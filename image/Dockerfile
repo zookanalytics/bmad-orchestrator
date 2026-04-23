@@ -49,10 +49,12 @@ ENV LANG=en_US.UTF-8
 ENV LC_ALL=en_US.UTF-8
 
 # Setup pnpm via corepack (pin version to avoid mismatch with project packageManager)
-ARG PNPM_VERSION=10.30.1
+ARG PNPM_VERSION=11.0.0-rc.5
 ENV PNPM_HOME="/pnpm"
 RUN mkdir -p "$PNPM_HOME"
-ENV PATH="$PNPM_HOME:$PATH"
+# pnpm 11 moved the global bin dir from $PNPM_HOME to $PNPM_HOME/bin (pnpm#10986).
+# Keep both on PATH so the image works with pnpm 10 and 11.
+ENV PATH="$PNPM_HOME/bin:$PNPM_HOME:$PATH"
 RUN corepack enable && corepack prepare pnpm@${PNPM_VERSION} --activate
 
 ARG USERNAME=node
