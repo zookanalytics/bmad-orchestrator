@@ -1,4 +1,4 @@
-FROM node:22-trixie
+FROM node:24-trixie
 
 ARG TZ
 ENV TZ="$TZ"
@@ -101,7 +101,7 @@ RUN mkdir -p /etc/ssh && \
   ssh-keyscan -t ed25519,ecdsa,rsa github.com >> /etc/ssh/ssh_known_hosts 2>/dev/null
 
 # SSH server setup: runtime dir, hardened config, remove default host keys (generated per-container)
-# Unlock the node account for SSH pubkey auth — the base node:22 image sets the
+# Unlock the node account for SSH pubkey auth — the base node:24 image sets the
 # password field to '!' (locked), and with UsePAM=no sshd rejects locked accounts
 # even when using key-based auth. Setting it to '*' unlocks the account while
 # keeping password login impossible (PasswordAuthentication no in sshd_config).

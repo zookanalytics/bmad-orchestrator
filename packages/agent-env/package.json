@@ -18,7 +18,7 @@
     "directory": "packages/agent-env"
   },
   "engines": {
-    "node": ">=20"
+    "node": ">=24"
   },
   "files": [
     "dist",
