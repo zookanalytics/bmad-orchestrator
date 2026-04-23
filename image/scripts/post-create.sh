@@ -173,7 +173,7 @@ fi
 
 # Pre-approve build/postinstall scripts for global installs.
 # pnpm 11 removed `pnpm.onlyBuiltDependencies` from package.json (pnpm#10086,
-# #11220). Each global install is also isolated under {PNPM_HOME}/global/v11/{hash}/
+# pnpm#11220). Each global install is also isolated under {PNPM_HOME}/global/v11/{hash}/
 # with its own config, so a single pre-written workspace file doesn't cover all
 # install groups. Passing `--allow-build` on every `pnpm install -g` tells pnpm
 # to persist allowBuilds into the correct isolated dir at install time.
