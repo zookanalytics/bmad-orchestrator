@@ -1,5 +1,11 @@
 # @zookanalytics/agent-env
 
+## 1.0.0
+
+### Major Changes
+
+- [#105](https://github.com/zookanalytics/bmad-orchestrator/pull/105) [`3c93186`](https://github.com/zookanalytics/bmad-orchestrator/commit/3c93186123295a767c24d35824086d3b1cc9fc17) Thanks [@johnzook](https://github.com/johnzook)! - Bump `engines.node` to `>=24` to match the devcontainer base image upgrade to `node:24-trixie`. Consumers must run Node 24 or later.
+
 ## 0.14.0
 
 ### Minor Changes
