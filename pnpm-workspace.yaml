@@ -1,2 +1,7 @@
 packages:
   - 'packages/*'
+# pnpm 11: `allowBuilds` replaces `onlyBuiltDependencies`. Settings from the
+# `pnpm` field in package.json are no longer read (pnpm#10086).
+allowBuilds:
+  esbuild: true
+  rollup: true
