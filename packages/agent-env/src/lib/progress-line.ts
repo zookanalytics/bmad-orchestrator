@@ -1,64 +1,95 @@
 /**
- * Single-line overwriting progress display for long-running subprocesses.
+ * Tail-N overwriting progress display for long-running subprocesses.
  *
- * Writes to stderr so it doesn't interfere with structured stdout output.
- * Uses carriage return + erase-line to overwrite the current line,
- * showing only the most recent output — useful for spotting hangs.
+ * Maintains a fixed-size window of the most recent output lines (default 5),
+ * redrawing the block in place using ANSI cursor controls. Writes to stderr
+ * so it doesn't interfere with structured stdout output.
  */
 
 const ERASE_LINE = '\x1b[K';
+const PREFIX = '⏳ ';
+const PREFIX_LEN = 3;
+const DEFAULT_MAX_LINES = 5;
 
 export interface ProgressLine {
-  /** Overwrite the current line with new text. */
+  /** Append a new line to the tail window and redraw the block. */
   update(line: string): void;
-  /** Clear the progress line and restore the cursor. */
+  /** Clear the entire block and restore the cursor to its top. */
   clear(): void;
 }
 
 /**
- * Create a single-line progress display on stderr.
+ * Create a tail-N progress display on stderr.
  *
- * Each call to `update()` overwrites the previous line in-place.
- * Call `clear()` when done to leave the terminal clean.
+ * Each `update()` adds a line to a ring buffer of size `maxLines` and redraws
+ * the block in place. Older lines scroll out of the buffer once it fills.
+ * `clear()` erases all visible lines and parks the cursor where the block began.
  *
  * @param stream - Writable stream (defaults to process.stderr)
  * @param columns - Terminal width for truncation (defaults to stderr columns or 80)
+ * @param maxLines - Maximum tail lines to keep visible (defaults to 5)
  */
 export function createProgressLine(
   stream: NodeJS.WriteStream = process.stderr,
-  columns?: number
+  columns?: number,
+  maxLines: number = DEFAULT_MAX_LINES
 ): ProgressLine {
-  // When stderr is not a TTY (piped, CI, redirected), return a no-op to
-  // avoid emitting raw ANSI escape codes into non-interactive output.
   if (!stream.isTTY) {
     return { update() {}, clear() {} };
   }
 
   const maxWidth = columns ?? stream.columns ?? 80;
-  // Reserve space for the prefix "⏳ " (3 chars)
-  const PREFIX = '⏳ ';
-  const prefixLen = 3;
-  let active = false;
+  const buffer: string[] = [];
+  let drawnHeight = 0;
+
+  function truncate(line: string): string {
+    // eslint-disable-next-line no-control-regex
+    const clean = line.replace(/\x1b\[[0-9;]*m/g, '');
+    if (clean.length + PREFIX_LEN <= maxWidth) {
+      return clean;
+    }
+    return clean.slice(0, maxWidth - PREFIX_LEN - 1) + '…';
+  }
+
+  function redraw(): void {
+    let out = '';
+    if (drawnHeight > 1) {
+      out += `\x1b[${drawnHeight - 1}A`;
+    }
+    out += '\r';
+    for (let i = 0; i < buffer.length; i++) {
+      if (i > 0) out += '\n';
+      out += `${ERASE_LINE}${PREFIX}${truncate(buffer[i])}`;
+    }
+    stream.write(out);
+    drawnHeight = buffer.length;
+  }
 
   return {
     update(line: string) {
-      // Strip ANSI escape codes — both for accurate length calculation and to
-      // avoid garbled output when truncation would split an escape sequence.
-      // eslint-disable-next-line no-control-regex
-      const clean = line.replace(/\x1b\[[0-9;]*m/g, '');
-      const truncated =
-        clean.length + prefixLen > maxWidth
-          ? clean.slice(0, maxWidth - prefixLen - 1) + '…'
-          : clean;
-      stream.write(`\r${ERASE_LINE}${PREFIX}${truncated}`);
-      active = true;
+      buffer.push(line);
+      if (buffer.length > maxLines) {
+        buffer.shift();
+      }
+      redraw();
     },
 
     clear() {
-      if (active) {
-        stream.write(`\r${ERASE_LINE}`);
-        active = false;
+      if (drawnHeight === 0) return;
+      let out = '';
+      if (drawnHeight > 1) {
+        out += `\x1b[${drawnHeight - 1}A`;
       }
+      out += `\r${ERASE_LINE}`;
+      for (let i = 1; i < drawnHeight; i++) {
+        out += `\n${ERASE_LINE}`;
+      }
+      if (drawnHeight > 1) {
+        out += `\x1b[${drawnHeight - 1}A\r`;
+      }
+      stream.write(out);
+      buffer.length = 0;
+      drawnHeight = 0;
     },
   };
 }
