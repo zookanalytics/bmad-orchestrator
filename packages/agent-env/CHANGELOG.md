@@ -1,5 +1,11 @@
 # @zookanalytics/agent-env
 
+## 1.0.1
+
+### Patch Changes
+
+- [#107](https://github.com/zookanalytics/bmad-orchestrator/pull/107) [`dfde696`](https://github.com/zookanalytics/bmad-orchestrator/commit/dfde6960a189baefe5762a95b8889c8e1bb69963) Thanks [@johnzook](https://github.com/johnzook)! - Re-apply SSH agent socket permissions on every container start instead of only at creation, so SSH operations (e.g. git over SSH) keep working after a host reboot recreates the bind-mounted `/run/host-services/ssh-auth.sock` with default `0660` permissions.
+
 ## 1.0.0
 
 ### Major Changes
