@@ -1,5 +1,17 @@
 # @zookanalytics/agent-env
 
+## 1.1.0
+
+### Minor Changes
+
+- [#111](https://github.com/zookanalytics/bmad-orchestrator/pull/111) [`91ade2e`](https://github.com/zookanalytics/bmad-orchestrator/commit/91ade2e83c2b4594155b28ac1c2214d9b391a179) Thanks [@johnzook](https://github.com/johnzook)! - Replace the single-line rebuild progress display with a fixed-height tail window (default 5 lines), redrawn in place via cursor-up + erase-line. Recent subprocess output stays visible during long steps without flooding the terminal. First-update output is bit-for-bit identical, so existing single-line behaviour is preserved when only one line has been seen.
+
+### Patch Changes
+
+- [#110](https://github.com/zookanalytics/bmad-orchestrator/pull/110) [`46ae9ce`](https://github.com/zookanalytics/bmad-orchestrator/commit/46ae9ce14f42fb75a7c0c61479c7fad26710acdf) Thanks [@johnzook](https://github.com/johnzook)! - Add `@github/keytar` to the pnpm `--allow-build` list so the `@google/gemini-cli` global install no longer stalls on a build-script approval prompt during devcontainer post-create.
+
+- [#109](https://github.com/zookanalytics/bmad-orchestrator/pull/109) [`281bb98`](https://github.com/zookanalytics/bmad-orchestrator/commit/281bb9873316cb4146af3250a57b8accc855d847) Thanks [@johnzook](https://github.com/johnzook)! - Fix tmux autosave overwriting `program: 'claude'` with `null` when claude is mid-tool-execution. Detection now trusts `claude-sessions.json` (written on launch, removed on graceful exit) instead of `pane_current_command`, which reflects whichever subprocess claude has in the foreground.
+
 ## 1.0.1
 
 ### Patch Changes
