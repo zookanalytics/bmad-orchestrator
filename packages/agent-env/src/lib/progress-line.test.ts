@@ -135,6 +135,27 @@ describe('createProgressLine', () => {
     expect(chunks[2]).toMatch(/\x1b\[1A/);
   });
 
+  it('emits \\r after \\n between rows so erase-line starts at column 0', () => {
+    const { stream, chunks } = createMockStream(80, true);
+    const progress = createProgressLine(stream, 80, 5);
+
+    progress.update('first');
+    progress.update('second');
+
+    const last = chunks[chunks.length - 1];
+    // Multi-row writes must include a CR before the next ERASE_LINE so
+    // raw-mode ptys (where \n alone does not reset column) clear correctly.
+    // eslint-disable-next-line no-control-regex
+    expect(last).toMatch(/\r\n\x1b\[K/);
+  });
+
+  it('throws RangeError when maxLines is below 1', () => {
+    const { stream } = createMockStream(80, true);
+    expect(() => createProgressLine(stream, 80, 0)).toThrow(RangeError);
+    expect(() => createProgressLine(stream, 80, -1)).toThrow(RangeError);
+    expect(() => createProgressLine(stream, 80, Number.NaN)).toThrow(RangeError);
+  });
+
   it('clear() erases all visible lines after multi-line updates', () => {
     const { stream, chunks } = createMockStream(80, true);
     const progress = createProgressLine(stream, 80, 5);

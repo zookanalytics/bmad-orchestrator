@@ -34,6 +34,9 @@ export function createProgressLine(
   columns?: number,
   maxLines: number = DEFAULT_MAX_LINES
 ): ProgressLine {
+  if (!Number.isFinite(maxLines) || maxLines < 1) {
+    throw new RangeError(`maxLines must be at least 1; received ${maxLines}`);
+  }
   if (!stream.isTTY) {
     return { update() {}, clear() {} };
   }
@@ -58,7 +61,9 @@ export function createProgressLine(
     }
     out += '\r';
     for (let i = 0; i < buffer.length; i++) {
-      if (i > 0) out += '\n';
+      // CRLF (not bare LF) between rows: \n alone does not reset the column
+      // under raw-mode ptys, so the next ERASE_LINE could start mid-line.
+      if (i > 0) out += '\r\n';
       out += `${ERASE_LINE}${PREFIX}${truncate(buffer[i])}`;
     }
     stream.write(out);
@@ -82,7 +87,7 @@ export function createProgressLine(
       }
       out += `\r${ERASE_LINE}`;
       for (let i = 1; i < drawnHeight; i++) {
-        out += `\n${ERASE_LINE}`;
+        out += `\r\n${ERASE_LINE}`;
       }
       if (drawnHeight > 1) {
         out += `\x1b[${drawnHeight - 1}A\r`;
