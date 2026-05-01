@@ -30,7 +30,7 @@ export async function executeTmuxSave(): Promise<void> {
   let tmuxOutput: string;
   try {
     tmuxOutput = execSync(
-      'tmux list-panes -a -F "#{pane_id}\t#{window_index}\t#{window_name}\t#{pane_current_path}\t#{pane_current_command}\t#{session_name}"',
+      'tmux list-panes -a -F "#{pane_id}\t#{window_index}\t#{window_name}\t#{pane_current_path}\t#{session_name}"',
       { encoding: 'utf-8', timeout: 5000 }
     );
   } catch {
@@ -45,13 +45,12 @@ export async function executeTmuxSave(): Promise<void> {
     .split('\n')
     .filter((line) => line.trim())
     .map((line) => {
-      const [paneId, indexStr, windowName, cwd, command, sessionName] = line.split('\t');
+      const [paneId, indexStr, windowName, cwd, sessionName] = line.split('\t');
       return {
         paneId,
         windowIndex: parseInt(indexStr, 10),
         windowName,
         cwd,
-        command,
         sessionName,
       };
     });

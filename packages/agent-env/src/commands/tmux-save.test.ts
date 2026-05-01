@@ -57,10 +57,9 @@ describe('executeTmuxSave', () => {
   });
 
   it('saves session state from tmux list-panes output', async () => {
-    // Simulate tmux list-panes output (tab-separated): pane_id window_index window_name pane_current_path pane_current_command session_name
+    // Simulate tmux list-panes output (tab-separated): pane_id window_index window_name pane_current_path session_name
     mockExecSync.mockReturnValue(
-      '%0\t1\tshell\t/workspaces/project\tzsh\tbugs\n' +
-        '%1\t2\tclaude-win\t/workspaces/project\tclaude\tbugs\n'
+      '%0\t1\tshell\t/workspaces/project\tbugs\n' + '%1\t2\tclaude-win\t/workspaces/project\tbugs\n'
     );
     mockReadPanesState.mockResolvedValue({
       version: 1,
@@ -97,11 +96,11 @@ describe('executeTmuxSave', () => {
     expect(mockWriteSessionState).not.toHaveBeenCalled();
   });
 
-  it('records program=null when claude-sessions has no entry, even if pane_current_command is claude', async () => {
+  it('records program=null when claude-sessions has no entry', async () => {
     // claude-sessions.json is authoritative. If the wrapper didn't write an
-    // entry (e.g. claude run outside the wrapper), we don't claim claude is
-    // running there — restore wouldn't have a session_id to resume anyway.
-    mockExecSync.mockReturnValue('%0\t1\twin\t/tmp\tclaude\tbugs\n');
+    // entry (e.g. claude is run outside the wrapper), we don't claim claude
+    // is running there — restore wouldn't have a session_id to resume anyway.
+    mockExecSync.mockReturnValue('%0\t1\twin\t/tmp\tbugs\n');
     mockReadPanesState.mockResolvedValue({ version: 1 }); // no entry for %0
 
     await executeTmuxSave();
@@ -111,11 +110,10 @@ describe('executeTmuxSave', () => {
     expect(savedState.windows[0].claude_session_id).toBeUndefined();
   });
 
-  it('records program=claude when claude-sessions has entry but pane_current_command shows a transient subprocess', async () => {
-    // Reproduces: autosave fires while claude is mid-tool-call, so
-    // pane_current_command returns the subprocess (bash/node/etc) instead of "claude".
-    // claude-sessions.json is the authoritative source — wrapper writes it on launch.
-    mockExecSync.mockReturnValue('%2\t1\tzsh\t/workspaces/foo\tbash\tagent-env\n');
+  it('records program=claude when claude-sessions has an entry for the pane', async () => {
+    // claude-sessions.json is the authoritative source — the wrapper writes
+    // it on launch and removes it on graceful exit.
+    mockExecSync.mockReturnValue('%2\t1\tzsh\t/workspaces/foo\tagent-env\n');
     mockReadPanesState.mockResolvedValue({
       version: 1,
       '%2': {
