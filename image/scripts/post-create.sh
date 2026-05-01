@@ -16,6 +16,9 @@ echo "Starting Agent DevContainer post-create setup..."
 echo "==============================================="
 
 # Step 1: Fix SSH agent socket permissions (if mounted)
+# Also re-applied in postStartCommand to survive host reboots, but needed here
+# so SSH-dependent steps below (e.g. install-shared-skills clones over SSH)
+# work on first container creation, before postStartCommand has run.
 echo ""
 echo "[Step 1] Fixing SSH agent socket permissions..."
 sudo /usr/local/bin/fix-ssh-socket-permissions.sh

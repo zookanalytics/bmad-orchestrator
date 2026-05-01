@@ -299,7 +299,7 @@ LABEL devcontainer.metadata='[ \
       "PULSE_COOKIE": "/shared-data/pulse/cookie" \
     }, \
     "postCreateCommand": "/usr/local/bin/post-create.sh", \
-    "postStartCommand": "sudo /usr/local/bin/start-sshd.sh; /home/node/.local/bin/tmux-session --detached || true; : > /tmp/install-shared-skills.log; /usr/local/bin/install-shared-skills.sh >> /tmp/install-shared-skills.log 2>&1 || true", \
+    "postStartCommand": "sudo /usr/local/bin/fix-ssh-socket-permissions.sh; sudo /usr/local/bin/start-sshd.sh; /home/node/.local/bin/tmux-session --detached || true; : > /tmp/install-shared-skills.log; /usr/local/bin/install-shared-skills.sh >> /tmp/install-shared-skills.log 2>&1 || true", \
     "forwardPorts": [22], \
     "customizations": { \
       "vscode": { \
