@@ -181,6 +181,7 @@ fi
 # install groups. Passing `--allow-build` on every `pnpm install -g` tells pnpm
 # to persist allowBuilds into the correct isolated dir at install time.
 PNPM_ALLOW_BUILDS=(
+  --allow-build=@github/keytar
   --allow-build=@zookanalytics/keystone-workflows
   --allow-build=keytar
   --allow-build=node-pty
