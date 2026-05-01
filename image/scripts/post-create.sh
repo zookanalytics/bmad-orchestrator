@@ -15,14 +15,13 @@ echo "==============================================="
 echo "Starting Agent DevContainer post-create setup..."
 echo "==============================================="
 
-# Step 1: Fix SSH agent socket permissions (if mounted)
-echo ""
-echo "[Step 1] Fixing SSH agent socket permissions..."
-sudo /usr/local/bin/fix-ssh-socket-permissions.sh
+# SSH agent socket permissions are fixed in postStartCommand (runs on every
+# container start, including after host reboot when the bind-mount socket is
+# re-created with default 0660 perms).
 
-# Step 2: SSH server setup (host keys + authorized_keys)
+# Step 1: SSH server setup (host keys + authorized_keys)
 echo ""
-echo "[Step 2] Setting up SSH server..."
+echo "[Step 1] Setting up SSH server..."
 
 # Generate persistent host keys (stored in workspace so they survive stop/start)
 SSH_HOST_KEY_DIR="$WORKSPACE_ROOT/.agent-env/ssh"
@@ -68,15 +67,15 @@ else
 fi
 echo "✓ SSH server setup complete"
 
-# Step 3: Assemble Claude Code managed settings
+# Step 2: Assemble Claude Code managed settings
 echo ""
-echo "[Step 3] Assembling Claude Code managed settings..."
+echo "[Step 2] Assembling Claude Code managed settings..."
 sudo /usr/local/bin/assemble-managed-settings.sh
 echo "✓ Managed settings assembled"
 
-# Step 4: Instance isolation (if applicable)
+# Step 3: Instance isolation (if applicable)
 echo ""
-echo "[Step 4] Checking for instance isolation..."
+echo "[Step 3] Checking for instance isolation..."
 
 # Fix shared-data volume permissions if needed (Docker creates volumes as root)
 if [ -n "${SHARED_DATA_DIR:-}" ] && [ -d "$SHARED_DATA_DIR" ] && [ ! -w "$SHARED_DATA_DIR" ]; then
@@ -107,33 +106,33 @@ else
   echo "  Skipping instance isolation (not in proper DevContainer)"
 fi
 
-# Step 4b: Promote PulseAudio cookie to shared-data (if available)
+# Step 3b: Promote PulseAudio cookie to shared-data (if available)
 PULSE_COOKIE_SRC="/etc/agent-env/pulse/cookie"
 PULSE_COOKIE_DST="${SHARED_DATA_DIR:-/shared-data}/pulse/cookie"
 if [ -f "$PULSE_COOKIE_SRC" ]; then
   echo ""
-  echo "[Step 4b] Promoting PulseAudio cookie to shared-data..."
+  echo "[Step 3b] Promoting PulseAudio cookie to shared-data..."
   mkdir -p "$(dirname "$PULSE_COOKIE_DST")"
   cp "$PULSE_COOKIE_SRC" "$PULSE_COOKIE_DST"
   chmod 600 "$PULSE_COOKIE_DST"
   echo "✓ PulseAudio cookie promoted"
 fi
 
-# Step 5: Check for package updates (daily)
+# Step 4: Check for package updates (daily)
 echo ""
-echo "[Step 5] Checking for package updates..."
+echo "[Step 4] Checking for package updates..."
 /usr/local/bin/check-daily-updates.sh
 echo "✓ Package update check complete"
 
-# Step 6: Fix node_modules ownership
+# Step 5: Fix node_modules ownership
 echo ""
-echo "[Step 6] Fixing node_modules ownership..."
+echo "[Step 5] Fixing node_modules ownership..."
 sudo /usr/local/bin/fix-node-modules-ownership.sh
 echo "✓ Node modules ownership fixed"
 
-# Step 7: Install CLI tools
+# Step 6: Install CLI tools
 echo ""
-echo "[Step 7] Installing CLI tools..."
+echo "[Step 6] Installing CLI tools..."
 
 # Install Claude Code via official installer (https://claude.ai/install.sh)
 # Security note: Piping to bash is the official install method. The script is served
@@ -231,46 +230,46 @@ fi
 
 echo "✓ CLI tools installed"
 
-# Step 8: Install shared agent skills
+# Step 7: Install shared agent skills
 # NOTE: Must run BEFORE firewall init (step 11) — skills installation
 # clones git repos and needs unrestricted network access.
 echo ""
-echo "[Step 8] Installing shared agent skills..."
+echo "[Step 7] Installing shared agent skills..."
 if /usr/local/bin/install-shared-skills.sh; then
   echo "✓ Shared agent skills installed"
 else
   echo "⚠ Shared agent skills installation had issues (see above)"
 fi
 
-# Step 9: Start dnsmasq for DNS logging
+# Step 8: Start dnsmasq for DNS logging
 echo ""
-echo "[Step 9] Starting dnsmasq DNS forwarder..."
+echo "[Step 8] Starting dnsmasq DNS forwarder..."
 sudo /usr/local/bin/start-dnsmasq.sh
 
-# Step 10: Start ulogd for firewall logging
+# Step 9: Start ulogd for firewall logging
 echo ""
-echo "[Step 10] Starting ulogd firewall logger..."
+echo "[Step 9] Starting ulogd firewall logger..."
 sudo /usr/local/bin/start-ulogd.sh
 echo "✓ ulogd started"
 
-# Step 11: Initialize firewall
+# Step 10: Initialize firewall
 echo ""
-echo "[Step 11] Initializing firewall rules..."
+echo "[Step 10] Initializing firewall rules..."
 sudo /usr/local/bin/init-firewall.sh
 echo "✓ Firewall initialized"
 
-# Step 12: Run sanity check
+# Step 11: Run sanity check
 echo ""
-echo "[Step 12] Running sanity check..."
+echo "[Step 11] Running sanity check..."
 if /usr/local/bin/devcontainer-sanity-check.sh; then
   echo "✓ Sanity check passed"
 else
   echo "⚠ Sanity check reported failures (see above) - container continues"
 fi
 
-# Step 13: Run project-specific post-create if it exists
+# Step 12: Run project-specific post-create if it exists
 echo ""
-echo "[Step 13] Running project-specific setup..."
+echo "[Step 12] Running project-specific setup..."
 PROJECT_POST_CREATE="$WORKSPACE_ROOT/.devcontainer/post-create-project.sh"
 if [ -f "$PROJECT_POST_CREATE" ]; then
     echo "Running $PROJECT_POST_CREATE..."
