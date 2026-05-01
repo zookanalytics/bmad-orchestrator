@@ -89,18 +89,20 @@ export async function executeTmuxSave(): Promise<void> {
     const paneEntry = panesState[pane.paneId];
     const hasClaudeEntry =
       typeof paneEntry === 'object' && paneEntry !== null && 'session_id' in paneEntry;
-    // Only trust the actual running command — claude-sessions.json entries
-    // can be stale if the user exited claude but kept the window open.
-    const isClaudeRunning = pane.command === 'claude';
+    // Trust claude-sessions.json over pane_current_command: the latter reflects
+    // whichever subprocess claude has in the foreground (bash for tool calls,
+    // etc.), so it returns "bash" or "node" any time autosave fires mid-tool-
+    // execution. The wrapper writes the entry on launch and removes it via an
+    // EXIT trap on graceful shutdown.
 
     const window: WindowEntry = {
       index: pane.windowIndex,
       name: pane.windowName,
       cwd: pane.cwd,
-      program: isClaudeRunning ? 'claude' : null,
+      program: hasClaudeEntry ? 'claude' : null,
     };
 
-    if (isClaudeRunning && hasClaudeEntry) {
+    if (hasClaudeEntry) {
       window.claude_session_id = paneEntry.session_id;
     }
 

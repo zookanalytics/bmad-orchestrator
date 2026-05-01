@@ -97,14 +97,38 @@ describe('executeTmuxSave', () => {
     expect(mockWriteSessionState).not.toHaveBeenCalled();
   });
 
-  it('detects claude from tmux command even without claude-sessions.json entry', async () => {
+  it('records program=null when claude-sessions has no entry, even if pane_current_command is claude', async () => {
+    // claude-sessions.json is authoritative. If the wrapper didn't write an
+    // entry (e.g. claude run outside the wrapper), we don't claim claude is
+    // running there — restore wouldn't have a session_id to resume anyway.
     mockExecSync.mockReturnValue('%0\t1\twin\t/tmp\tclaude\tbugs\n');
     mockReadPanesState.mockResolvedValue({ version: 1 }); // no entry for %0
 
     await executeTmuxSave();
 
     const savedState: SessionState = mockWriteSessionState.mock.calls[0][1];
-    expect(savedState.windows[0].program).toBe('claude');
+    expect(savedState.windows[0].program).toBeNull();
     expect(savedState.windows[0].claude_session_id).toBeUndefined();
+  });
+
+  it('records program=claude when claude-sessions has entry but pane_current_command shows a transient subprocess', async () => {
+    // Reproduces: autosave fires while claude is mid-tool-call, so
+    // pane_current_command returns the subprocess (bash/node/etc) instead of "claude".
+    // claude-sessions.json is the authoritative source — wrapper writes it on launch.
+    mockExecSync.mockReturnValue('%2\t1\tzsh\t/workspaces/foo\tbash\tagent-env\n');
+    mockReadPanesState.mockResolvedValue({
+      version: 1,
+      '%2': {
+        session_id: 'e2b75898-1536-4390-9563-51eaa11cd9a6',
+        window_name: 'zsh',
+        cwd: '/workspaces/foo',
+      },
+    });
+
+    await executeTmuxSave();
+
+    const savedState: SessionState = mockWriteSessionState.mock.calls[0][1];
+    expect(savedState.windows[0].program).toBe('claude');
+    expect(savedState.windows[0].claude_session_id).toBe('e2b75898-1536-4390-9563-51eaa11cd9a6');
   });
 });
