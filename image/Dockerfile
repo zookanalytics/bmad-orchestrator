@@ -49,7 +49,7 @@ ENV LANG=en_US.UTF-8
 ENV LC_ALL=en_US.UTF-8
 
 # Setup pnpm via corepack (pin version to avoid mismatch with project packageManager)
-ARG PNPM_VERSION=11.0.0-rc.5
+ARG PNPM_VERSION=11.0.8
 ENV PNPM_HOME="/pnpm"
 RUN mkdir -p "$PNPM_HOME"
 # pnpm 11 moved the global bin dir from $PNPM_HOME to $PNPM_HOME/bin (pnpm#10986).
