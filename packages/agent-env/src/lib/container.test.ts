@@ -29,6 +29,12 @@ function mockExecutor(results: Record<string, ExecuteResult>) {
         }
       }
 
+      // The `devcontainer --version` preflight probe defaults to "available"
+      // unless a test mocks it explicitly (e.g. to exercise the missing-CLI path).
+      if (key === 'devcontainer --version') {
+        return { ok: true, stdout: '0.0.0', stderr: '', exitCode: 0 };
+      }
+
       // Default: command not found
       return { ok: false, stdout: '', stderr: `command not found: ${command}`, exitCode: 127 };
     });
@@ -647,6 +653,26 @@ describe('devcontainerUp', () => {
     expect(result.error.suggestion).toBeDefined();
   });
 
+  it('returns DEVCONTAINER_CLI_MISSING when the devcontainer CLI is not found', async () => {
+    const executor = mockExecutor({
+      'docker info': successResult,
+      'devcontainer --version': {
+        ok: false,
+        stdout: '',
+        stderr: 'command not found: devcontainer',
+        exitCode: 127,
+      },
+    });
+    const lifecycle = createContainerLifecycle(executor);
+
+    const result = await lifecycle.devcontainerUp('/workspace/path', 'ae-test');
+    expect(result.ok).toBe(false);
+    if (result.ok) throw new Error('Expected failure');
+    expect(result.error).not.toBeNull();
+    expect(result.error.code).toBe('DEVCONTAINER_CLI_MISSING');
+    expect(result.error.suggestion).toContain('@devcontainers/cli');
+  });
+
   it('returns CONTAINER_ERROR when devcontainer up fails', async () => {
     const executor = mockExecutor({
       'docker info': successResult,
@@ -849,7 +875,8 @@ describe('devcontainerUp', () => {
 
     // Find the devcontainer call
     const devcontainerCall = executor.mock.calls.find(
-      (call: unknown[]) => call[0] === 'devcontainer'
+      (call: unknown[]) =>
+        call[0] === 'devcontainer' && Array.isArray(call[1]) && call[1][0] === 'up'
     );
     expect(devcontainerCall).toBeDefined();
     if (devcontainerCall) {
@@ -1022,7 +1049,8 @@ describe('devcontainerUp remoteEnv options', () => {
       remoteEnv: { AGENT_INSTANCE: 'test', FOO: 'bar' },
     });
     const devcontainerCall = executor.mock.calls.find(
-      (call: unknown[]) => call[0] === 'devcontainer'
+      (call: unknown[]) =>
+        call[0] === 'devcontainer' && Array.isArray(call[1]) && call[1][0] === 'up'
     );
     expect(devcontainerCall).toBeDefined();
     const args = (devcontainerCall as unknown[])[1] as string[];
@@ -1044,7 +1072,8 @@ describe('devcontainerUp remoteEnv options', () => {
 
     await lifecycle.devcontainerUp('/workspace', 'ae-test');
     const devcontainerCall = executor.mock.calls.find(
-      (call: unknown[]) => call[0] === 'devcontainer'
+      (call: unknown[]) =>
+        call[0] === 'devcontainer' && Array.isArray(call[1]) && call[1][0] === 'up'
     );
     expect(devcontainerCall).toBeDefined();
     expect((devcontainerCall as unknown[])[1]).not.toContain('--remote-env');
@@ -1090,7 +1119,8 @@ describe('devcontainerUp configPath options', () => {
 
     await lifecycle.devcontainerUp('/workspace', 'ae-test');
     const devcontainerCall = executor.mock.calls.find(
-      (call: unknown[]) => call[0] === 'devcontainer'
+      (call: unknown[]) =>
+        call[0] === 'devcontainer' && Array.isArray(call[1]) && call[1][0] === 'up'
     );
     expect(devcontainerCall).toBeDefined();
     expect((devcontainerCall as unknown[])[1]).not.toContain('--config');
@@ -1134,7 +1164,8 @@ describe('devcontainerUp build options', () => {
 
     await lifecycle.devcontainerUp('/workspace', 'ae-test');
     const devcontainerCall = executor.mock.calls.find(
-      (call: unknown[]) => call[0] === 'devcontainer'
+      (call: unknown[]) =>
+        call[0] === 'devcontainer' && Array.isArray(call[1]) && call[1][0] === 'up'
     );
     expect(devcontainerCall).toBeDefined();
     expect((devcontainerCall as unknown[])[1]).not.toContain('--build-no-cache');
@@ -1154,7 +1185,8 @@ describe('devcontainerUp build options', () => {
 
     await lifecycle.devcontainerUp('/workspace', 'ae-test', { buildNoCache: false });
     const devcontainerCall = executor.mock.calls.find(
-      (call: unknown[]) => call[0] === 'devcontainer'
+      (call: unknown[]) =>
+        call[0] === 'devcontainer' && Array.isArray(call[1]) && call[1][0] === 'up'
     );
     expect(devcontainerCall).toBeDefined();
     expect((devcontainerCall as unknown[])[1]).not.toContain('--build-no-cache');
@@ -1181,7 +1213,8 @@ describe('devcontainerUp interactive option', () => {
 
       await lifecycle.devcontainerUp('/workspace', 'ae-test', { interactive: true });
       const devcontainerCall = executor.mock.calls.find(
-        (call: unknown[]) => call[0] === 'devcontainer'
+        (call: unknown[]) =>
+          call[0] === 'devcontainer' && Array.isArray(call[1]) && call[1][0] === 'up'
       );
       expect(devcontainerCall).toBeDefined();
       expect((devcontainerCall as unknown[])[2]).toHaveProperty('stdin', 'inherit');
@@ -1207,7 +1240,8 @@ describe('devcontainerUp interactive option', () => {
 
       await lifecycle.devcontainerUp('/workspace', 'ae-test', { interactive: true });
       const devcontainerCall = executor.mock.calls.find(
-        (call: unknown[]) => call[0] === 'devcontainer'
+        (call: unknown[]) =>
+          call[0] === 'devcontainer' && Array.isArray(call[1]) && call[1][0] === 'up'
       );
       expect(devcontainerCall).toBeDefined();
       expect((devcontainerCall as unknown[])[2]).not.toHaveProperty('stdin');
@@ -1230,7 +1264,8 @@ describe('devcontainerUp interactive option', () => {
 
     await lifecycle.devcontainerUp('/workspace', 'ae-test');
     const devcontainerCall = executor.mock.calls.find(
-      (call: unknown[]) => call[0] === 'devcontainer'
+      (call: unknown[]) =>
+        call[0] === 'devcontainer' && Array.isArray(call[1]) && call[1][0] === 'up'
     );
     expect(devcontainerCall).toBeDefined();
     expect((devcontainerCall as unknown[])[2]).not.toHaveProperty('stdin');

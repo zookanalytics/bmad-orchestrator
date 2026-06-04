@@ -45,6 +45,7 @@ type Execute = (
 
 export interface ContainerLifecycle {
   isDockerAvailable(): Promise<boolean>;
+  isDevcontainerCliAvailable(): Promise<boolean>;
   containerStatus(containerName: string): Promise<ContainerResult>;
   getContainerNameById(containerId: string): Promise<string | null>;
   findContainerByWorkspaceLabel(workspacePath: string): Promise<string | null>;
@@ -178,6 +179,61 @@ export function createContainerLifecycle(executor: Execute = createExecutor()): 
   async function isDockerAvailable(): Promise<boolean> {
     const result = await executor('docker', ['info'], { timeout: DOCKER_INFO_TIMEOUT });
     return result.ok;
+  }
+
+  /**
+   * Check whether the `devcontainer` CLI is resolvable on PATH.
+   *
+   * agent-env shells out to a bare `devcontainer` command but does not bundle
+   * it as a hard dependency — VS Code's Dev Containers extension ships its own
+   * copy, and many users install it globally. When it is missing entirely the
+   * spawn fails with ENOENT and produces no stdout/stderr, so we probe for it
+   * up front to surface an actionable message instead of an empty error.
+   */
+  async function isDevcontainerCliAvailable(): Promise<boolean> {
+    const result = await executor('devcontainer', ['--version'], { timeout: DOCKER_INFO_TIMEOUT });
+    return result.ok;
+  }
+
+  /**
+   * Verify the prerequisites for `devcontainer up` are present.
+   *
+   * @returns A failed ContainerResult describing the missing prerequisite, or
+   *   `null` when both Docker and the devcontainer CLI are available.
+   */
+  async function checkDevcontainerPrerequisites(): Promise<ContainerResult | null> {
+    if (!(await isDockerAvailable())) {
+      return {
+        ok: false,
+        status: 'not-found',
+        containerId: null,
+        error: {
+          code: 'ORBSTACK_REQUIRED',
+          message: 'Docker is not available. OrbStack or Docker Desktop must be running.',
+          suggestion: 'Start OrbStack or Docker Desktop, then try again.',
+        },
+      };
+    }
+
+    // We don't bundle the devcontainer CLI (VS Code's Dev Containers extension
+    // provides one, and users may install it globally). When it is missing the
+    // spawn fails with an empty ENOENT, so surface an actionable message here.
+    if (!(await isDevcontainerCliAvailable())) {
+      return {
+        ok: false,
+        status: 'not-found',
+        containerId: null,
+        error: {
+          code: 'DEVCONTAINER_CLI_MISSING',
+          message: 'The `devcontainer` CLI was not found on your PATH.',
+          suggestion:
+            'Install it with `npm install -g @devcontainers/cli`, or — if you use VS Code — run the ' +
+            '"Dev Containers: Install devcontainer CLI" command and ensure the resulting binary is on your PATH.',
+        },
+      };
+    }
+
+    return null;
   }
 
   /**
@@ -361,19 +417,10 @@ export function createContainerLifecycle(executor: Execute = createExecutor()): 
       interactive?: boolean;
     }
   ): Promise<ContainerResult> {
-    // Check Docker availability first
-    const dockerOk = await isDockerAvailable();
-    if (!dockerOk) {
-      return {
-        ok: false,
-        status: 'not-found',
-        containerId: null,
-        error: {
-          code: 'ORBSTACK_REQUIRED',
-          message: 'Docker is not available. OrbStack or Docker Desktop must be running.',
-          suggestion: 'Start OrbStack or Docker Desktop, then try again.',
-        },
-      };
+    // Verify Docker and the devcontainer CLI are both available up front.
+    const prereqError = await checkDevcontainerPrerequisites();
+    if (prereqError) {
+      return prereqError;
     }
 
     // Run devcontainer up
@@ -542,6 +589,7 @@ export function createContainerLifecycle(executor: Execute = createExecutor()): 
 
   return {
     isDockerAvailable,
+    isDevcontainerCliAvailable,
     containerStatus,
     getContainerNameById,
     findContainerByWorkspaceLabel,

@@ -210,9 +210,11 @@ fi
 echo "  - Installing agent-env CLI..."
 AGENT_ENV_DEV_MOUNT="/opt/agent-env-dev"
 if [ -d "$AGENT_ENV_DEV_MOUNT" ]; then
-  echo "    Dev mount detected at $AGENT_ENV_DEV_MOUNT — linking local build"
-  if (cd "$AGENT_ENV_DEV_MOUNT" && pnpm link --global); then
-    echo "    ✓ agent-env linked from dev mount"
+  echo "    Dev mount detected at $AGENT_ENV_DEV_MOUNT — installing local build"
+  # pnpm 11 removed `pnpm link --global` (no-arg/--global form); `pnpm add -g <dir>`
+  # is the supported way to put a local package's bin on the global PATH.
+  if pnpm add -g "$AGENT_ENV_DEV_MOUNT"; then
+    echo "    ✓ agent-env installed from dev mount"
   else
     echo "    ❌ CRITICAL: agent-env dev link failed!"
     echo "    If you are using a dev mount, your local build must be valid."

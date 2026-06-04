@@ -19,6 +19,7 @@ import {
   mergeMounts,
   mergeRunArgs,
   readRepoConfig,
+  resolveSshAgentMount,
   validateRepoConfig,
   writeGeneratedConfig,
 } from './devcontainer-merge.js';
@@ -868,6 +869,9 @@ describe('buildManagedConfig', () => {
       containerName: 'ae-repo-my-instance',
       repoSlug: 'my-repo',
       purpose: 'testing',
+      // Disable SSH agent forwarding so the assertion is independent of the
+      // host environment running the tests.
+      sshAgent: null,
     };
 
     const result = buildManagedConfig(defaults, params);
@@ -885,6 +889,66 @@ describe('buildManagedConfig', () => {
     });
     expect(result.mounts).toEqual([]);
     expect(result.lifecycleCmds).toEqual(LABEL_LIFECYCLE_CMDS);
+  });
+
+  it('injects the SSH agent mount and SSH_AUTH_SOCK when forwarding is provided', () => {
+    const defaults = {
+      image: 'test:latest',
+      initializeCmd: 'bash init.sh',
+      baseContainerEnv: { AGENT_ENV_CONTAINER: 'true' },
+    };
+    const result = buildManagedConfig(defaults, {
+      instanceName: 'i',
+      containerName: 'ae-repo-i',
+      repoSlug: 'repo',
+      purpose: '',
+      sshAgent: resolveSshAgentMount('linux', '/host/agent.sock'),
+    });
+
+    expect(result.mounts).toEqual([
+      'source=${localEnv:SSH_AUTH_SOCK},target=/run/host-services/ssh-auth.sock,type=bind',
+    ]);
+    expect(result.containerEnv.SSH_AUTH_SOCK).toBe('/run/host-services/ssh-auth.sock');
+  });
+});
+
+// ─── resolveSshAgentMount ────────────────────────────────────────────────────
+
+describe('resolveSshAgentMount', () => {
+  it('uses the Docker Desktop / OrbStack fixed path on macOS', () => {
+    const result = resolveSshAgentMount('darwin', undefined);
+    expect(result).toEqual({
+      mount:
+        'source=/run/host-services/ssh-auth.sock,target=/run/host-services/ssh-auth.sock,type=bind',
+      env: { SSH_AUTH_SOCK: '/run/host-services/ssh-auth.sock' },
+    });
+  });
+
+  it('forwards the host agent via ${localEnv:SSH_AUTH_SOCK} on Linux', () => {
+    const result = resolveSshAgentMount('linux', '/run/user/1000/agent.sock');
+    // The concrete socket path only gates whether forwarding is enabled — it
+    // must never be persisted, since agent sockets under /tmp/ssh-* or
+    // /run/user/... are ephemeral and the generated config is reused by
+    // attach/code across restarts. The devcontainer variable defers
+    // resolution to each `devcontainer up`.
+    expect(result).toEqual({
+      mount: 'source=${localEnv:SSH_AUTH_SOCK},target=/run/host-services/ssh-auth.sock,type=bind',
+      env: { SSH_AUTH_SOCK: '/run/host-services/ssh-auth.sock' },
+    });
+  });
+
+  it('returns null on Linux when no agent socket is present', () => {
+    // Note: passing `undefined` would re-trigger the process.env default, so
+    // exercise the unset case by clearing the env var, and the empty case
+    // explicitly with ''.
+    const saved = process.env.SSH_AUTH_SOCK;
+    delete process.env.SSH_AUTH_SOCK;
+    try {
+      expect(resolveSshAgentMount('linux')).toBeNull();
+      expect(resolveSshAgentMount('linux', '')).toBeNull();
+    } finally {
+      if (saved !== undefined) process.env.SSH_AUTH_SOCK = saved;
+    }
   });
 });
 

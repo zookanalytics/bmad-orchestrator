@@ -699,6 +699,74 @@ export async function writeGeneratedConfig(
   await deps.rename(tmpPath, outputPath);
 }
 
+// ─── SSH Agent Forwarding ────────────────────────────────────────────────────
+
+/**
+ * Container-side path where the forwarded SSH agent socket is exposed.
+ *
+ * This is kept constant across platforms so everything downstream (the
+ * SSH_AUTH_SOCK env var, fix-ssh-socket-permissions.sh, sshd) can rely on a
+ * single path regardless of where the host socket actually lives.
+ */
+export const SSH_AGENT_CONTAINER_SOCKET = '/run/host-services/ssh-auth.sock';
+
+/** A bind mount + matching SSH_AUTH_SOCK env for forwarding the host SSH agent. */
+export interface SshAgentForwarding {
+  mount: string;
+  env: Record<string, string>;
+}
+
+/**
+ * Resolve the host SSH agent socket mount for the current platform.
+ *
+ * The correct host source differs by platform and therefore cannot live in the
+ * image's static devcontainer.metadata LABEL:
+ *
+ * - macOS (Docker Desktop / OrbStack): the runtime injects the host agent at a
+ *   fixed path inside its VM, `/run/host-services/ssh-auth.sock`. That literal
+ *   path must be used as the mount source — it is special-cased by the runtime
+ *   and is not a normal file on the macOS host.
+ * - Linux (native Docker / Podman): there is no magic path; the host's real
+ *   `$SSH_AUTH_SOCK` must be forwarded directly. The mount source is emitted
+ *   as the devcontainer variable `${localEnv:SSH_AUTH_SOCK}` rather than the
+ *   concrete path: agent sockets under `/tmp/ssh-*` or `/run/user/...` are
+ *   ephemeral and change across logout/reboot, and the generated config is
+ *   reused by attach/code to restart containers without being regenerated.
+ *   The variable defers resolution to each `devcontainer up`, so a restart
+ *   picks up the current shell's agent instead of a stale baked-in path.
+ *
+ * Returns `null` when no agent is available to forward (Linux with no
+ * `SSH_AUTH_SOCK`), so callers can omit the mount entirely rather than emit a
+ * bind mount with a non-existent source — which makes `docker run` fail hard.
+ * The `sshAuthSock` value only gates this decision; it is never persisted.
+ *
+ * @param platform - Host platform (defaults to `process.platform`)
+ * @param sshAuthSock - Host SSH agent socket path (defaults to `process.env.SSH_AUTH_SOCK`)
+ */
+export function resolveSshAgentMount(
+  platform: NodeJS.Platform = process.platform,
+  sshAuthSock: string | undefined = process.env.SSH_AUTH_SOCK
+): SshAgentForwarding | null {
+  const target = SSH_AGENT_CONTAINER_SOCKET;
+  const forwarding = (source: string): SshAgentForwarding => ({
+    mount: `source=${source},target=${target},type=bind`,
+    env: { SSH_AUTH_SOCK: target },
+  });
+
+  if (platform === 'darwin') {
+    return forwarding(target);
+  }
+
+  if (sshAuthSock && sshAuthSock.length > 0) {
+    // Literal devcontainer variable (not a JS template) — substituted by the
+    // devcontainer CLI at each `up`, so the persisted config never holds an
+    // ephemeral socket path.
+    return forwarding('${localEnv:SSH_AUTH_SOCK}');
+  }
+
+  return null;
+}
+
 // ─── ManagedConfig Builder ───────────────────────────────────────────────────
 
 /**
@@ -714,6 +782,12 @@ export function buildManagedConfig(
     containerName: string;
     repoSlug: string;
     purpose: string;
+    /**
+     * Platform-resolved SSH agent forwarding (see resolveSshAgentMount). When
+     * omitted, the caller defaults to the current platform. Pass `null`
+     * explicitly to disable SSH agent forwarding.
+     */
+    sshAgent?: SshAgentForwarding | null;
   }
 ): ManagedConfig {
   const statusBarWatcher = {
@@ -721,6 +795,8 @@ export function buildManagedConfig(
     event: 'onFolderChange',
     vscodeTask: 'betterStatusBar.refreshButtons',
   };
+
+  const sshAgent = params.sshAgent === undefined ? resolveSshAgentMount() : params.sshAgent;
 
   return {
     image: defaults.image,
@@ -734,8 +810,9 @@ export function buildManagedConfig(
       AGENT_ENV_INSTANCE: params.instanceName,
       AGENT_ENV_REPO: params.repoSlug,
       AGENT_ENV_PURPOSE: params.purpose,
+      ...(sshAgent?.env ?? {}),
     },
-    mounts: [],
+    mounts: sshAgent ? [sshAgent.mount] : [],
     customizations: {
       vscode: {
         settings: {

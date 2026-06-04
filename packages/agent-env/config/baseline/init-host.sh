@@ -1,12 +1,20 @@
 #!/usr/bin/env bash
 # init-host.sh - Runs on the HOST before container creation (initializeCommand)
 # Ensures mount sources exist to prevent devcontainer up failures.
-# The .gitconfig and SSH socket mounts are provided by the image LABEL metadata.
+# The .gitconfig mount is provided by the image LABEL metadata; the SSH agent
+# socket mount is injected per-platform by agent-env (resolveSshAgentMount).
 
 set -euo pipefail
 
 GITCONFIG="$HOME/.gitconfig"
-SSH_SOCKET="/run/host-services/ssh-auth.sock"
+
+# Host SSH agent socket. macOS Docker Desktop/OrbStack expose it at a fixed path;
+# on Linux it is the host's real $SSH_AUTH_SOCK. Used only for a pre-flight warning.
+if [ "$(uname -s)" = "Darwin" ]; then
+  SSH_SOCKET="/run/host-services/ssh-auth.sock"
+else
+  SSH_SOCKET="${SSH_AUTH_SOCK:-}"
+fi
 
 # Ensure ~/.gitconfig exists (mounted read-only into container)
 if [ ! -f "$GITCONFIG" ]; then
@@ -48,11 +56,15 @@ if [ -f "$PULSE_COOKIE_SRC" ]; then
   echo "agent-env: Staged PulseAudio cookie for audio passthrough"
 fi
 
-# Verify SSH agent socket exists (provided by Docker Desktop / OrbStack on macOS)
-if [ ! -S "$SSH_SOCKET" ]; then
-  echo "agent-env: Warning: SSH agent socket not found at $SSH_SOCKET"
+# Verify a host SSH agent socket is available to forward into the container.
+if [ -z "$SSH_SOCKET" ] || [ ! -S "$SSH_SOCKET" ]; then
+  echo "agent-env: Warning: no SSH agent socket found${SSH_SOCKET:+ at $SSH_SOCKET}"
   echo "agent-env: SSH operations (git clone/push) may not work inside the container."
-  echo "agent-env: Ensure Docker Desktop or OrbStack is running on macOS."
+  if [ "$(uname -s)" = "Darwin" ]; then
+    echo "agent-env: Ensure Docker Desktop or OrbStack is running."
+  else
+    echo "agent-env: Start an SSH agent and load your key (eval \"\$(ssh-agent -s)\" && ssh-add)."
+  fi
 fi
 
 echo "agent-env: Host initialization complete"
