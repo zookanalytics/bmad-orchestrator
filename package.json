@@ -22,7 +22,7 @@
     "dev:orchestrator": "pnpm --filter @zookanalytics/bmad-orchestrator dev",
     "dev:agent-env": "pnpm --filter @zookanalytics/agent-env dev",
     "bootstrap": "pnpm install && pnpm build",
-    "setup:agent-env": "pnpm run bootstrap && cd packages/agent-env && pnpm link --global",
+    "setup:agent-env": "pnpm run bootstrap && pnpm add -g ./packages/agent-env",
     "test:install:retro": "node packages/bmm-retrospective-module/test-install.cjs",
     "bmad:install":"npx bmad-method install --directory $PWD --modules core,bmm,bmb,tea",
     "changeset": "changeset",

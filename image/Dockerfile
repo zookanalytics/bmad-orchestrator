@@ -136,7 +136,7 @@ RUN chmod +x /home/node/.local/bin/tmux-session /home/node/.local/bin/tmux-purpo
 
 # Bake agent-env CLI from local build so containers always use the version
 # that matches the image. post-create.sh detects /opt/agent-env-dev and runs
-# pnpm link --global from there instead of installing from npm.
+# `pnpm add -g /opt/agent-env-dev` from there instead of installing from npm.
 COPY --chown=node:node packages/agent-env/package.json /opt/agent-env-dev/package.json
 COPY --chown=node:node packages/agent-env/bin/ /opt/agent-env-dev/bin/
 COPY --chown=node:node packages/agent-env/dist/ /opt/agent-env-dev/dist/
@@ -283,12 +283,10 @@ LABEL devcontainer.metadata='[ \
       "source=agent-devcontainer-pnpm-store,target=/workspaces/.pnpm-store,type=volume", \
       "source=agent-devcontainer-node-modules-${localWorkspaceFolderBasename},target=/workspaces/${localWorkspaceFolderBasename}/node_modules,type=volume", \
       "source=${localEnv:HOME}/.gitconfig,target=/home/node/.gitconfig,type=bind,readonly", \
-      "source=/run/host-services/ssh-auth.sock,target=/run/host-services/ssh-auth.sock,type=bind", \
       "source=${localEnv:HOME}/.agent-env/ssh-pub-keys,target=/home/node/.ssh-host,type=bind,readonly", \
       "source=${localWorkspaceFolder}/.agent-env,target=/etc/agent-env,type=bind" \
     ], \
     "containerEnv": { \
-      "SSH_AUTH_SOCK": "/run/host-services/ssh-auth.sock", \
       "POWERLEVEL9K_DISABLE_GITSTATUS": "true", \
       "SHARED_DATA_DIR": "/shared-data", \
       "PNPM_HOME": "/pnpm", \

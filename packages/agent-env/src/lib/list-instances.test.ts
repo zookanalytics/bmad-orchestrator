@@ -75,6 +75,7 @@ function makeCleanGitState(): GitStateResult {
 function mockContainer(overrides: Partial<ContainerLifecycle> = {}): ContainerLifecycle {
   return {
     isDockerAvailable: vi.fn().mockResolvedValue(true),
+    isDevcontainerCliAvailable: vi.fn().mockResolvedValue(true),
     containerStatus: vi.fn().mockResolvedValue({
       ok: true,
       status: 'running',
