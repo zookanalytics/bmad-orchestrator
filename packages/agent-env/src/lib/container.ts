@@ -164,6 +164,28 @@ function buildDevcontainerErrorDetails(
   return parts.join('\n   ') || 'No error details available';
 }
 
+// ─── Runtime detection ───────────────────────────────────────────────────────
+
+/** Which container engine backs the `docker` command on this host. */
+export type ContainerRuntime = 'docker' | 'podman';
+
+/**
+ * Detect whether the `docker` CLI is actually Podman's Docker-compatible shim.
+ *
+ * This matters because Podman is stricter than Docker in ways that require
+ * Podman-specific runArgs (see buildManagedConfig): a fresh sticky-1777 tmpfs at
+ * /tmp, and a keep-id uid remap so bind-mounted host files are writable by the
+ * container user. `docker --version` prints "podman version ..." when the shim
+ * is in use. Defaults to 'docker' when the probe fails, so a detection error can
+ * never add Podman-only flags that would break a real Docker daemon.
+ */
+export async function detectContainerRuntime(
+  executor: Execute = createExecutor()
+): Promise<ContainerRuntime> {
+  const result = await executor('docker', ['--version'], { timeout: DOCKER_INFO_TIMEOUT });
+  return result.ok && /podman/i.test(result.stdout) ? 'podman' : 'docker';
+}
+
 // ─── Factory ─────────────────────────────────────────────────────────────────
 
 /**

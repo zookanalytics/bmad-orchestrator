@@ -30,7 +30,7 @@ import type { StateFsDeps } from './state.js';
 import type { ContainerError, WorkspacePath } from './types.js';
 import type { FsDeps } from './workspace.js';
 
-import { createContainerLifecycle } from './container.js';
+import { createContainerLifecycle, detectContainerRuntime } from './container.js';
 import {
   buildManagedConfig,
   loadManagedDefaults,
@@ -271,12 +271,17 @@ async function setupMergedConfig(
     // Load managed defaults from baseline config
     const defaults = await loadManagedDefaults(deps.mergeDeps);
 
+    // Detect the container runtime so Podman-only runArgs are emitted only when
+    // Podman actually backs `docker` on this host (see buildManagedConfig).
+    const containerRuntime = await detectContainerRuntime(deps.executor);
+
     // Build managed config from instance parameters
     const managed = buildManagedConfig(defaults, {
       instanceName: wsPath.name,
       containerName,
       repoSlug: repoName,
       purpose: purposeText,
+      containerRuntime,
     });
 
     // Copy repo-level .env / .env.local into workspace root

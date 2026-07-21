@@ -4,6 +4,7 @@ import { describe, it, expect, vi } from 'vitest';
 
 import {
   createContainerLifecycle,
+  detectContainerRuntime,
   DEVCONTAINER_UP_TIMEOUT,
   DEVCONTAINER_UP_NO_CACHE_TIMEOUT,
   DOCKER_INFO_TIMEOUT,
@@ -83,6 +84,36 @@ describe('isDockerAvailable', () => {
       ['info'],
       expect.objectContaining({ timeout: DOCKER_INFO_TIMEOUT })
     );
+  });
+});
+
+// ─── detectContainerRuntime ──────────────────────────────────────────────────
+
+describe('detectContainerRuntime', () => {
+  it('returns "podman" when `docker --version` reports the Podman shim', async () => {
+    const executor = mockExecutor({
+      'docker --version': { ok: true, stdout: 'podman version 5.7.0', stderr: '', exitCode: 0 },
+    });
+    expect(await detectContainerRuntime(executor)).toBe('podman');
+  });
+
+  it('returns "docker" for a real Docker daemon', async () => {
+    const executor = mockExecutor({
+      'docker --version': {
+        ok: true,
+        stdout: 'Docker version 27.3.1, build ce12230',
+        stderr: '',
+        exitCode: 0,
+      },
+    });
+    expect(await detectContainerRuntime(executor)).toBe('docker');
+  });
+
+  it('defaults to "docker" when the probe fails (never adds Podman-only flags)', async () => {
+    const executor = mockExecutor({
+      'docker --version': failureResult,
+    });
+    expect(await detectContainerRuntime(executor)).toBe('docker');
   });
 });
 

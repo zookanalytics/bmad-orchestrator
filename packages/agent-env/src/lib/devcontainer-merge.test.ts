@@ -468,6 +468,41 @@ describe('validateRepoConfig', () => {
     validateRepoConfig({ name: 'test' }, 'ghcr.io/test/managed:latest', logger);
     expect(logger.warn).not.toHaveBeenCalled();
   });
+
+  it('warns when repo sets overrideCommand:false (agent-env forces true)', () => {
+    const logger = { warn: vi.fn() };
+    validateRepoConfig({ overrideCommand: false }, 'ghcr.io/test/managed:latest', logger);
+    expect(logger.warn).toHaveBeenCalledWith(
+      expect.stringContaining("'overrideCommand: false'")
+    );
+  });
+
+  it('does not warn when repo sets overrideCommand:true', () => {
+    const logger = { warn: vi.fn() };
+    validateRepoConfig({ overrideCommand: true }, 'ghcr.io/test/managed:latest', logger);
+    expect(logger.warn).not.toHaveBeenCalled();
+  });
+
+  it('warns when repo sets a non-node containerUser/remoteUser (agent-env forces node)', () => {
+    const logger = { warn: vi.fn() };
+    validateRepoConfig(
+      { containerUser: 'vscode', remoteUser: 'vscode' },
+      'ghcr.io/test/managed:latest',
+      logger
+    );
+    expect(logger.warn).toHaveBeenCalledWith(expect.stringContaining("'containerUser: vscode'"));
+    expect(logger.warn).toHaveBeenCalledWith(expect.stringContaining("'remoteUser: vscode'"));
+  });
+
+  it('does not warn when repo sets the node user', () => {
+    const logger = { warn: vi.fn() };
+    validateRepoConfig(
+      { containerUser: 'node', remoteUser: 'node' },
+      'ghcr.io/test/managed:latest',
+      logger
+    );
+    expect(logger.warn).not.toHaveBeenCalled();
+  });
 });
 
 // ─── readRepoConfig ──────────────────────────────────────────────────────────
@@ -691,6 +726,43 @@ describe('mergeDevcontainerConfigs', () => {
     expect(result.waitFor).toBe('onCreateCommand');
     expect(result.someNewProperty).toBe('value');
   });
+
+  it('forces overrideCommand:true, overriding a repo overrideCommand:false', () => {
+    const managed = createManagedConfig();
+    // A repo tuned for its own self-sustaining image may set false; once we swap
+    // in the managed image the container must be kept alive by the CLI loop.
+    const result = mergeDevcontainerConfigs(managed, { overrideCommand: false });
+    expect(result.overrideCommand).toBe(true);
+  });
+
+  it('forces overrideCommand:true even when repo sets it true', () => {
+    const managed = createManagedConfig();
+    const result = mergeDevcontainerConfigs(managed, { overrideCommand: true });
+    expect(result.overrideCommand).toBe(true);
+  });
+
+  it('sets overrideCommand:true when repo omits it', () => {
+    const managed = createManagedConfig();
+    const result = mergeDevcontainerConfigs(managed, { name: 'repo' });
+    expect(result.overrideCommand).toBe(true);
+  });
+
+  it('forces containerUser/remoteUser to node, overriding a repo value', () => {
+    const managed = createManagedConfig();
+    const result = mergeDevcontainerConfigs(managed, {
+      containerUser: 'vscode',
+      remoteUser: 'vscode',
+    });
+    expect(result.containerUser).toBe('node');
+    expect(result.remoteUser).toBe('node');
+  });
+
+  it('sets containerUser/remoteUser to node when repo omits them', () => {
+    const managed = createManagedConfig();
+    const result = mergeDevcontainerConfigs(managed, { name: 'repo' });
+    expect(result.containerUser).toBe('node');
+    expect(result.remoteUser).toBe('node');
+  });
 });
 
 // ─── buildManagedOnly ────────────────────────────────────────────────────────
@@ -708,6 +780,19 @@ describe('buildManagedOnly', () => {
     const result = buildManagedOnly(managed);
     expect(result).not.toHaveProperty('postCreateCommand');
     expect(result).not.toHaveProperty('postStartCommand');
+  });
+
+  it('sets overrideCommand:true so the managed image container stays alive', () => {
+    const managed = createManagedConfig();
+    const result = buildManagedOnly(managed);
+    expect(result.overrideCommand).toBe(true);
+  });
+
+  it('sets containerUser/remoteUser to the managed image user (node)', () => {
+    const managed = createManagedConfig();
+    const result = buildManagedOnly(managed);
+    expect(result.containerUser).toBe('node');
+    expect(result.remoteUser).toBe('node');
   });
 
   it('includes VS Code customizations', () => {
@@ -872,6 +957,7 @@ describe('buildManagedConfig', () => {
       // Disable SSH agent forwarding so the assertion is independent of the
       // host environment running the tests.
       sshAgent: null,
+      // Default runtime (docker) → no Podman-specific runArgs.
     };
 
     const result = buildManagedConfig(defaults, params);
@@ -909,6 +995,63 @@ describe('buildManagedConfig', () => {
       'source=${localEnv:SSH_AUTH_SOCK},target=/run/host-services/ssh-auth.sock,type=bind',
     ]);
     expect(result.containerEnv.SSH_AUTH_SOCK).toBe('/run/host-services/ssh-auth.sock');
+  });
+
+  it('adds Podman-only runArgs (tmpfs /tmp + keep-id uid remap) under Podman', () => {
+    const defaults = {
+      image: 'test:latest',
+      initializeCmd: 'bash init.sh',
+      baseContainerEnv: { AGENT_ENV_CONTAINER: 'true' },
+    };
+    const result = buildManagedConfig(defaults, {
+      instanceName: 'i',
+      containerName: 'ae-repo-i',
+      repoSlug: 'repo',
+      purpose: '',
+      sshAgent: null,
+      containerRuntime: 'podman',
+    });
+
+    expect(result.runArgs).toEqual([
+      '--name=ae-repo-i',
+      '--tmpfs=/tmp:mode=1777',
+      '--userns=keep-id:uid=1000,gid=1000',
+    ]);
+  });
+
+  it('omits Podman-only runArgs under Docker', () => {
+    const defaults = {
+      image: 'test:latest',
+      initializeCmd: 'bash init.sh',
+      baseContainerEnv: { AGENT_ENV_CONTAINER: 'true' },
+    };
+    const result = buildManagedConfig(defaults, {
+      instanceName: 'i',
+      containerName: 'ae-repo-i',
+      repoSlug: 'repo',
+      purpose: '',
+      sshAgent: null,
+      containerRuntime: 'docker',
+    });
+
+    expect(result.runArgs).toEqual(['--name=ae-repo-i']);
+  });
+
+  it('emits no Podman runArgs by default (runtime unspecified)', () => {
+    const defaults = {
+      image: 'test:latest',
+      initializeCmd: 'bash init.sh',
+      baseContainerEnv: { AGENT_ENV_CONTAINER: 'true' },
+    };
+    const result = buildManagedConfig(defaults, {
+      instanceName: 'i',
+      containerName: 'ae-repo-i',
+      repoSlug: 'repo',
+      purpose: '',
+      sshAgent: null,
+    });
+
+    expect(result.runArgs).toEqual(['--name=ae-repo-i']);
   });
 });
 
