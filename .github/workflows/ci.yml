@@ -56,7 +56,9 @@ jobs:
       - name: Verify dogfood image pin
         shell: bash
         run: |
-          EXPECTED=$(jq -r .version packages/agent-env/package.json)
+          # `|| true` on extractions: this step runs under `bash -eo pipefail`,
+          # so a failed grep/jq would abort before the diagnostic branches below.
+          EXPECTED=$(jq -r .version packages/agent-env/package.json || true)
           if [ -z "$EXPECTED" ] || [ "$EXPECTED" = "null" ]; then
             echo "❌ packages/agent-env/package.json has no .version field (got: '$EXPECTED')"
             exit 1
@@ -65,7 +67,7 @@ jobs:
           # extract the image line via grep instead of jq. Anchor on the managed
           # repo coordinate (not indentation, which reformatting would break) —
           # a nested `image` key would not reference this coordinate.
-          IMAGE=$(grep -oE '"image"[[:space:]]*:[[:space:]]*"ghcr\.io/zookanalytics/bmad-orchestrator/devcontainer:[^"]+"' .devcontainer/devcontainer.json | head -1 | sed -E 's/.*"image"[[:space:]]*:[[:space:]]*"([^"]+)".*/\1/')
+          IMAGE=$(grep -oE '"image"[[:space:]]*:[[:space:]]*"ghcr\.io/zookanalytics/bmad-orchestrator/devcontainer:[^"]+"' .devcontainer/devcontainer.json | head -1 | sed -E 's/.*"image"[[:space:]]*:[[:space:]]*"([^"]+)".*/\1/' || true)
           if [ -z "$IMAGE" ]; then
             echo "❌ Could not locate an \"image\" field referencing ghcr.io/zookanalytics/bmad-orchestrator/devcontainer in .devcontainer/devcontainer.json"
             exit 1
