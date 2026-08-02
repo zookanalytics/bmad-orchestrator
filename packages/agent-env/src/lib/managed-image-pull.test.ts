@@ -7,6 +7,7 @@ import { pullManagedImage } from './managed-image-pull.js';
 function makeContainer(overrides: Partial<ContainerLifecycle> = {}): ContainerLifecycle {
   return {
     isDockerAvailable: vi.fn(),
+    isDevcontainerCliAvailable: vi.fn(),
     containerStatus: vi.fn(),
     getContainerNameById: vi.fn(),
     findContainerByWorkspaceLabel: vi.fn(),
