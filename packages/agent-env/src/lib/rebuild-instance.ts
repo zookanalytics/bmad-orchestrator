@@ -41,7 +41,13 @@ import {
   validateRepoConfig,
   writeGeneratedConfig,
 } from './devcontainer-merge.js';
-import { copyManagedAssets, parseDockerfileImages, resolveDockerfilePath } from './devcontainer.js';
+import {
+  copyManagedAssets,
+  getManagedImage,
+  parseDockerfileImages,
+  resolveDockerfilePath,
+} from './devcontainer.js';
+import { pullManagedImage } from './managed-image-pull.js';
 import { copyRepoEnvFiles } from './repo-env.js';
 import { readState, writeStateAtomic } from './state.js';
 import { saveTmuxState } from './tmux-utils.js';
@@ -166,7 +172,7 @@ async function refreshMergedConfig(
     }
 
     if (repoConfig) {
-      validateRepoConfig(repoConfig, defaults.image, deps.logger);
+      validateRepoConfig(repoConfig, defaults.image, deps.logger, wsRoot);
     }
 
     const merged = mergeDevcontainerConfigs(managed, repoConfig);
@@ -178,7 +184,10 @@ async function refreshMergedConfig(
     const configPath = join(wsRoot, AGENT_ENV_DIR, 'devcontainer.json');
     await writeGeneratedConfig(configPath, merged, deps.mergeDeps);
 
-    return { ok: true, repoConfigDetected: repoConfig !== undefined };
+    return {
+      ok: true,
+      repoConfigDetected: repoConfig !== undefined,
+    };
   } catch (err) {
     return {
       ok: false,
@@ -228,12 +237,21 @@ type PullStepResult =
  *
  * Returns hasDockerfile for use by buildNoCache logic.
  * When pull is false, still resolves the Dockerfile path but skips pulling.
+ * Always invokes pullManagedImage so the managed (`image:`-only) path is
+ * honored on configs that have no Dockerfile.
  */
 async function executePullStep(
   wsRoot: string,
   pull: boolean,
+  managedImage: string,
   deps: Pick<RebuildInstanceDeps, 'devcontainerFsDeps' | 'container' | 'logger'>
 ): Promise<PullStepResult> {
+  // Pull the managed image first, regardless of whether a repo Dockerfile is present.
+  const managedPullResult = await pullManagedImage(managedImage, pull, deps);
+  if (!managedPullResult.ok) {
+    return { ok: false, error: managedPullResult.error };
+  }
+
   let dockerfilePath: string | null;
   try {
     dockerfilePath = await resolveDockerfilePath(wsRoot, deps.devcontainerFsDeps);
@@ -255,7 +273,7 @@ async function executePullStep(
   }
 
   if (dockerfilePath === null) {
-    deps.logger?.info('No Dockerfile found — skipping image pull.');
+    deps.logger?.info('No Dockerfile found — only managed image pulled.');
     return { ok: true, hasDockerfile: false };
   }
 
@@ -436,7 +454,17 @@ export async function rebuildInstance(
     };
   }
 
-  // Step 3: Re-merge devcontainer config (before teardown — if it fails, container is still intact)
+  // Step 3: Pull managed image + parse Dockerfile + pull base images.
+  // Runs BEFORE the config rewrite: if the pull fails (e.g. pinned tag not yet
+  // published), the old config keeps its previous image tag so the image-drift
+  // signal in the menu survives the failed rebuild.
+  const pullStepResult = await executePullStep(wsPath.root, pull, getManagedImage(), deps);
+  if (!pullStepResult.ok) {
+    return { ok: false, error: pullStepResult.error };
+  }
+  const { hasDockerfile } = pullStepResult;
+
+  // Step 4: Re-merge devcontainer config (before teardown — if it fails, container is still intact)
   const configResult = await refreshMergedConfig(
     wsPath.root,
     containerName,
@@ -449,13 +477,6 @@ export async function rebuildInstance(
   if (!configResult.ok) {
     return { ok: false, error: configResult.error };
   }
-
-  // Step 4: Parse Dockerfile + pull base images
-  const pullStepResult = await executePullStep(wsPath.root, pull, deps);
-  if (!pullStepResult.ok) {
-    return { ok: false, error: pullStepResult.error };
-  }
-  const { hasDockerfile } = pullStepResult;
 
   // Step 5: Check container status (using old name — that's what's running)
   const statusResult = await deps.container.containerStatus(oldContainerName);

@@ -131,7 +131,7 @@ program.action(async () => {
   }
 
   // Step 2: Launch action loop for selected instance
-  const menuDeps = buildMenuDeps();
+  const menuDeps = buildMenuDeps(pickerResult.name);
   await launchActionLoop(pickerResult.name, menuDeps);
 });
 

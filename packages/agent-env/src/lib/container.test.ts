@@ -988,23 +988,94 @@ describe('dockerPull', () => {
     );
   });
 
-  it('returns IMAGE_PULL_FAILED error with suggestion on failure', async () => {
+  it('returns IMAGE_PULL_FAILED error with suggestion on a generic pull failure', async () => {
     const executor = mockExecutor({
       'docker pull': {
         ok: false,
         stdout: '',
-        stderr: 'Error: pull access denied',
+        stderr: 'Error: connection reset by peer',
         exitCode: 1,
       },
     });
     const lifecycle = createContainerLifecycle(executor);
 
-    const result = await lifecycle.dockerPull('private-registry.io/image:latest');
+    const result = await lifecycle.dockerPull('private-registry.io/image:1.0.0');
     expect(result.ok).toBe(false);
     if (result.ok) throw new Error('Expected failure');
     expect(result.error.code).toBe('IMAGE_PULL_FAILED');
-    expect(result.error.message).toContain('private-registry.io/image:latest');
+    expect(result.error.message).toContain('private-registry.io/image:1.0.0');
     expect(result.error.suggestion).toContain('--no-pull');
+    // F17: the generic IMAGE_PULL_FAILED suggestion ALSO carries the cached-image caveat
+    // so users see consistent guidance across both failure modes.
+    expect(result.error.suggestion).toContain('ONLY if you already have a previously cached image');
+  });
+
+  describe('IMAGE_VERSION_NOT_PUBLISHED mapping (AC5, AC15 path)', () => {
+    const matchedStderrs = [
+      'manifest unknown',
+      'manifest for ghcr.io/zookanalytics/foo:1.2.3 not found: manifest unknown',
+    ];
+
+    it.each(matchedStderrs)('maps "%s" to IMAGE_VERSION_NOT_PUBLISHED', async (stderr) => {
+      const executor = mockExecutor({
+        'docker pull': { ok: false, stdout: '', stderr, exitCode: 1 },
+      });
+      const lifecycle = createContainerLifecycle(executor);
+
+      const result = await lifecycle.dockerPull('ghcr.io/zookanalytics/foo:1.2.3');
+      expect(result.ok).toBe(false);
+      if (result.ok) throw new Error('Expected failure');
+      expect(result.error.code).toBe('IMAGE_VERSION_NOT_PUBLISHED');
+      expect(result.error.message).toContain('ghcr.io/zookanalytics/foo:1.2.3');
+      // Suggestion must contain workflow URL, packages URL, --no-pull mention,
+      // and the AC15 conditional clause verbatim.
+      expect(result.error.suggestion).toContain(
+        'https://github.com/ZookAnalytics/bmad-orchestrator/actions/workflows/publish-image.yml'
+      );
+      expect(result.error.suggestion).toContain(
+        'https://github.com/ZookAnalytics/bmad-orchestrator/pkgs/container/bmad-orchestrator%2Fdevcontainer'
+      );
+      expect(result.error.suggestion).toContain('--no-pull');
+      expect(result.error.suggestion).toContain(
+        'ONLY if you already have a previously cached image'
+      );
+    });
+
+    it('does NOT match unrelated stderr (falls back to IMAGE_PULL_FAILED)', async () => {
+      const executor = mockExecutor({
+        'docker pull': {
+          ok: false,
+          stdout: '',
+          stderr: 'connection refused',
+          exitCode: 1,
+        },
+      });
+      const lifecycle = createContainerLifecycle(executor);
+
+      const result = await lifecycle.dockerPull('ghcr.io/zookanalytics/foo:1.2.3');
+      expect(result.ok).toBe(false);
+      if (result.ok) throw new Error('Expected failure');
+      expect(result.error.code).toBe('IMAGE_PULL_FAILED');
+    });
+
+    it('does NOT misroute genuine "pull access denied" auth errors as IMAGE_VERSION_NOT_PUBLISHED', async () => {
+      // Authentic auth failures against private registries should surface as
+      // generic IMAGE_PULL_FAILED, not the "tag not yet published" guidance.
+      const executor = mockExecutor({
+        'docker pull': {
+          ok: false,
+          stdout: '',
+          stderr: 'Error response from daemon: pull access denied for foo',
+          exitCode: 1,
+        },
+      });
+      const lifecycle = createContainerLifecycle(executor);
+
+      const result = await lifecycle.dockerPull('private.example/foo:1.0.0');
+      expect(result.ok).toBe(false);
+      if (result.ok) throw new Error('Expected failure');
+      expect(result.error.code).toBe('IMAGE_PULL_FAILED');
+    });
   });
 });
 

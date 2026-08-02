@@ -105,6 +105,28 @@ function hasNewerInstall(driftState?: VersionDriftState): boolean {
 }
 
 /**
+ * Format a container image reference into a short, human-readable tag label
+ * (e.g., `ghcr.io/foo/bar:1.2.0` → `v1.2.0`). Handles registry ports,
+ * digest pinning (`:tag@sha256:...`), and untagged images.
+ *
+ * Returns `'refresh'` for `:latest` and other non-semver tags so the menu
+ * doesn't surface grammatically-nonsensical labels like "image vlatest available".
+ */
+export function formatImageTagForLabel(image: string): string {
+  // Strip any digest suffix first: foo:bar@sha256:abc... -> foo:bar
+  const noDigest = image.split('@')[0];
+  // Match the trailing :tag (tag can't contain '/' or ':')
+  const m = /:([^:/]+)$/.exec(noDigest);
+  if (!m) return 'refresh';
+  const tag = m[1];
+  // Only prefix with 'v' for semver-ish tags (digit.digit.digit, optionally
+  // with prerelease/build-metadata suffixes). Otherwise render as a generic
+  // "refresh" hint — `:latest`, branch names, channel labels, etc.
+  if (/^\d+\.\d+\.\d+(?:[-+].+)?$/.test(tag)) return `v${tag}`;
+  return 'refresh';
+}
+
+/**
  * Build the action list for the menu.
  *
  * Priority order for the extra slot:
@@ -122,6 +144,18 @@ function buildActionOptions(driftState?: VersionDriftState): typeof BASE_ACTION_
   if (driftState && hasNewerInstall(driftState)) {
     const label = `♻️  Restart menu (v${driftState.installedVersion} installed)`;
     return [{ label, value: 'restart' }, ...BASE_ACTION_OPTIONS, EXIT_OPTION];
+  }
+  if (driftState?.imageDrift) {
+    // Swap rebuild's label in-place so no duplicate 'rebuild' value is introduced (AC19).
+    const imageLabel = formatImageTagForLabel(driftState.imageDrift.expectedImage);
+    const updatedOptions = BASE_ACTION_OPTIONS.map((o) =>
+      o.value === 'rebuild'
+        ? { label: `🛠  Rebuild container (image ${imageLabel} available)`, value: 'rebuild' }
+        : o
+    );
+    // Image drift is the normal state right after a CLI upgrade (until the next
+    // rebuild) — keep "Check for updates" available, matching every other lane.
+    return [...updatedOptions, CHECK_FOR_UPDATES_OPTION, EXIT_OPTION];
   }
   if (driftState?.updateMessage) {
     // Newer version on npm but not installed yet — show informational
@@ -152,6 +186,17 @@ function DriftBanner({ driftState }: { driftState: VersionDriftState }): React.R
       <Box marginBottom={1}>
         <Text color="yellow">
           agent-env v{driftState.installedVersion} is installed — restart to use it
+        </Text>
+      </Box>
+    );
+  }
+  // Workspace image tag will refresh on next rebuild — informational.
+  if (driftState.imageDrift) {
+    return (
+      <Box marginBottom={1}>
+        <Text color="cyan">
+          Container image will refresh on next rebuild: {driftState.imageDrift.configuredImage} →{' '}
+          {driftState.imageDrift.expectedImage}
         </Text>
       </Box>
     );

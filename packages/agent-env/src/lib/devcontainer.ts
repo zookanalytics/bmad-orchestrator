@@ -11,6 +11,7 @@ import { access, cp, mkdir, readdir, readFile, stat, writeFile } from 'node:fs/p
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+import packageJson from '../../package.json' with { type: 'json' };
 import { AGENT_ENV_DIR } from './types.js';
 
 // ─── Types for dependency injection ──────────────────────────────────────────
@@ -32,6 +33,26 @@ const defaultFsDeps: DevcontainerFsDeps = { access, cp, mkdir, readdir, readFile
 const DEVCONTAINER_DIR = '.devcontainer';
 const DEVCONTAINER_JSON = 'devcontainer.json';
 const DOT_DEVCONTAINER_JSON = '.devcontainer.json';
+
+/**
+ * Single source of truth for the managed container image repository.
+ *
+ * The published image tag is pinned to the agent-env package version
+ * (see `getManagedImage()`), so upgrading the npm package reliably
+ * triggers a matching image pull on the next rebuild.
+ */
+export const MANAGED_IMAGE_REPO = 'ghcr.io/zookanalytics/bmad-orchestrator/devcontainer';
+
+/**
+ * Returns the managed image reference pinned to the current agent-env version,
+ * e.g. `${MANAGED_IMAGE_REPO}:<X.Y.Z>`.
+ *
+ * The image is published by .github/workflows/publish-image.yml whenever
+ * packages/agent-env/package.json version changes.
+ */
+export function getManagedImage(): string {
+  return `${MANAGED_IMAGE_REPO}:${packageJson.version}`;
+}
 
 // ─── Path utilities ──────────────────────────────────────────────────────────
 

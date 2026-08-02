@@ -53,6 +53,39 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      - name: Verify dogfood image pin
+        shell: bash
+        run: |
+          # `|| true` on extractions: this step runs under `bash -eo pipefail`,
+          # so a failed grep/jq would abort before the diagnostic branches below.
+          EXPECTED=$(jq -r .version packages/agent-env/package.json || true)
+          if [ -z "$EXPECTED" ] || [ "$EXPECTED" = "null" ]; then
+            echo "❌ packages/agent-env/package.json has no .version field (got: '$EXPECTED')"
+            exit 1
+          fi
+          # .devcontainer/devcontainer.json is JSONC (contains // comments), so
+          # extract the image line via grep instead of jq. Anchor on the managed
+          # repo coordinate (not indentation, which reformatting would break) —
+          # a nested `image` key would not reference this coordinate.
+          IMAGE=$(grep -oE '"image"[[:space:]]*:[[:space:]]*"ghcr\.io/zookanalytics/bmad-orchestrator/devcontainer:[^"]+"' .devcontainer/devcontainer.json | head -1 | sed -E 's/.*"image"[[:space:]]*:[[:space:]]*"([^"]+)".*/\1/' || true)
+          if [ -z "$IMAGE" ]; then
+            echo "❌ Could not locate an \"image\" field referencing ghcr.io/zookanalytics/bmad-orchestrator/devcontainer in .devcontainer/devcontainer.json"
+            exit 1
+          fi
+          # Strip any digest, then extract the trailing tag via a robust regex
+          # in node — sed alternatives mishandle host:port references.
+          ACTUAL=$(node -e "const i=process.argv[1].split('@')[0]; const m=/:([^:/]+)\$/.exec(i); console.log(m?m[1]:'')" "$IMAGE")
+          if [ -z "$ACTUAL" ]; then
+            echo "❌ Could not extract tag from .devcontainer/devcontainer.json image: $IMAGE"
+            exit 1
+          fi
+          if [ "$EXPECTED" != "$ACTUAL" ]; then
+            echo "❌ .devcontainer/devcontainer.json image tag ($ACTUAL) does not match packages/agent-env/package.json version ($EXPECTED)."
+            echo "   Run: node scripts/sync-dogfood-pin.mjs"
+            exit 1
+          fi
+          echo "✓ Dogfood image pin matches agent-env version ($EXPECTED)"
+
       - name: Build all packages
         run: pnpm -r build
 

@@ -39,7 +39,8 @@ import {
   validateRepoConfig,
   writeGeneratedConfig,
 } from './devcontainer-merge.js';
-import { copyManagedAssets } from './devcontainer.js';
+import { copyManagedAssets, getManagedImage } from './devcontainer.js';
+import { pullManagedImage } from './managed-image-pull.js';
 import { MAX_PURPOSE_LENGTH } from './purpose-instance.js';
 import { copyRepoEnvFiles } from './repo-env.js';
 import { createInitialState, ensureGitExclude, writeStateAtomic } from './state.js';
@@ -285,7 +286,7 @@ async function setupMergedConfig(
     // Read and validate repo config (if any)
     const repoConfig = await readRepoConfig(wsPath.root, deps.mergeDeps, deps.logger);
     if (repoConfig) {
-      validateRepoConfig(repoConfig, defaults.image, deps.logger);
+      validateRepoConfig(repoConfig, defaults.image, deps.logger, wsPath.root);
     }
 
     // Deep merge managed + repo config
@@ -314,6 +315,11 @@ async function setupMergedConfig(
 export interface CreateInstanceOptions {
   purpose?: string;
   onProgress?: (line: string) => void;
+  /**
+   * When false, skip pulling the managed image — start the container with
+   * whatever image is already cached locally. Defaults to true.
+   */
+  pull?: boolean;
 }
 
 /**
@@ -458,6 +464,28 @@ export async function createInstance(
         suggestion: `Choose a different instance name or remove the existing one first.`,
       },
     };
+  }
+
+  // Step 2.5: Pre-flight Docker availability + managed-image pull BEFORE clone.
+  // Docker check first so users see ORBSTACK_REQUIRED (not a confusing
+  // dockerPull failure) when the daemon is down. Pull second so a transient
+  // IMAGE_VERSION_NOT_PUBLISHED failure does not nuke a freshly-cloned
+  // workspace. Both are safe to return without rollback: no workspace state
+  // exists yet.
+  const dockerAvailable = await deps.container.isDockerAvailable();
+  if (!dockerAvailable) {
+    return {
+      ok: false,
+      error: {
+        code: 'ORBSTACK_REQUIRED',
+        message: 'Docker is not available. OrbStack or Docker Desktop must be running.',
+        suggestion: 'Start OrbStack or Docker Desktop, then try again.',
+      },
+    };
+  }
+  const managedPullResult = await pullManagedImage(getManagedImage(), options?.pull ?? true, deps);
+  if (!managedPullResult.ok) {
+    return { ok: false, error: managedPullResult.error };
   }
 
   // Step 3-4: Clone repo and create .agent-env directory

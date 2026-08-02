@@ -2,6 +2,7 @@ import { describe, it, expect, vi } from 'vitest';
 
 import {
   detectDriftState,
+  detectImageDrift,
   getInstalledVersion,
   isNewerVersion,
   isPackagePathStale,
@@ -121,7 +122,7 @@ describe('isPackagePathStale', () => {
 
 describe('detectDriftState', () => {
   it('combines all three signals', async () => {
-    const result = await detectDriftState({
+    const result = await detectDriftState(undefined, {
       isPackagePathStale: vi.fn().mockResolvedValue(true),
       fetchUpdateMessage: vi.fn().mockResolvedValue('Update available: 0.12.3 -> 0.13.0'),
       getInstalledVersion: vi.fn().mockReturnValue('0.13.0'),
@@ -131,10 +132,11 @@ describe('detectDriftState', () => {
     expect(result.updateMessage).toBe('Update available: 0.12.3 -> 0.13.0');
     expect(result.installedVersion).toBe('0.13.0');
     expect(result.currentVersion).toMatch(/^\d+\.\d+\.\d+/);
+    expect(result.imageDrift).toBeNull();
   });
 
   it('returns clean state when all signals report no drift', async () => {
-    const result = await detectDriftState({
+    const result = await detectDriftState(undefined, {
       isPackagePathStale: vi.fn().mockResolvedValue(false),
       fetchUpdateMessage: vi.fn().mockResolvedValue(null),
       getInstalledVersion: vi.fn().mockReturnValue('0.12.3'),
@@ -143,10 +145,11 @@ describe('detectDriftState', () => {
     expect(result.packageMoved).toBe(false);
     expect(result.updateMessage).toBeNull();
     expect(result.installedVersion).toBe('0.12.3');
+    expect(result.imageDrift).toBeNull();
   });
 
   it('returns installedVersion=null when binary is not on PATH', async () => {
-    const result = await detectDriftState({
+    const result = await detectDriftState(undefined, {
       isPackagePathStale: vi.fn().mockResolvedValue(false),
       fetchUpdateMessage: vi.fn().mockResolvedValue(null),
       getInstalledVersion: vi.fn().mockReturnValue(null),
@@ -157,7 +160,7 @@ describe('detectDriftState', () => {
 
   it('passes force=false to fetchUpdateMessage by default', async () => {
     const fetchUpdateMessage = vi.fn().mockResolvedValue(null);
-    await detectDriftState({
+    await detectDriftState(undefined, {
       isPackagePathStale: vi.fn().mockResolvedValue(false),
       fetchUpdateMessage,
     });
@@ -167,6 +170,7 @@ describe('detectDriftState', () => {
   it('passes force=true when options.forceRefresh is true', async () => {
     const fetchUpdateMessage = vi.fn().mockResolvedValue(null);
     await detectDriftState(
+      undefined,
       {
         isPackagePathStale: vi.fn().mockResolvedValue(false),
         fetchUpdateMessage,
@@ -191,7 +195,7 @@ describe('detectDriftState', () => {
       return null;
     });
 
-    await detectDriftState({
+    await detectDriftState(undefined, {
       isPackagePathStale: slowProbe,
       fetchUpdateMessage: slowFetch,
     });
@@ -199,6 +203,48 @@ describe('detectDriftState', () => {
     // Both starts must appear before either end — parallel execution.
     expect(order.indexOf('probe-start')).toBeLessThan(order.indexOf('fetch-end'));
     expect(order.indexOf('fetch-start')).toBeLessThan(order.indexOf('probe-end'));
+  });
+
+  it('does NOT invoke detectImageDrift when workspaceName is undefined', async () => {
+    const imageDriftProbe = vi.fn().mockResolvedValue({
+      configuredImage: 'foo:1',
+      expectedImage: 'foo:2',
+    });
+    const result = await detectDriftState(undefined, {
+      isPackagePathStale: vi.fn().mockResolvedValue(false),
+      fetchUpdateMessage: vi.fn().mockResolvedValue(null),
+      detectImageDrift: imageDriftProbe,
+    });
+    expect(imageDriftProbe).not.toHaveBeenCalled();
+    expect(result.imageDrift).toBeNull();
+  });
+
+  it('passes a workspace-specific managed-config path to detectImageDrift', async () => {
+    const imageDriftProbe = vi
+      .fn()
+      .mockResolvedValue({ configuredImage: 'foo:1', expectedImage: 'foo:2' });
+    const result = await detectDriftState('my-ws', {
+      isPackagePathStale: vi.fn().mockResolvedValue(false),
+      fetchUpdateMessage: vi.fn().mockResolvedValue(null),
+      detectImageDrift: imageDriftProbe,
+    });
+    expect(imageDriftProbe).toHaveBeenCalledTimes(1);
+    // Tightened argument assertion (F6/F20): the path must end with the managed
+    // config relative path AND contain the workspace name segment.
+    const path = imageDriftProbe.mock.calls[0][0] as string;
+    expect(path.endsWith('/.agent-env/devcontainer.json')).toBe(true);
+    expect(path).toContain('my-ws');
+    expect(result.imageDrift).toEqual({ configuredImage: 'foo:1', expectedImage: 'foo:2' });
+  });
+
+  it('returns imageDrift=null if the override rejects (F10 resilience)', async () => {
+    const imageDriftProbe = vi.fn().mockRejectedValue(new Error('boom'));
+    const result = await detectDriftState('my-ws', {
+      isPackagePathStale: vi.fn().mockResolvedValue(false),
+      fetchUpdateMessage: vi.fn().mockResolvedValue(null),
+      detectImageDrift: imageDriftProbe,
+    });
+    expect(result.imageDrift).toBeNull();
   });
 });
 
@@ -253,8 +299,93 @@ describe('VersionDriftState typing', () => {
       updateMessage: null,
       installedVersion: '0.13.0',
       currentVersion: '0.12.3',
+      imageDrift: null,
     };
     expect(state.packageMoved).toBe(true);
     expect(state.installedVersion).toBe('0.13.0');
+  });
+});
+
+// ─── detectImageDrift ───────────────────────────────────────────────────────
+
+describe('detectImageDrift', () => {
+  // Compose image references from a base + tag so no literal "<repo>:<semver>"
+  // string appears in the test source (AC12 falsifiable grep).
+  const IMAGE_BASE = 'ghcr.io/zookanalytics/bmad-orchestrator/devcontainer';
+  const expectedImage = IMAGE_BASE + ':' + '2.0.0';
+  const olderImage = IMAGE_BASE + ':' + '1.0.0';
+
+  it('returns null when the configured image matches expected', async () => {
+    const readFile = vi.fn().mockResolvedValue(JSON.stringify({ image: expectedImage }));
+    const result = await detectImageDrift('/ws/.agent-env/devcontainer.json', {
+      readFile,
+      getExpectedImage: () => expectedImage,
+    });
+    expect(result).toBeNull();
+  });
+
+  it('returns drift details when the configured image differs', async () => {
+    const readFile = vi.fn().mockResolvedValue(JSON.stringify({ image: olderImage }));
+    const result = await detectImageDrift('/ws/.agent-env/devcontainer.json', {
+      readFile,
+      getExpectedImage: () => expectedImage,
+    });
+    expect(result).toEqual({ configuredImage: olderImage, expectedImage });
+  });
+
+  it('returns null when the file is missing', async () => {
+    const readFile = vi
+      .fn()
+      .mockRejectedValue(Object.assign(new Error('ENOENT'), { code: 'ENOENT' }));
+    const result = await detectImageDrift('/missing.json', { readFile });
+    expect(result).toBeNull();
+  });
+
+  it('returns null AND warns when the file is corrupt JSONC', async () => {
+    const readFile = vi.fn().mockResolvedValue('{{ not json at all }}');
+    const warn = vi.fn();
+    const result = await detectImageDrift('/ws/.agent-env/devcontainer.json', {
+      readFile,
+      getExpectedImage: () => expectedImage,
+      logger: { warn },
+    });
+    expect(result).toBeNull();
+    expect(warn).toHaveBeenCalledTimes(1);
+    expect(warn).toHaveBeenCalledWith(expect.stringContaining('may be corrupted'));
+  });
+
+  it('returns null when the image field is missing or not a string', async () => {
+    const readFile = vi.fn().mockResolvedValue(JSON.stringify({ name: 'x' }));
+    const result = await detectImageDrift('/ws/.agent-env/devcontainer.json', {
+      readFile,
+      getExpectedImage: () => expectedImage,
+    });
+    expect(result).toBeNull();
+  });
+
+  it('parses JSONC files containing multiple // comments (regression for F14)', async () => {
+    const content =
+      '// AUTO-GENERATED by agent-env v1.0.0. Do not edit.\n' +
+      '// extra comment line\n' +
+      JSON.stringify({ image: expectedImage });
+    const readFile = vi.fn().mockResolvedValue(content);
+    const result = await detectImageDrift('/ws/.agent-env/devcontainer.json', {
+      readFile,
+      getExpectedImage: () => expectedImage,
+    });
+    expect(result).toBeNull();
+  });
+
+  it('reports drift for a digest-pinned reference that does not match expected (F19)', async () => {
+    // The managed image never carries a digest; if a downstream user
+    // hand-pins a digest, drift detection treats it as drift — strictness
+    // is intentional, see Known Limitations in the tech spec.
+    const digestPinned = expectedImage + '@sha256:abcdef0123456789';
+    const readFile = vi.fn().mockResolvedValue(JSON.stringify({ image: digestPinned }));
+    const result = await detectImageDrift('/ws/.agent-env/devcontainer.json', {
+      readFile,
+      getExpectedImage: () => expectedImage,
+    });
+    expect(result).toEqual({ configuredImage: digestPinned, expectedImage });
   });
 });

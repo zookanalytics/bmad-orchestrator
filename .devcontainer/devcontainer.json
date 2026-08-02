@@ -3,7 +3,10 @@
   // All shared infrastructure config lives in image/Dockerfile (LABEL devcontainer.metadata).
   // Base config from image LABEL — run: docker inspect <image> | jq -r '.[0].Config.Labels["devcontainer.metadata"]'
   "name": "Agent Tools - ${localWorkspaceFolderBasename}",
-  "image": "ghcr.io/zookanalytics/bmad-orchestrator/devcontainer:latest",
+  // Pinned-by-policy. Synced via scripts/sync-dogfood-pin.mjs (run automatically in the Version Packages PR).
+  // If a pull fails with "manifest unknown" right after a release merge, the image is still
+  // building — check the publish-image workflow run and retry once it completes.
+  "image": "ghcr.io/zookanalytics/bmad-orchestrator/devcontainer:1.1.1",
   "initializeCommand": "bash -c 'touch ~/.gitconfig'",
   "runArgs": [
     "--name=agenttools-${localWorkspaceFolderBasename}",

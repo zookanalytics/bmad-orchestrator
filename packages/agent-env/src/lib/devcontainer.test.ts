@@ -1,4 +1,5 @@
-import { accessSync } from 'node:fs';
+import { parse as parseJsonc, type ParseError } from 'jsonc-parser';
+import { accessSync, readFileSync } from 'node:fs';
 import { mkdir, readFile, rm, stat, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -7,9 +8,11 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import type { DevcontainerFsDeps } from './devcontainer.js';
 
 import {
+  MANAGED_IMAGE_REPO,
   copyManagedAssets,
   copyStatusBarTemplate,
   getBaselineConfigPath,
+  getManagedImage,
   getPackageRoot,
   getTemplatesPath,
   hasDevcontainerConfig,
@@ -192,16 +195,22 @@ describe('devcontainer.json content', () => {
   beforeEach(async () => {
     const baselinePath = getBaselineConfigPath();
     const content = await readFile(join(baselinePath, 'devcontainer.json'), 'utf-8');
-    config = JSON.parse(content);
+    // Baseline now contains a JSONC `//` comment above the sentinel `image` field,
+    // so JSON.parse would throw. Use jsonc-parser to match runtime behavior.
+    const errors: ParseError[] = [];
+    config = parseJsonc(content, errors, { allowTrailingComma: true }) as Record<string, unknown>;
+    expect(errors).toEqual([]);
   });
 
-  it('is valid JSON', () => {
+  it('is valid JSONC', () => {
     expect(config).toBeDefined();
     expect(typeof config).toBe('object');
   });
 
-  it('uses pre-built GHCR image instead of local Dockerfile build', () => {
-    expect(config.image).toBe('ghcr.io/zookanalytics/bmad-orchestrator/devcontainer:latest');
+  it('has a sentinel image value (replaced at runtime by getManagedImage())', () => {
+    // The runtime override lives in loadManagedDefaults — this assertion enforces
+    // the on-disk contract so future contributors don't try to edit the baseline tag.
+    expect(config.image).toBe('MANAGED_BY_AGENT_ENV_DO_NOT_EDIT');
     expect(config.build).toBeUndefined();
   });
 
@@ -490,5 +499,28 @@ describe('copyManagedAssets', () => {
     // Should have statusBar.template.json
     const templateStats = await stat(join(tempDir, '.agent-env', 'statusBar.template.json'));
     expect(templateStats.isFile()).toBe(true);
+  });
+});
+
+// ─── getManagedImage ─────────────────────────────────────────────────────────
+
+describe('getManagedImage', () => {
+  it('returns MANAGED_IMAGE_REPO concatenated with a relaxed-semver tag', () => {
+    const result = getManagedImage();
+    expect(result.startsWith(`${MANAGED_IMAGE_REPO}:`)).toBe(true);
+    expect(result).toContain('.');
+    const tag = result.slice(MANAGED_IMAGE_REPO.length + 1);
+    // Accept prerelease (`-beta.1`) and build-metadata (`+local`) suffixes that
+    // normaliseVersion already tolerates elsewhere in the codebase.
+    expect(tag).toMatch(/^\d+\.\d+\.\d+(?:[-+].+)?$/);
+  });
+
+  it('matches packages/agent-env/package.json version (dual-source check)', () => {
+    // Read package.json via a separate fs call rather than the inlined import
+    // the implementation uses. If both the implementation and the test shared
+    // the same stale symbol, this catches it.
+    const pkgUrl = new URL('../../package.json', import.meta.url);
+    const pkg = JSON.parse(readFileSync(pkgUrl, 'utf8')) as { version: string };
+    expect(getManagedImage()).toBe(`${MANAGED_IMAGE_REPO}:${pkg.version}`);
   });
 });

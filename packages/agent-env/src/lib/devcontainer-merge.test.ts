@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs';
 import { lstat, mkdir, readFile, readlink, rm, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
@@ -8,6 +9,7 @@ import type { DevcontainerMergeDeps, ManagedConfig } from './devcontainer-merge.
 
 import {
   LABEL_LIFECYCLE_CMDS,
+  _resetWarningCache,
   buildManagedConfig,
   buildManagedOnly,
   composeAllLifecycle,
@@ -416,6 +418,12 @@ describe('deepMergeCustomizations', () => {
 // ─── validateRepoConfig ──────────────────────────────────────────────────────
 
 describe('validateRepoConfig', () => {
+  // F18: reset the module-scoped throttle cache between tests to prevent
+  // cross-test pollution. _resetWarningCache is the documented seam.
+  beforeEach(() => {
+    _resetWarningCache();
+  });
+
   it('accepts a clean config', () => {
     expect(() => validateRepoConfig({ name: 'test' }, 'ghcr.io/test/managed:latest')).not.toThrow();
   });
@@ -451,6 +459,33 @@ describe('validateRepoConfig', () => {
       expect.stringContaining("Repo config specifies image 'my-image:latest'")
     );
     expect(logger.warn).toHaveBeenCalledWith(expect.stringContaining('overridden'));
+    // AC11: warning must reference BOTH repo image and managed image.
+    expect(logger.warn).toHaveBeenCalledWith(
+      expect.stringContaining('ghcr.io/test/managed:latest')
+    );
+  });
+
+  // ─── Throttle behavior (AC16, AC20) ─────────────────────────────────────────
+
+  it('throttles repeated warnings for the same workspace + image pair (AC16)', () => {
+    const logger = { warn: vi.fn() };
+    validateRepoConfig({ image: 'my-image:latest' }, 'ghcr.io/test/managed:latest', logger, 'ws1');
+    validateRepoConfig({ image: 'my-image:latest' }, 'ghcr.io/test/managed:latest', logger, 'ws1');
+    expect(logger.warn).toHaveBeenCalledTimes(1);
+  });
+
+  it('re-warns when the same workspace sees a DIFFERENT repo image (AC16)', () => {
+    const logger = { warn: vi.fn() };
+    validateRepoConfig({ image: 'my-image:a' }, 'ghcr.io/test/managed:latest', logger, 'ws1');
+    validateRepoConfig({ image: 'my-image:b' }, 'ghcr.io/test/managed:latest', logger, 'ws1');
+    expect(logger.warn).toHaveBeenCalledTimes(2);
+  });
+
+  it('does NOT suppress across DIFFERENT workspaces (AC20)', () => {
+    const logger = { warn: vi.fn() };
+    validateRepoConfig({ image: 'my-image:latest' }, 'ghcr.io/test/managed:latest', logger, 'ws1');
+    validateRepoConfig({ image: 'my-image:latest' }, 'ghcr.io/test/managed:latest', logger, 'ws2');
+    expect(logger.warn).toHaveBeenCalledTimes(2);
   });
 
   it('does not warn when repo specifies the same image as managed', () => {
@@ -725,11 +760,40 @@ describe('buildManagedOnly', () => {
 // ─── loadManagedDefaults ─────────────────────────────────────────────────────
 
 describe('loadManagedDefaults', () => {
-  it('reads image and initializeCommand from baseline config', async () => {
+  it('returns the version-pinned managed image (not the baseline sentinel) and initializeCommand', async () => {
     const result = await loadManagedDefaults();
-    expect(result.image).toBe('ghcr.io/zookanalytics/bmad-orchestrator/devcontainer:latest');
+    // Dual-source read: read package.json via a separate fs call rather than
+    // through the implementation's inlined import. This catches the case where
+    // both the implementation and the test would see a stale version.
+    const pkgUrl = new URL('../../package.json', import.meta.url);
+    const pkg = JSON.parse(readFileSync(pkgUrl, 'utf8')) as { version: string };
+    expect(result.image).toBe(
+      `ghcr.io/zookanalytics/bmad-orchestrator/devcontainer:${pkg.version}`
+    );
     expect(result.initializeCmd).toBe('bash .agent-env/init-host.sh');
     expect(result.baseContainerEnv.AGENT_ENV_CONTAINER).toBe('true');
+  });
+
+  it('overrides any baseline image value with getManagedImage() (decoupled from baseline literal)', async () => {
+    // The implementation MUST replace whatever `image` is on disk with the
+    // version-pinned managed image, so the baseline file's image value is
+    // irrelevant. Pass an arbitrary string; the result still uses getManagedImage().
+    const mockDeps = {
+      readFile: vi.fn().mockResolvedValue(
+        JSON.stringify({
+          image: 'arbitrary-string-from-baseline',
+          initializeCommand: 'bash .agent-env/init-host.sh',
+          containerEnv: { AGENT_ENV_CONTAINER: 'true' },
+        })
+      ),
+    };
+    const result = await loadManagedDefaults(mockDeps);
+    const pkgUrl = new URL('../../package.json', import.meta.url);
+    const pkg = JSON.parse(readFileSync(pkgUrl, 'utf8')) as { version: string };
+    expect(result.image).toBe(
+      `ghcr.io/zookanalytics/bmad-orchestrator/devcontainer:${pkg.version}`
+    );
+    expect(result.image).not.toBe('arbitrary-string-from-baseline');
   });
 
   it('does NOT extract mounts from baseline config', async () => {

@@ -20,8 +20,12 @@ export const DEVCONTAINER_UP_TIMEOUT = 300_000;
 /** Timeout for devcontainer up with --build-no-cache (300 seconds — full rebuilds are slow) */
 export const DEVCONTAINER_UP_NO_CACHE_TIMEOUT = 300_000;
 
-/** Timeout for docker pull operation (300 seconds — large images can take minutes) */
-export const DOCKER_PULL_TIMEOUT = 300_000;
+/**
+ * Timeout for docker pull operation (15 minutes). The managed image pull is
+ * mandatory in create/rebuild and the image is multi-GB — a first download on
+ * a slow link can legitimately exceed 5 minutes.
+ */
+export const DOCKER_PULL_TIMEOUT = 900_000;
 
 /** Timeout for docker inspect operation (10 seconds) */
 export const DOCKER_INSPECT_TIMEOUT = 10_000;
@@ -576,13 +580,44 @@ export function createContainerLifecycle(executor: Execute = createExecutor()): 
       return { ok: true };
     }
 
+    // Detect registry "not-yet-published" errors so we can return an actionable
+    // suggestion pointing to the agent-env / image-publish version mismatch.
+    // Note: `pull access denied` is intentionally NOT a trigger — it surfaces
+    // for genuine auth failures against private registries, which is a
+    // different problem class than "image tag hasn't shipped yet".
+    const stderr = result.stderr ?? '';
+    const stderrLower = stderr.toLowerCase();
+    const isManifestUnknown =
+      stderrLower.includes('manifest unknown') ||
+      (stderrLower.includes('manifest for') && stderrLower.includes('not found'));
+
+    if (isManifestUnknown) {
+      return {
+        ok: false,
+        error: {
+          code: 'IMAGE_VERSION_NOT_PUBLISHED',
+          message: `Image '${image}' is not available in the registry: ${stderr.trim()}`,
+          suggestion:
+            `The container image for this agent-env version may not be published yet. ` +
+            `Image publishes complete shortly after each release; check workflow status to estimate readiness.\n` +
+            `   • Workflow runs: https://github.com/ZookAnalytics/bmad-orchestrator/actions/workflows/publish-image.yml\n` +
+            `   • Available tags: https://github.com/ZookAnalytics/bmad-orchestrator/pkgs/container/bmad-orchestrator%2Fdevcontainer\n` +
+            `   • Emergency unblock (ONLY if you already have a previously cached image): ` +
+            `retry with --no-pull. The container will start with the locally cached image, which may not match agent-env's current version. ` +
+            `If no image is cached, you must wait for the registry tag to publish.`,
+        },
+      };
+    }
+
     return {
       ok: false,
       error: {
         code: 'IMAGE_PULL_FAILED',
-        message: `Failed to pull '${image}': ${result.stderr}`,
+        message: `Failed to pull '${image}': ${stderr}`,
         suggestion:
-          'Check network connectivity and image name. Use --no-pull to skip pulling and use cached images.',
+          'Check network connectivity and image name. ' +
+          'Use --no-pull ONLY if you already have a previously cached image — ' +
+          'the container will start with whatever is cached locally and may not match the current agent-env version.',
       },
     };
   }

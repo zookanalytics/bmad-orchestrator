@@ -42,6 +42,6 @@ export const onCommand = new Command('on')
     const { workspaceName } = lookup;
 
     // Launch the persistent action loop
-    const menuDeps = buildMenuDeps();
+    const menuDeps = buildMenuDeps(workspaceName);
     await launchActionLoop(workspaceName, menuDeps, repoSlug);
   });
