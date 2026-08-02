@@ -13,7 +13,7 @@ export const rebuildCommand = new Command('rebuild')
   .argument('<name>', 'Instance name to rebuild')
   .option('--force', 'Rebuild even if the container is currently running')
   .option('--yes', 'Skip confirmation prompt')
-  .option('--no-pull', 'Skip pulling fresh base images')
+  .option('--no-pull', 'Skip pulling the managed image and base images (use cached images)')
   .option('--use-cache', 'Allow Docker build layer cache reuse')
   .option('--repo <slug>', 'Repo slug or URL to scope instance lookup')
   .action(

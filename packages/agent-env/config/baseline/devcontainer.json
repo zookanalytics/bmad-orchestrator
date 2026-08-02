@@ -1,5 +1,8 @@
 {
-  "image": "ghcr.io/zookanalytics/bmad-orchestrator/devcontainer:latest",
+  // This value is replaced at runtime by agent-env (see getManagedImage() in
+  // packages/agent-env/src/lib/devcontainer.ts). To change the image source,
+  // edit MANAGED_IMAGE_REPO in that file.
+  "image": "MANAGED_BY_AGENT_ENV_DO_NOT_EDIT",
   "initializeCommand": "bash .agent-env/init-host.sh",
   "mounts": [
     "source=${localWorkspaceFolder}/.agent-env,target=/etc/agent-env,type=bind"

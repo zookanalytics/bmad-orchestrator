@@ -33,7 +33,7 @@ export interface MenuContainerProps {
   /** Initial drift snapshot — if omitted, the container runs its own first probe. */
   initialDriftState?: VersionDriftState;
   /** Override for tests. */
-  detectDriftStateFn?: () => Promise<VersionDriftState>;
+  detectDriftStateFn?: (workspaceName: string) => Promise<VersionDriftState>;
   /** Override for tests — defaults to 10 minutes. */
   pollIntervalMs?: number;
 }
@@ -50,6 +50,7 @@ function makeNeutralDriftState(): VersionDriftState {
     updateMessage: null,
     installedVersion: null,
     currentVersion: getCurrentVersion(),
+    imageDrift: null,
   };
 }
 
@@ -70,7 +71,7 @@ export function MenuContainer({
 
     const runProbe = async () => {
       try {
-        const next = await detectDriftStateFn();
+        const next = await detectDriftStateFn(instanceInfo.name);
         if (!cancelled) {
           setDriftState(next);
         }
@@ -90,7 +91,7 @@ export function MenuContainer({
       cancelled = true;
       clearInterval(handle);
     };
-  }, [detectDriftStateFn, pollIntervalMs]);
+  }, [detectDriftStateFn, pollIntervalMs, instanceInfo.name]);
 
   return (
     <InteractiveMenu

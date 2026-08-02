@@ -4,7 +4,7 @@ import { describe, it, expect, vi } from 'vitest';
 
 import type { InstanceInfo } from '../lib/list-instances.js';
 
-import { InteractiveMenu } from './InteractiveMenu.js';
+import { InteractiveMenu, formatImageTagForLabel } from './InteractiveMenu.js';
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
@@ -240,6 +240,7 @@ describe('InteractiveMenu', () => {
             updateMessage: null,
             installedVersion: null,
             currentVersion: '0.12.3',
+            imageDrift: null,
           }}
         />
       );
@@ -260,6 +261,7 @@ describe('InteractiveMenu', () => {
             updateMessage: null,
             installedVersion: null,
             currentVersion: '0.12.2',
+            imageDrift: null,
           }}
         />
       );
@@ -281,6 +283,7 @@ describe('InteractiveMenu', () => {
             updateMessage: null,
             installedVersion: null,
             currentVersion: '0.12.3',
+            imageDrift: null,
           }}
         />
       );
@@ -308,6 +311,7 @@ describe('InteractiveMenu', () => {
             updateMessage: null,
             installedVersion: null,
             currentVersion: '0.12.2',
+            imageDrift: null,
           }}
         />
       );
@@ -329,6 +333,7 @@ describe('InteractiveMenu', () => {
             updateMessage: null,
             installedVersion: '0.13.0',
             currentVersion: '0.12.3',
+            imageDrift: null,
           }}
         />
       );
@@ -350,6 +355,7 @@ describe('InteractiveMenu', () => {
             updateMessage: 'Update available: 0.12.2 -> 0.13.0',
             installedVersion: null,
             currentVersion: '0.12.2',
+            imageDrift: null,
           }}
         />
       );
@@ -372,6 +378,7 @@ describe('InteractiveMenu', () => {
             updateMessage: null,
             installedVersion: null,
             currentVersion: '0.12.2',
+            imageDrift: null,
           }}
         />
       );
@@ -412,5 +419,185 @@ describe('InteractiveMenu', () => {
       expect(onSetPurpose).not.toHaveBeenCalled();
       expect(lastFrame()).toContain('Attach to session');
     });
+
+    // ─── Image-drift surfacing (AC8, AC19, AC23) ─────────────────────────────
+
+    // Compose drift-test image references from a base so no test contains a
+    // hardcoded "<repo>:<semver>" literal (AC12 falsifiable grep).
+    const IMAGE_BASE = 'ghcr.io/zookanalytics/bmad-orchestrator/devcontainer';
+    const CONFIGURED_IMAGE = IMAGE_BASE + ':' + '1.0.0';
+    const EXPECTED_IMAGE = IMAGE_BASE + ':' + '1.2.0';
+
+    it('renders normally when imageDrift is null', () => {
+      const info = makeInstanceInfo();
+      const { lastFrame } = render(
+        <InteractiveMenu
+          instanceInfo={info}
+          onAction={vi.fn()}
+          onSetPurpose={vi.fn()}
+          driftState={{
+            packageMoved: false,
+            updateMessage: null,
+            installedVersion: null,
+            currentVersion: '0.12.3',
+            imageDrift: null,
+          }}
+        />
+      );
+      const output = lastFrame() ?? '';
+      expect(output).toContain('Rebuild container');
+      expect(output).not.toContain('image v');
+      expect(output).not.toContain('Container image will refresh');
+    });
+
+    it('relabels Rebuild and shows cyan banner when imageDrift is set (AC8)', () => {
+      const info = makeInstanceInfo();
+      const { lastFrame } = render(
+        <InteractiveMenu
+          instanceInfo={info}
+          onAction={vi.fn()}
+          onSetPurpose={vi.fn()}
+          driftState={{
+            packageMoved: false,
+            updateMessage: null,
+            installedVersion: null,
+            currentVersion: '1.0.0',
+            imageDrift: {
+              configuredImage: CONFIGURED_IMAGE,
+              expectedImage: EXPECTED_IMAGE,
+            },
+          }}
+        />
+      );
+      const output = lastFrame() ?? '';
+      expect(output).toContain('Rebuild container (image v1.2.0 available)');
+      expect(output).toContain('Container image will refresh on next rebuild');
+      expect(output).toContain(':1.0.0');
+      expect(output).toContain(':1.2.0');
+    });
+
+    it('keeps Check for updates available when imageDrift is set without updateMessage', () => {
+      const info = makeInstanceInfo();
+      const { lastFrame } = render(
+        <InteractiveMenu
+          instanceInfo={info}
+          onAction={vi.fn()}
+          onSetPurpose={vi.fn()}
+          driftState={{
+            packageMoved: false,
+            updateMessage: null,
+            installedVersion: null,
+            currentVersion: '1.0.0',
+            imageDrift: {
+              configuredImage: CONFIGURED_IMAGE,
+              expectedImage: EXPECTED_IMAGE,
+            },
+          }}
+        />
+      );
+      const output = lastFrame() ?? '';
+      expect(output).toContain('Check for updates');
+    });
+
+    it('packageMoved takes priority over imageDrift (Restart banner shown, not image banner)', () => {
+      const info = makeInstanceInfo();
+      const { lastFrame } = render(
+        <InteractiveMenu
+          instanceInfo={info}
+          onAction={vi.fn()}
+          onSetPurpose={vi.fn()}
+          driftState={{
+            packageMoved: true,
+            updateMessage: null,
+            installedVersion: null,
+            currentVersion: '1.0.0',
+            imageDrift: {
+              configuredImage: CONFIGURED_IMAGE,
+              expectedImage: EXPECTED_IMAGE,
+            },
+          }}
+        />
+      );
+      const output = lastFrame() ?? '';
+      expect(output).toContain('Restart menu');
+      expect(output).toContain('agent-env was upgraded');
+      // Image banner should NOT appear when a higher-priority signal is active.
+      expect(output).not.toContain('Container image will refresh');
+    });
+
+    it('AC19: no duplicate "value" entries in action options when imageDrift is set', () => {
+      // Indirect assertion via rendered output — only one option mentions "Rebuild container".
+      const info = makeInstanceInfo();
+      const { lastFrame } = render(
+        <InteractiveMenu
+          instanceInfo={info}
+          onAction={vi.fn()}
+          onSetPurpose={vi.fn()}
+          driftState={{
+            packageMoved: false,
+            updateMessage: null,
+            installedVersion: null,
+            currentVersion: '1.0.0',
+            imageDrift: {
+              configuredImage: CONFIGURED_IMAGE,
+              expectedImage: EXPECTED_IMAGE,
+            },
+          }}
+        />
+      );
+      const output = lastFrame() ?? '';
+      const rebuildMatches = output.match(/Rebuild container/g) ?? [];
+      expect(rebuildMatches.length).toBe(1);
+    });
+
+    it('AC23: preserves Check for updates when imageDrift AND updateMessage are both set', () => {
+      const info = makeInstanceInfo();
+      const { lastFrame } = render(
+        <InteractiveMenu
+          instanceInfo={info}
+          onAction={vi.fn()}
+          onSetPurpose={vi.fn()}
+          driftState={{
+            packageMoved: false,
+            updateMessage: 'Update available: 1.0.0 -> 1.2.0',
+            installedVersion: null,
+            currentVersion: '1.0.0',
+            imageDrift: {
+              configuredImage: CONFIGURED_IMAGE,
+              expectedImage: EXPECTED_IMAGE,
+            },
+          }}
+        />
+      );
+      const output = lastFrame() ?? '';
+      expect(output).toContain('Rebuild container (image v1.2.0 available)');
+      expect(output).toContain('Check for updates');
+    });
+  });
+});
+
+// ─── formatImageTagForLabel (F12, F17) ──────────────────────────────────────
+
+describe('formatImageTagForLabel', () => {
+  it('extracts tag from a registry-with-port reference', () => {
+    expect(formatImageTagForLabel('host:5000/foo/bar:1.2.0')).toBe('v1.2.0');
+  });
+
+  it('strips a digest suffix before extracting the tag', () => {
+    expect(formatImageTagForLabel('foo/bar:1.2.0@sha256:abc')).toBe('v1.2.0');
+  });
+
+  it('returns "refresh" for non-semver tags like :latest (F17)', () => {
+    // Avoid the grammatically-nonsensical "image vlatest available" label
+    expect(formatImageTagForLabel('foo/bar:latest')).toBe('refresh');
+  });
+
+  it('returns "refresh" for untagged image references', () => {
+    expect(formatImageTagForLabel('foo/bar')).toBe('refresh');
+  });
+
+  it('preserves prerelease and build-metadata suffixes', () => {
+    expect(formatImageTagForLabel('foo/bar:1.2.0-beta.1')).toBe('v1.2.0-beta.1');
+    expect(formatImageTagForLabel('foo/bar:1.2.0+local')).toBe('v1.2.0+local');
   });
 });

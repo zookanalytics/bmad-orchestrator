@@ -12,14 +12,16 @@
  * detects that condition proactively so the menu can prompt a restart.
  */
 
+import { parse as parseJsonc, type ParseError } from 'jsonc-parser';
 import { spawnSync, type SpawnSyncOptions } from 'node:child_process';
-import { access, constants } from 'node:fs/promises';
+import { access, constants, readFile } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 
 import packageJson from '../../package.json' with { type: 'json' };
-import { getBaselineConfigPath } from './devcontainer.js';
+import { getBaselineConfigPath, getManagedImage } from './devcontainer.js';
 import { checkForUpdate } from './update-check.js';
+import { getWorkspacePathByName, type FsDeps } from './workspace.js';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -44,6 +46,14 @@ export interface VersionDriftState {
   installedVersion: string | null;
   /** Version string baked into this running process. */
   currentVersion: string;
+  /**
+   * The image tag pinned in this workspace's `.agent-env/devcontainer.json`
+   * does not match the image tag the *current* agent-env version would
+   * produce. Rebuild will request the new image. Null when no managed
+   * config file exists yet (e.g., uncreated instance), no workspace name
+   * was supplied to `detectDriftState`, or the file is corrupt/unreadable.
+   */
+  imageDrift: { configuredImage: string; expectedImage: string } | null;
 }
 
 export interface DetectDriftDeps {
@@ -56,6 +66,8 @@ export interface DetectDriftDeps {
   fetchUpdateMessage?: (force: boolean) => Promise<string | null>;
   /** Override for testing the installed-version probe. */
   getInstalledVersion?: () => string | null;
+  /** Override for testing the managed-image drift probe. */
+  detectImageDrift?: (path: string) => Promise<VersionDriftState['imageDrift']>;
 }
 
 /** DI surface for {@link isPackagePathStale}. */
@@ -144,6 +156,64 @@ export async function isPackagePathStale(deps: IsPackagePathStaleDeps = {}): Pro
   }
 }
 
+// ─── Image-drift signal ─────────────────────────────────────────────────────
+
+export interface DetectImageDriftDeps {
+  readFile?: typeof readFile;
+  getExpectedImage?: () => string;
+  logger?: { warn(m: string): void };
+}
+
+/**
+ * Compare the `image:` field already written in a workspace's managed
+ * devcontainer.json against the image tag the *currently running* agent-env
+ * would produce. Returns drift details when they differ, null otherwise.
+ *
+ * Failure modes return null (this signal is a hint, not a blocker).
+ * Corruption additionally emits a warning when the caller provides
+ * `deps.logger` — the default menu wiring does not, since a console
+ * write mid-Ink-render would corrupt the frame.
+ */
+export async function detectImageDrift(
+  managedConfigPath: string,
+  deps: DetectImageDriftDeps = {}
+): Promise<VersionDriftState['imageDrift']> {
+  const read = deps.readFile ?? readFile;
+  const expected = (deps.getExpectedImage ?? getManagedImage)();
+  let content: string;
+  try {
+    content = await read(managedConfigPath, 'utf-8');
+  } catch {
+    // File missing or unreadable — no drift signal. Common for pre-rebuild instances.
+    return null;
+  }
+  const errors: ParseError[] = [];
+  const parsed = parseJsonc(content, errors, { allowTrailingComma: true }) as {
+    image?: unknown;
+  } | null;
+  if (errors.length > 0 || parsed === null) {
+    deps.logger?.warn(
+      `Could not parse ${managedConfigPath} to check image drift — file may be corrupted. Rebuild to regenerate.`
+    );
+    return null;
+  }
+  if (typeof parsed.image !== 'string') return null;
+  if (parsed.image === expected) return null;
+  return { configuredImage: parsed.image, expectedImage: expected };
+}
+
+/**
+ * Resolve the absolute path to a workspace's managed devcontainer.json
+ * (`<wsRoot>/.agent-env/devcontainer.json`).
+ */
+export function getManagedConfigPath(
+  workspaceName: string,
+  fsDeps?: Pick<FsDeps, 'homedir'>
+): string {
+  const wsPath = getWorkspacePathByName(workspaceName, fsDeps);
+  return join(wsPath.agentEnvDir, 'devcontainer.json');
+}
+
 // ─── Secondary signal: registry check ───────────────────────────────────────
 
 const UPDATE_CHECK_CACHE_PATH = join(homedir(), '.agent-env', 'update-check.json');
@@ -193,6 +263,7 @@ export interface DetectDriftOptions {
  * registry hit; without it, the normal cache applies.
  */
 export async function detectDriftState(
+  workspaceName?: string,
   deps: DetectDriftDeps = {},
   options: DetectDriftOptions = {}
 ): Promise<VersionDriftState> {
@@ -200,14 +271,23 @@ export async function detectDriftState(
     isPackagePathStale: probe = isPackagePathStale,
     fetchUpdateMessage = (force: boolean) => fetchUpdateMessageFromRegistry(force),
     getInstalledVersion: resolveInstalled = getInstalledVersion,
+    detectImageDrift: imageProbe = (path: string) => detectImageDrift(path),
   } = deps;
 
   // installedVersion is synchronous (spawnSync), run it alongside the async probes.
   const installedVersion = resolveInstalled();
 
-  const [packageMoved, updateMessage] = await Promise.all([
+  const [packageMoved, updateMessage, imageDrift] = await Promise.all([
     probe(),
     fetchUpdateMessage(options.forceRefresh ?? false),
+    // Resilience: a buggy override could reject. Built-in detectImageDrift
+    // already swallows its own errors, but treat the whole probe as best-effort
+    // so the entire drift state never rejects on the menu's poll loop.
+    workspaceName !== undefined
+      ? imageProbe(getManagedConfigPath(workspaceName)).catch(
+          () => null as VersionDriftState['imageDrift']
+        )
+      : Promise.resolve<VersionDriftState['imageDrift']>(null),
   ]);
 
   return {
@@ -215,6 +295,7 @@ export async function detectDriftState(
     updateMessage,
     installedVersion,
     currentVersion: packageJson.version,
+    imageDrift,
   };
 }
 

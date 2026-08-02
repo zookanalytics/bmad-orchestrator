@@ -9,7 +9,7 @@ import type { ContainerLifecycle } from './container.js';
 import type { CreateInstanceDeps } from './create-instance.js';
 
 import { createInstance, resolveRepoUrl, attachToInstance } from './create-instance.js';
-import { getBaselineConfigPath, getTemplatesPath } from './devcontainer.js';
+import { getBaselineConfigPath, getManagedImage, getTemplatesPath } from './devcontainer.js';
 import { AGENT_ENV_DIR, WORKSPACES_DIR } from './types.js';
 
 // ─── createInstance tests ───────────────────────────────────────────────────
@@ -36,9 +36,13 @@ const gitCloneFailure: ExecuteResult = {
   exitCode: 128,
 };
 
-/** Baseline config fixture returned by mergeDeps.readFile for the baseline config path */
+/** Baseline config fixture returned by mergeDeps.readFile for the baseline config path.
+ *
+ * `image` is a sentinel — loadManagedDefaults overrides it with getManagedImage()
+ * at runtime, so the on-disk value can be anything that parses as a string.
+ */
 const BASELINE_CONFIG_JSON = JSON.stringify({
-  image: 'ghcr.io/zookanalytics/bmad-orchestrator/devcontainer:latest',
+  image: 'MANAGED_BY_AGENT_ENV_DO_NOT_EDIT',
   initializeCommand: 'bash .agent-env/init-host.sh',
   mounts: ['source=${localWorkspaceFolder}/.agent-env,target=/etc/agent-env,type=bind'],
   containerEnv: { AGENT_ENV_CONTAINER: 'true' },
@@ -832,6 +836,82 @@ describe('createInstance', () => {
     const jsonStart = written.indexOf('{');
     const writtenContent = JSON.parse(written.slice(jsonStart));
     expect(writtenContent.containerEnv.AGENT_ENV_PURPOSE).toBe('');
+  });
+
+  // ─── Managed image pull (AC1, F1, F8) ─────────────────────────────────────
+
+  describe('managed-image pull', () => {
+    it('calls dockerPull with getManagedImage() BEFORE git clone (F8: pull-before-clone)', async () => {
+      const callOrder: string[] = [];
+      const dockerPull = vi.fn().mockImplementation(async (image: string) => {
+        callOrder.push(`dockerPull:${image}`);
+        return { ok: true };
+      });
+      const containerOverrides: Partial<ContainerLifecycle> = { dockerPull };
+
+      const baseDeps = createTestDeps(gitCloneSuccess, containerOverrides);
+      // Wrap executor so we record clone ordering relative to dockerPull.
+      const wrappedExecutor = vi
+        .fn<typeof baseDeps.executor>()
+        .mockImplementation(async (cmd, args, opts) => {
+          if (cmd === 'git' && Array.isArray(args) && args[0] === 'clone') {
+            callOrder.push('git clone');
+          }
+          return baseDeps.executor(cmd, args, opts);
+        });
+      const deps = { ...baseDeps, executor: wrappedExecutor };
+
+      const result = await createInstance('auth', 'https://github.com/user/repo.git', deps);
+
+      expect(result.ok).toBe(true);
+      const pullIndex = callOrder.findIndex((c) => c.startsWith('dockerPull:'));
+      const cloneIndex = callOrder.indexOf('git clone');
+      expect(pullIndex).toBeGreaterThanOrEqual(0);
+      expect(cloneIndex).toBeGreaterThanOrEqual(0);
+      expect(pullIndex).toBeLessThan(cloneIndex);
+      expect(dockerPull).toHaveBeenCalledWith(getManagedImage());
+    });
+
+    it('returns IMAGE_VERSION_NOT_PUBLISHED without clone or workspace creation when pull fails', async () => {
+      const dockerPull = vi.fn().mockResolvedValue({
+        ok: false,
+        error: {
+          code: 'IMAGE_VERSION_NOT_PUBLISHED',
+          message: 'manifest unknown',
+          suggestion: 'wait',
+        },
+      });
+      const baseDeps = createTestDeps(gitCloneSuccess, { dockerPull });
+      const gitInvoked = vi.fn();
+      const wrappedExecutor = vi
+        .fn<typeof baseDeps.executor>()
+        .mockImplementation(async (cmd, args, opts) => {
+          if (cmd === 'git' && Array.isArray(args) && args[0] === 'clone') {
+            gitInvoked();
+          }
+          return baseDeps.executor(cmd, args, opts);
+        });
+      const deps = { ...baseDeps, executor: wrappedExecutor };
+
+      const result = await createInstance('auth', 'https://github.com/user/repo.git', deps);
+
+      expect(result.ok).toBe(false);
+      if (result.ok) throw new Error('Expected failure');
+      expect(result.error.code).toBe('IMAGE_VERSION_NOT_PUBLISHED');
+      expect(gitInvoked).not.toHaveBeenCalled();
+    });
+
+    it('skips dockerPull when --no-pull is passed (pull: false)', async () => {
+      const dockerPull = vi.fn().mockResolvedValue({ ok: true });
+      const deps = createTestDeps(gitCloneSuccess, { dockerPull });
+
+      const result = await createInstance('auth', 'https://github.com/user/repo.git', deps, {
+        pull: false,
+      });
+
+      expect(result.ok).toBe(true);
+      expect(dockerPull).not.toHaveBeenCalled();
+    });
   });
 });
 

@@ -157,6 +157,10 @@ jobs:
         id: changesets
         uses: changesets/action@6a0a831ff30acef54f2c6aa1cbbc1096b066edaf # v1.7.0
         with:
+          # Custom version command keeps the in-repo dogfood image pin in sync
+          # with the bumped agent-env version, so the Version Packages PR
+          # passes the "Verify dogfood image pin" CI check without manual fixups.
+          version: pnpm run version-packages
           publish: pnpm changeset publish
           createGithubReleases: true
           # Use GitHub API to create commits instead of git CLI. This produces

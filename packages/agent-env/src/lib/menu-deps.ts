@@ -23,6 +23,7 @@ import {
 } from './shutdown-instance.js';
 import {
   detectDriftState,
+  detectImageDrift,
   getCurrentVersion,
   isNewerVersion,
   isPackagePathStale,
@@ -31,8 +32,12 @@ import {
 /**
  * Build the DI wrappers for the action loop.
  * Shared between the `on` command and the default no-arg flow.
+ *
+ * @param workspaceName - The active workspace name. Threaded through to
+ *   `detectDriftState` so the manual "Check for updates" surface includes
+ *   image-drift signals, not only registry/install drift.
  */
-export function buildMenuDeps(): InteractiveMenuDeps {
+export function buildMenuDeps(workspaceName: string): InteractiveMenuDeps {
   return {
     attachInstance: (wsName, slug) => {
       const deps = createAttachDefaultDeps();
@@ -102,7 +107,16 @@ export function buildMenuDeps(): InteractiveMenuDeps {
     },
     checkForUpdates: async () => {
       console.log('Checking for updates...');
-      const state = await detectDriftState({}, { forceRefresh: true });
+      const state = await detectDriftState(
+        workspaceName,
+        {
+          // Outside the Ink render loop console output is safe — surface
+          // corrupt-config warnings from the image-drift probe here.
+          detectImageDrift: (path) =>
+            detectImageDrift(path, { logger: { warn: (m) => console.warn(m) } }),
+        },
+        { forceRefresh: true }
+      );
       const current = getCurrentVersion();
       if (state.packageMoved) {
         console.log(
@@ -112,10 +126,20 @@ export function buildMenuDeps(): InteractiveMenuDeps {
         console.log(
           `\x1b[33magent-env v${state.installedVersion} is installed — pick "Restart menu" to use it.\x1b[0m`
         );
-      } else if (state.updateMessage) {
-        console.log(state.updateMessage);
       } else {
-        console.log(`\x1b[32m✓\x1b[0m agent-env ${current} is up to date`);
+        // updateMessage and imageDrift are independent signals — report both
+        // (a user can have a newer npm version AND a stale local image).
+        if (state.updateMessage) {
+          console.log(state.updateMessage);
+        }
+        if (state.imageDrift) {
+          console.log(
+            `\x1b[36mContainer image will refresh on next rebuild: ${state.imageDrift.configuredImage} → ${state.imageDrift.expectedImage}\x1b[0m`
+          );
+        }
+        if (!state.updateMessage && !state.imageDrift) {
+          console.log(`\x1b[32m✓\x1b[0m agent-env ${current} is up to date`);
+        }
       }
       return { ok: true };
     },

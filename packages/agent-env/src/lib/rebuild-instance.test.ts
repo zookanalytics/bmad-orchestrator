@@ -25,7 +25,7 @@ import type {
 import type { RebuildInstanceDeps } from './rebuild-instance.js';
 import type { InstanceState } from './types.js';
 
-import { getBaselineConfigPath } from './devcontainer.js';
+import { getBaselineConfigPath, getManagedImage } from './devcontainer.js';
 import { rebuildInstance } from './rebuild-instance.js';
 import { AGENT_ENV_DIR, STATE_FILE, WORKSPACES_DIR } from './types.js';
 
@@ -154,9 +154,13 @@ function createDevcontainerStatMock(hasExistingDevcontainer: boolean) {
   });
 }
 
-/** Baseline config fixture content for merge mocks */
+/** Baseline config fixture content for merge mocks.
+ *
+ * `image` is a sentinel — loadManagedDefaults overrides it with getManagedImage()
+ * at runtime, so the on-disk value can be anything that parses as a string.
+ */
 const BASELINE_CONFIG_JSON = JSON.stringify({
-  image: 'ghcr.io/zookanalytics/bmad-orchestrator/devcontainer:latest',
+  image: 'MANAGED_BY_AGENT_ENV_DO_NOT_EDIT',
   initializeCommand: 'bash .agent-env/init-host.sh',
   mounts: ['source=${localWorkspaceFolder}/.agent-env,target=/etc/agent-env,type=bind'],
   containerEnv: { AGENT_ENV_CONTAINER: 'true' },
@@ -1133,9 +1137,21 @@ describe('rebuildInstance', () => {
     expect(result.error.code).toBe('IMAGE_PULL_FAILED');
     expect(mockContainer.containerStop).not.toHaveBeenCalled();
     expect(mockContainer.containerRemove).not.toHaveBeenCalled();
+    // Pull runs BEFORE the config rewrite: a failed pull must not update
+    // .agent-env/devcontainer.json, or the image-drift signal would be erased
+    // while the container still runs the stale image.
+    const managedConfigPath = join(
+      tempDir,
+      AGENT_ENV_DIR,
+      WORKSPACES_DIR,
+      'repo-auth',
+      AGENT_ENV_DIR,
+      'devcontainer.json'
+    );
+    await expect(access(managedConfigPath)).rejects.toThrow();
   });
 
-  it('skips pull with info log when no Dockerfile found', async () => {
+  it('logs "only managed image pulled" when no Dockerfile is present', async () => {
     const state = createTestState('repo-auth', { repoConfigDetected: true });
     await createTestWorkspace('repo-auth', state);
     // Create a .devcontainer/ with only devcontainer.json (image-based, no Dockerfile)
@@ -1152,11 +1168,14 @@ describe('rebuildInstance', () => {
     const result = await rebuildInstance('auth', deps);
 
     expect(result.ok).toBe(true);
-    expect(mockContainer.dockerPull).not.toHaveBeenCalled();
-    expect(deps.logger?.info).toHaveBeenCalledWith(expect.stringContaining('No Dockerfile found'));
+    // The managed image is always pulled even when no Dockerfile is found.
+    expect(mockContainer.dockerPull).toHaveBeenCalledWith(getManagedImage());
+    expect(deps.logger?.info).toHaveBeenCalledWith(
+      expect.stringContaining('only managed image pulled')
+    );
   });
 
-  it('skips parameterized FROM lines with logger.warn', async () => {
+  it('skips parameterized FROM lines with logger.warn (managed image still pulled in parallel)', async () => {
     const state = createTestState('repo-auth', { repoConfigDetected: true });
     await createTestWorkspace('repo-auth', state, {
       devcontainerFiles: ['devcontainer.json', 'Dockerfile'],
@@ -1167,8 +1186,10 @@ describe('rebuildInstance', () => {
 
     await rebuildInstance('auth', deps);
 
+    // dockerPull is called for `node:22` AND the managed image (the parameterized FROM is skipped).
     expect(mockContainer.dockerPull).toHaveBeenCalledWith('node:22');
-    expect(mockContainer.dockerPull).toHaveBeenCalledTimes(1);
+    expect(mockContainer.dockerPull).toHaveBeenCalledWith(getManagedImage());
+    expect(mockContainer.dockerPull).toHaveBeenCalledTimes(2);
     expect(deps.logger?.warn).toHaveBeenCalledWith(
       expect.stringContaining('Skipping parameterized FROM')
     );
@@ -1307,5 +1328,44 @@ describe('rebuildInstance', () => {
     expect(callOrder).toContain('docker_pull');
     expect(callOrder).not.toContain('container_stop');
     expect(mockContainer.containerStop).not.toHaveBeenCalled();
+  });
+
+  // ─── Managed image pull (AC2, AC3, AC4) ─────────────────────────────────────
+
+  describe('managed-image pull', () => {
+    it('pulls the managed image when no Dockerfile is present (image:-only config)', async () => {
+      const state = createTestState('repo-auth', { repoConfigDetected: false });
+      await createTestWorkspace('repo-auth', state, {
+        devcontainerFiles: ['devcontainer.json'], // no Dockerfile
+      });
+      const mockContainer = createMockContainer();
+      const deps = createTestDeps({ container: mockContainer });
+
+      const result = await rebuildInstance('auth', deps);
+
+      expect(result.ok).toBe(true);
+      expect(mockContainer.dockerPull).toHaveBeenCalledWith(getManagedImage());
+    });
+
+    it('emits the AC15 warning and skips dockerPull when pull=false', async () => {
+      const state = createTestState('repo-auth', { repoConfigDetected: false });
+      await createTestWorkspace('repo-auth', state, {
+        devcontainerFiles: ['devcontainer.json'],
+      });
+      const mockContainer = createMockContainer();
+      const warn = vi.fn();
+      const deps = createTestDeps({
+        container: mockContainer,
+        logger: { warn, info: vi.fn() },
+      });
+
+      const result = await rebuildInstance('auth', deps, { pull: false });
+
+      expect(result.ok).toBe(true);
+      expect(mockContainer.dockerPull).not.toHaveBeenCalled();
+      const allWarns = warn.mock.calls.map((c) => c[0]).join('\n');
+      expect(allWarns).toContain('Using cached image; not matched to current agent-env version');
+      expect(allWarns).toContain(getManagedImage());
+    });
   });
 });

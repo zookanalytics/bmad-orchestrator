@@ -14,6 +14,7 @@ interface CreateOptions {
   repo?: string;
   purpose?: string;
   attach?: boolean;
+  pull?: boolean;
 }
 
 export const createCommand = new Command('create')
@@ -22,6 +23,7 @@ export const createCommand = new Command('create')
   .option('--repo <url|slug>', 'Git repo URL, registered slug, or "." for current directory')
   .option('--purpose <text>', 'Set the instance purpose/label at creation time')
   .option('--attach', 'Attach immediately after creation')
+  .option('--no-pull', 'Skip pulling the managed image (use cached image)')
   .option('--baseline', '[REMOVED] Config merge replaces this flag')
   .option('--no-baseline', '[REMOVED] Config merge replaces this flag')
   .action(async (name: string, options: CreateOptions & { baseline?: boolean }) => {
@@ -82,6 +84,7 @@ export const createCommand = new Command('create')
       const result = await createInstance(name, repoUrl, deps, {
         purpose: options.purpose,
         onProgress: progress.update,
+        pull: options.pull,
       });
       progress.clear();
 

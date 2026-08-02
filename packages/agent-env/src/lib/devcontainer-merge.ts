@@ -9,11 +9,11 @@
 import { parse as parseJsonc, type ParseError } from 'jsonc-parser';
 import { constants } from 'node:fs';
 import { access, lstat, readFile, readlink, rename, writeFile } from 'node:fs/promises';
-import { createRequire } from 'node:module';
 import { join } from 'node:path';
 
+import packageJson from '../../package.json' with { type: 'json' };
 import { CONTAINER_AGENT_ENV_DIR } from './container-env.js';
-import { getBaselineConfigPath } from './devcontainer.js';
+import { getBaselineConfigPath, getManagedImage } from './devcontainer.js';
 import { AGENT_ENV_DIR } from './types.js';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
@@ -200,15 +200,37 @@ export async function readRepoConfig(
 // ─── Validation ──────────────────────────────────────────────────────────────
 
 /**
+ * Maximum entries kept in the validateRepoConfig warning cache. FIFO eviction
+ * prevents unbounded growth in long-lived `agent-env on` sessions.
+ */
+const MAX_WARNED_MISMATCHES = 100;
+
+const warnedMismatches = new Set<string>();
+
+/**
+ * Reset the validateRepoConfig warning cache. Tests use this in `beforeEach`
+ * to avoid cross-test pollution (the cache is module-scoped).
+ * @internal
+ */
+export function _resetWarningCache(): void {
+  warnedMismatches.clear();
+}
+
+/**
  * Validate a repo config for compatibility with agent-env.
  *
  * Rejects configs with build/compose properties.
  * Warns when repo specifies a different image than the managed image.
+ *
+ * The image-mismatch warning is throttled per `<workspaceKey>|<repoImage>|
+ * <managedImage>` triple — same key warns once per process, but different
+ * workspaces are NOT suppressed against each other (AC20).
  */
 export function validateRepoConfig(
   config: ParsedDevcontainerConfig,
   managedImage: string,
-  logger?: { warn: (msg: string) => void }
+  logger?: { warn: (msg: string) => void },
+  workspaceKey?: string
 ): void {
   const rejectedProps = ['build', 'dockerFile', 'dockerfile', 'dockerComposeFile'];
 
@@ -223,9 +245,18 @@ export function validateRepoConfig(
   if ('image' in config && config.image !== undefined) {
     const repoImage = String(config.image);
     if (repoImage !== managedImage) {
-      logger?.warn(
-        `Repo config specifies image '${repoImage}' which will be overridden by agent-env managed image.`
-      );
+      const key = `${workspaceKey ?? '*'}|${repoImage}|${managedImage}`;
+      if (!warnedMismatches.has(key)) {
+        if (warnedMismatches.size >= MAX_WARNED_MISMATCHES) {
+          // Evict oldest (insertion order) to keep the Set bounded.
+          const first = warnedMismatches.values().next().value;
+          if (first !== undefined) warnedMismatches.delete(first);
+        }
+        warnedMismatches.add(key);
+        logger?.warn(
+          `Repo config specifies image '${repoImage}' which will be overridden by agent-env managed image '${managedImage}'.`
+        );
+      }
     }
   }
 }
@@ -658,26 +689,16 @@ export async function loadManagedDefaults(
   }
 
   return {
-    image: config.image,
+    // The baseline file's `image` field is a sentinel (MANAGED_BY_AGENT_ENV_DO_NOT_EDIT)
+    // — the real image is computed at runtime from packageJson.version via getManagedImage().
+    // Edit MANAGED_IMAGE_REPO in devcontainer.ts to change the image source.
+    image: getManagedImage(),
     initializeCmd: config.initializeCommand,
     baseContainerEnv,
   };
 }
 
 // ─── Generated Config I/O ────────────────────────────────────────────────────
-
-/**
- * Get the agent-env package version for the generated config header.
- */
-function getPackageVersion(): string {
-  try {
-    const req = createRequire(import.meta.url);
-    const pkg = req('../../package.json') as { version: string };
-    return pkg.version;
-  } catch {
-    return 'unknown';
-  }
-}
 
 /**
  * Write a generated devcontainer config with auto-generated header comment.
@@ -689,7 +710,7 @@ export async function writeGeneratedConfig(
   config: DevcontainerConfig,
   deps: Pick<DevcontainerMergeDeps, 'writeFile' | 'rename'> = defaultMergeDeps
 ): Promise<void> {
-  const version = getPackageVersion();
+  const version = packageJson.version;
   const header = `${AUTO_GENERATED_HEADER} v${version}. Do not edit.\n`;
   const json = JSON.stringify(config, null, 2);
   const content = `${header}${json}\n`;
