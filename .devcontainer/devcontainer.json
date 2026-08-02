@@ -6,7 +6,7 @@
   // Pinned-by-policy. Synced via scripts/sync-dogfood-pin.mjs (run automatically in the Version Packages PR).
   // If a pull fails with "manifest unknown" right after a release merge, the image is still
   // building — check the publish-image workflow run and retry once it completes.
-  "image": "ghcr.io/zookanalytics/bmad-orchestrator/devcontainer:1.1.1",
+  "image": "ghcr.io/zookanalytics/bmad-orchestrator/devcontainer:1.2.0",
   "initializeCommand": "bash -c 'touch ~/.gitconfig'",
   "runArgs": [
     "--name=agenttools-${localWorkspaceFolderBasename}",
