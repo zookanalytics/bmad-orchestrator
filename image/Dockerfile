@@ -167,9 +167,6 @@ RUN sh -c "$(wget -O- https://github.com/deluan/zsh-in-docker/releases/download/
   -a 'export PATH="$HOME/.local/bin:$PATH"' \
   -x
 
-# Setup pnpm
-RUN pnpm setup
-
 # Install bun (required for keystone-cli)
 # Must run as node user to install to ~/.bun
 RUN curl -fsSL https://bun.sh/install | bash
