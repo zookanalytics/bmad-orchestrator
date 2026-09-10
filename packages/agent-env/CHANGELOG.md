@@ -1,5 +1,27 @@
 # @zookanalytics/agent-env
 
+## 1.2.1
+
+### Patch Changes
+
+- [#119](https://github.com/zookanalytics/bmad-orchestrator/pull/119) [`790fa59`](https://github.com/zookanalytics/bmad-orchestrator/commit/790fa597d0e045c0d1472ef16c9105370686d9b2) Thanks [@johnzook](https://github.com/johnzook)! - Fix `pnpm add -g @zookanalytics/agent-env` failing with `ERR_MODULE_NOT_FOUND` for `react` on pnpm >= 11.
+
+  `@inkjs/ui@2.0.0` imports `react` but declares neither a dependency nor a peer dependency on it. Under pnpm <= 10, the missing declaration resolved by accident because Node's resolver walked up from `<root>/node_modules/.pnpm/<pkg>/node_modules/<pkg>` into pnpm's hoisted fallback `.pnpm/node_modules/` directory (which held `react`). pnpm 11 moved packages into the shared content-addressable store at `<store>/v11/links/@inkjs/ui/2.0.0/<hash>/node_modules/@inkjs/ui`, a path with no `.pnpm/node_modules/` ancestor, so the accidental resolution broke and every global install crashed on startup at `@inkjs/ui/build/components/badge/badge.js`.
+
+  Inlined `@inkjs/ui` into `dist/cli.js` via tsup's `noExternal` so its `react` import now resolves from `agent-env`'s own declared `react` dependency inside the bundle. `react` itself remains external — a single instance is used, so Ink hooks continue to work correctly. Moved `@inkjs/ui` from `dependencies` to `devDependencies` since consumers no longer need it installed at runtime.
+
+- [#116](https://github.com/zookanalytics/bmad-orchestrator/pull/116) [`fa0241c`](https://github.com/zookanalytics/bmad-orchestrator/commit/fa0241cb9eda0c40a1eb9c10c8f1391d9548a112) Thanks [@zook-bot](https://github.com/zook-bot)! - Fix `agent-env create` failing on rootless Podman hosts with an opaque _"An error occurred setting up the container."_ The generic devcontainer error hid a chain of distinct failures that all stem from one root cause: agent-env always swaps a repo's devcontainer image for the managed image, but inherited image-specific settings from the repo config that were invalid once the image was swapped (e.g. `overrideCommand: false` and `containerUser/remoteUser: vscode` tuned for a base image like `mcr.microsoft.com/devcontainers/go`).
+
+  Extended agent-env's existing "force the managed image" principle to the other managed-image-owned settings, and added two Podman-only runArgs gated on runtime detection:
+  - **Forced in the merge (each warns via `validateRepoConfig`):**
+    - `overrideCommand: true` — the managed image's command (`node`) exits immediately; the devcontainer CLI's keep-alive loop (only injected when `overrideCommand` is `true`) is what keeps the container alive. A repo `false` left the container dead, and Podman then refused to `exec` the user probe into a stopped container.
+    - `containerUser` / `remoteUser: node` — matches the managed image's `node` user, which owns `/pnpm`, `/home/node`, and the shared volumes; running as any other user broke `post-create.sh` with `EACCES`.
+  - **Podman-only runArgs (via new `detectContainerRuntime()`; Docker rejects `keep-id`, so this is runtime-gated, not platform-gated):**
+    - `--tmpfs=/tmp:mode=1777` — the feature-install build under Podman leaves `/tmp` at `0755`, so `apt-get`'s unprivileged `_apt` user can't `mkstemp` there and OpenPGP signature verification fails on every repository.
+    - `--userns=keep-id:uid=1000,gid=1000` — remaps the host user onto `node`'s uid so host-owned bind mounts (the cloned repo and `.agent-env`) are writable for any host uid.
+
+  Together these clear every agent-env-owned setup step on rootless Podman. Docker hosts are unaffected — all Podman-specific behavior is behind runtime detection. See `packages/agent-env/docs/repo-compatibility.md` for what the managed-image model requires of a repo (repo-side toolchain and user assumptions remain out of scope).
+
 ## 1.2.0
 
 ### Minor Changes
