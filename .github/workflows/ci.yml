@@ -151,10 +151,15 @@ jobs:
   # Enforce changeset presence on PRs that touch publishable packages.
   # Blocks merge when no changeset is found. Apply the `no-changeset-needed`
   # label to opt out for docs-only, CI, or infrastructure PRs.
+  #
+  # Skip the auto-generated "Version Packages" PR from the changesets action.
+  # That PR is the one PR that must not add changesets — it consumes them into
+  # version bumps and CHANGELOG entries, so both the `changeset status` check
+  # and the "new changeset file added" check are guaranteed to fail on it.
   changeset-check:
     name: Changeset Check
     runs-on: ubuntu-latest
-    if: github.event_name == 'pull_request'
+    if: github.event_name == 'pull_request' && !startsWith(github.head_ref, 'changeset-release/')
 
     steps:
       # Skip early when opted out via label — job still reports SUCCESS
