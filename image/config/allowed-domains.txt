@@ -26,6 +26,7 @@ skills.sh
 # Anthropic (Claude Code)
 claude.ai
 code.claude.com
+platform.claude.com
 api.anthropic.com
 statsig.anthropic.com
 
