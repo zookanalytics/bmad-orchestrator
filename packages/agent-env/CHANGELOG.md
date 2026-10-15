@@ -1,5 +1,11 @@
 # @zookanalytics/agent-env
 
+## 1.2.2
+
+### Patch Changes
+
+- [#123](https://github.com/zookanalytics/bmad-orchestrator/pull/123) [`d1d5f46`](https://github.com/zookanalytics/bmad-orchestrator/commit/d1d5f46f78209f795435134a23d53c4f3ccf8556) Thanks [@johnzook](https://github.com/johnzook)! - Allow `platform.claude.com` in the devcontainer firewall allowlist so Claude Code's OAuth login no longer fails with `ECONNREFUSED 160.79.104.10:443`.
+
 ## 1.2.1
 
 ### Patch Changes
